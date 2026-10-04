@@ -80,7 +80,10 @@ export async function chooseFile(
   }
 }
 
+export const DESKTOP_FLAG = "__WRITASAURUS_DESKTOP__";
+
 export function checkIsDesktop(): Promise<boolean> {
+  if ((globalThis as Record<string, unknown>)[DESKTOP_FLAG] === true) return Promise.resolve(true);
   try {
     return Promise.resolve(
       Boolean(Deno.env.get("DENO_SERVE_ADDRESS") || Deno.env.get("DENO_DESKTOP")),

@@ -1,9 +1,9 @@
 import "./desktop/desktop.ts";
-import { createApp } from "./app.ts";
+import { DESKTOP_FLAG } from "./lib/desktop.ts";
+// @ts-types="./types/fresh-server.d.ts"
+import server from "../_fresh/server.js";
 
-const app = await createApp({
-  isDesktop: () => true,
-  onExit: () => Deno.exit(0),
-});
+// The built Fresh server shares globalThis, so this marks every request as Desktop.
+(globalThis as Record<string, unknown>)[DESKTOP_FLAG] = true;
 
-Deno.serve(app.fetch);
+Deno.serve(server.fetch);

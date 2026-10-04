@@ -1,5 +1,5 @@
 import { chromium, type Page } from "playwright";
-import { createApp } from "../../src/app.ts";
+import { createFreshApp } from "../../src/fresh-app.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -50,7 +50,7 @@ async function withEditorPage(
   test: (page: Page) => Promise<void>,
   desktop = false,
 ): Promise<void> {
-  const app = desktop ? createApp({ isDesktop: () => true }) : createApp();
+  const app = createFreshApp(desktop ? { isDesktop: () => true } : {}).handler();
   const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, app);
   const address = server.addr as Deno.NetAddr;
   const browser = await launchBrowser();
@@ -650,4 +650,3 @@ Deno.test("browser: theme preference persists across navigation to settings, wel
     await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   });
 });
-

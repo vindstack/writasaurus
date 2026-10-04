@@ -8,8 +8,8 @@ import { settingsRoutes } from "../features/settings/settings.routes.ts";
 
 const distRoot = fromFileUrl(new URL("../../dist", import.meta.url));
 
-export const Routes = (router: Router, options: { onExit?: () => void } = {}): Router => {
-  editorRoutes(router, options);
+export const Routes = (router: Router): Router => {
+  editorRoutes(router);
   aboutRoutes(router);
   welcomeRoutes(router);
   settingsRoutes(router);

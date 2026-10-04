@@ -1,10 +1,10 @@
-import { createApp } from "../src/app.ts";
+import { createTestApp } from "./helpers.ts";
 
 function assert(condition: unknown): asserts condition {
   if (!condition) throw new Error("Assertion failed");
 }
 
-const app = await createApp();
+const app = createTestApp();
 
 Deno.test("renders editor on root route with its registered asset entries", async () => {
   const response = await app.request("/");

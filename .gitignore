@@ -3,3 +3,5 @@
 dist/
 deno.lock
 ignore/
+_fresh/
+node_modules/

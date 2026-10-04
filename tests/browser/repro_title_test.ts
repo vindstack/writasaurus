@@ -1,8 +1,11 @@
 import { chromium, type Page } from "playwright";
-import { createApp } from "../../src/app.ts";
+import { createFreshApp } from "../../src/fresh-app.ts";
 
 async function _withEditorPage(test: (page: Page) => Promise<void>): Promise<void> {
-  const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, createApp());
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    createFreshApp().handler(),
+  );
   const address = server.addr as Deno.NetAddr;
   const browser = await chromium.launch({
     executablePath: "/home/josh/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome",
@@ -32,7 +35,10 @@ async function _withEditorPage(test: (page: Page) => Promise<void>): Promise<voi
 }
 
 Deno.test("repro: new manuscript flow", async () => {
-  const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, createApp());
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    createFreshApp().handler(),
+  );
   const address = server.addr as Deno.NetAddr;
   const browser = await chromium.launch({
     executablePath: "/home/josh/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome",

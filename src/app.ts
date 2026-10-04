@@ -44,7 +44,7 @@ export function createApp(options: AppOptions = {}): App {
     json,
   }, globalMiddleware);
 
-  router = Routes(router, { onExit: options.onExit });
+  router = Routes(router);
 
   return router.init();
 }

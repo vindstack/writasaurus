@@ -22,6 +22,27 @@
       "deno.desktop",
       "dom",
       "dom.iterable"
+    ],
+    "jsx": "precompile",
+    "jsxImportSource": "preact",
+    "jsxPrecompileSkipElements": [
+      "a",
+      "img",
+      "source",
+      "body",
+      "html",
+      "head",
+      "title",
+      "meta",
+      "script",
+      "link",
+      "style",
+      "base",
+      "noscript",
+      "template"
+    ],
+    "types": [
+      "vite/client"
     ]
   },
   "fmt": {
@@ -31,24 +52,41 @@
   },
   "lint": {
     "rules": {
-      "tags": ["recommended"]
+      "tags": [
+        "fresh",
+        "recommended"
+      ]
     }
   },
   "tasks": {
-    "build": "deno run -A src/bundle.ts",
+    "build": "deno task build:legacy && vite build",
     "test:browser": "deno task build && deno test -A tests/browser",
-    "test": "deno test --allow-read=dist,tests tests/*_test.ts && deno task test:browser",
-    "check": "deno fmt --check && deno lint && deno check src/web.server.ts src/desktop.server.ts src/bundle.ts src/features/editor/editor.client.ts src/features/settings/settings.client.ts && deno task test",
-    "desktop": "deno task build && deno desktop --icon=src/assets/static/desktop-icon.png --include dist src/desktop.server.ts --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell .",
-    "desktop:dev": "deno task build && deno desktop --hmr --icon=src/assets/static/desktop-icon.png --include dist --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell src/desktop.server.ts",
-    "dev": "deno task build && deno run --allow-env=PORT --allow-net --allow-read=dist --watch=src/,dist/ src/web.server.ts",
+    "test": "deno test --allow-read --allow-env tests/*_test.ts && deno task test:browser",
+    "check": "deno fmt --check && deno lint && deno check src/main.ts src/desktop.server.ts src/bundle.ts src/features/editor/editor.client.ts src/features/settings/settings.client.ts && deno task test",
+    "desktop": "deno task build && deno desktop --icon=src/assets/static/desktop-icon.png --include dist --include _fresh src/desktop.server.ts --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell .",
+    "desktop:dev": "deno task build && deno desktop --hmr --icon=src/assets/static/desktop-icon.png --include dist --include _fresh --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell src/desktop.server.ts",
+    "dev": "deno task build:legacy && vite --port 8000",
     "dev:assets": "deno run -A src/bundle.ts --watch",
-    "start": "deno run --allow-env=PORT --allow-net --allow-read=dist src/web.server.ts"
+    "start": "deno serve --allow-env --allow-net --allow-read _fresh/server.js",
+    "build:legacy": "deno run -A src/bundle.ts"
   },
   "imports": {
     "@std/http": "jsr:@std/http@^1.1.3",
     "@std/path": "jsr:@std/path@^1.1.4",
     "harper": "npm:harper.js@2.10.0",
-    "playwright": "npm:playwright@^1.63.0"
-  }
+    "playwright": "npm:playwright@^1.63.0",
+    "fresh": "jsr:@fresh/core@^2.3.3",
+    "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",
+    "preact": "npm:preact@^10.29.1",
+    "@preact/signals": "npm:@preact/signals@^2.9.0",
+    "vite": "npm:vite@^7.1.3",
+    "@types/babel__core": "npm:@types/babel__core@^7.20.5"
+  },
+  "nodeModulesDir": "manual",
+  "exclude": [
+    "**/_fresh/*",
+    "dist/",
+    "desktop/",
+    "node_modules/"
+  ]
 }
