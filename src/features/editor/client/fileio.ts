@@ -1,7 +1,7 @@
 import type { Manuscript, WritableFileHandle } from "./types.ts";
 import { storeHandle } from "./storage.ts";
 import { editorStore, markSaved, state } from "./state.ts";
-import { epubFilename, generateEpub } from "../../../lib/epub.ts";
+import { epubFilename, generateEpub } from "../../../../lib/epub.ts";
 
 const filePicker = globalThis as unknown as {
   showSaveFilePicker?: (options: object) => Promise<WritableFileHandle>;

@@ -1,6 +1,6 @@
 import { html, webComponent } from "../../../framework/web-components/index.ts";
 import { editorEvents } from "./editor-events.ts";
-import "../../../lib/ui/app-tooltip.ts";
+import "../../../../lib/ui/app-tooltip.ts";
 
 function preserveEditorSelection(event: Event): void {
   const target = event.target as HTMLElement | null;

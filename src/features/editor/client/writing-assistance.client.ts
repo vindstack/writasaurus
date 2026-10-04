@@ -6,7 +6,7 @@ import {
   getWritingAssistanceWords,
   saveWritingAssistanceIgnores,
   saveWritingAssistanceWords,
-} from "../../../lib/settings.ts";
+} from "../../../../lib/settings.ts";
 import { TOGGLE_WRITING_ASSISTANCE_EVENT } from "./editor-events.ts";
 import { normalizeEditorBlocks } from "./editor-normalize.ts";
 

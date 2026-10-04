@@ -1,6 +1,6 @@
 import { join } from "@std/path";
 
-const staticDir = "src/assets/static";
+const staticDir = "static";
 const distDir = "dist";
 const assetsDir = join(distDir, "assets");
 const manifestPath = join(distDir, "manifest.json");

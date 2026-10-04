@@ -3,7 +3,7 @@ import {
   getDailyWordGoalPreference,
   getDailyWrittenWords,
   getWordsPerPagePreference,
-} from "../../../lib/settings.ts";
+} from "../../../../lib/settings.ts";
 import { editorEvents, toggleWritingAssistancePanel } from "./editor-events.ts";
 import { activeChapter, editorStore, totalWords } from "./state.ts";
 import "./word-count.ts";

@@ -1,10 +1,10 @@
 import { chromium, type Page } from "playwright";
-import { createFreshApp } from "../../src/fresh-app.ts";
+import { createTestApp } from "../helpers.ts";
 
 async function _withEditorPage(test: (page: Page) => Promise<void>): Promise<void> {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
-    createFreshApp().handler(),
+    createTestApp().fetch,
   );
   const address = server.addr as Deno.NetAddr;
   const browser = await chromium.launch({
@@ -37,7 +37,7 @@ async function _withEditorPage(test: (page: Page) => Promise<void>): Promise<voi
 Deno.test("repro: new manuscript flow", async () => {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
-    createFreshApp().handler(),
+    createTestApp().fetch,
   );
   const address = server.addr as Deno.NetAddr;
   const browser = await chromium.launch({

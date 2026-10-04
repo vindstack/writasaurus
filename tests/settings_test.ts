@@ -25,7 +25,7 @@ import {
   SETTINGS_WRITING_ASSISTANCE_KEY,
   THEME_SETTINGS_KEY,
   type ThemePreference,
-} from "../src/lib/settings.ts";
+} from "../lib/settings.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -189,4 +189,3 @@ Deno.test("settings: applyThemePreference updates data-theme attribute", () => {
   applyThemePreference("dark");
   applyThemePreference("auto");
 });
-

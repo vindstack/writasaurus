@@ -1,7 +1,7 @@
 {
   "name": "Writasaurus",
   "version": "0.1.0",
-  "exports": "./src/desktop.server.ts",
+  "exports": "./desktop.ts",
   "desktop": {
     "app": {
       "name": "Writasaurus",
@@ -61,10 +61,10 @@
   "tasks": {
     "build": "deno task build:legacy && vite build",
     "test:browser": "deno task build && deno test -A tests/browser",
-    "test": "deno test --allow-read --allow-env tests/*_test.ts && deno task test:browser",
-    "check": "deno fmt --check && deno lint && deno check src/main.ts src/desktop.server.ts src/bundle.ts src/features/editor/editor.client.ts src/features/settings/settings.client.ts && deno task test",
-    "desktop": "deno task build && deno desktop --icon=src/assets/static/desktop-icon.png --include dist --include _fresh src/desktop.server.ts --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell .",
-    "desktop:dev": "deno task build && deno desktop --hmr --icon=src/assets/static/desktop-icon.png --include dist --include _fresh --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell src/desktop.server.ts",
+    "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test -A tests/browser",
+    "check": "deno fmt --check && deno lint && deno check main.ts desktop.ts src/bundle.ts routes/ lib/ && deno task test",
+    "desktop": "deno task build && deno desktop --icon=static/desktop-icon.png --include dist --include _fresh desktop.ts --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell .",
+    "desktop:dev": "deno task build && deno desktop --hmr --icon=static/desktop-icon.png --include dist --include _fresh --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
     "dev": "deno task build:legacy && vite --port 8000",
     "dev:assets": "deno run -A src/bundle.ts --watch",
     "start": "deno serve --allow-env --allow-net --allow-read _fresh/server.js",

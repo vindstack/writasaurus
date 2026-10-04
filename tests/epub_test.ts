@@ -6,7 +6,7 @@ import {
   isEpubFilename,
   parseEpub,
   unzip,
-} from "../src/lib/epub.ts";
+} from "../lib/epub.ts";
 import type { Manuscript } from "../src/features/editor/client/types.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {

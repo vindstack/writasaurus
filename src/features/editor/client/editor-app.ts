@@ -4,7 +4,7 @@ import {
   applyThemePreference,
   getFontPreference,
   getThemePreference,
-} from "../../../lib/settings.ts";
+} from "../../../../lib/settings.ts";
 import { blankManuscript } from "./data.ts";
 import { loadFile } from "./actions.ts";
 import { executeEditorCommand } from "./editor-commands.ts";
@@ -16,7 +16,7 @@ import { type EditorWritingArea, editorWritingArea } from "./editor-writing-area
 import { hasWritePermission, openFile, saveEpubToDisk, saveToDisk } from "./fileio.ts";
 import { editorStore, markChanged, state, syncChapter } from "./state.ts";
 import { editorHistory } from "./history.ts";
-import { isEpubFilename } from "../../../lib/epub.ts";
+import { isEpubFilename } from "../../../../lib/epub.ts";
 import {
   restoreHandle,
   restoreLocal,

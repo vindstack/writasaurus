@@ -11,8 +11,8 @@ import {
   saveFontPreference,
   saveWordsPerPagePreference,
   saveWritingAssistancePreference,
-} from "../../lib/settings.ts";
-import { registerReturnToEditorShortcut } from "../../lib/shortcuts.ts";
+} from "../../../lib/settings.ts";
+import { registerReturnToEditorShortcut } from "../../../lib/shortcuts.ts";
 
 applyThemePreference(getThemePreference());
 

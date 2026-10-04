@@ -1,9 +1,9 @@
-import { textFromHtml } from "../../../lib/utilties/dom-utilities.ts";
-import { htmlToMarkdown, markdownToHtml } from "../../../lib/utilties/markdown-utilities.ts";
+import { textFromHtml } from "../../../../lib/utilties/dom-utilities.ts";
+import { htmlToMarkdown, markdownToHtml } from "../../../../lib/utilties/markdown-utilities.ts";
 import {
   createSlugFromString,
   getWordAndCharCountFromString,
-} from "../../../lib/utilties/string-utilities.ts";
+} from "../../../../lib/utilties/string-utilities.ts";
 import type { Chapter, Manuscript } from "./types.ts";
 
 export function blankManuscript(title = "Untitled Manuscript"): Manuscript {

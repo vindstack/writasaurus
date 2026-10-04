@@ -7,8 +7,8 @@ import {
 import { addChapter, deleteChapter, reorderChapter, selectChapter } from "./actions.ts";
 import { editorEvents } from "./editor-events.ts";
 import { editorStore, state } from "./state.ts";
-import { createDragDrop, type DragDropController } from "../../../lib/drag-drop.ts";
-import "../../../lib/ui/app-chip.ts";
+import { createDragDrop, type DragDropController } from "../../../../lib/drag-drop.ts";
+import "../../../../lib/ui/app-chip.ts";
 
 export interface EditorSidebar extends WebComponentElement<Record<string, never>> {
   collapsed: boolean;

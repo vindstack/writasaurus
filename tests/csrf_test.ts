@@ -1,4 +1,4 @@
-import { isCsrfSafe } from "../src/lib/security/csrf.ts";
+import { isCsrfSafe } from "../lib/security/csrf.ts";
 
 function assert(condition: unknown): asserts condition {
   if (!condition) throw new Error("Assertion failed");

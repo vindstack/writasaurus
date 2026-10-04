@@ -1,4 +1,4 @@
-import { isReturnToEditorShortcut } from "../src/lib/shortcuts.ts";
+import { isReturnToEditorShortcut } from "../lib/shortcuts.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);

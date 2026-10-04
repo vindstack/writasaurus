@@ -1,17 +1,17 @@
 import { html, webComponent } from "../../../framework/web-components/index.ts";
-import { syncTruncationTooltip } from "../../../lib/text/text.ts";
+import { syncTruncationTooltip } from "../../../../lib/text/text.ts";
 import { commitManuscriptTitle, renameManuscript } from "./actions.ts";
 import { editorStore, state } from "./state.ts";
 import type { Unsubscribe } from "../../../framework/web-components/index.ts";
 import "../../../shared/components/save-status.ts";
-import "../../../lib/ui/app-divider.ts";
-import "../../../lib/ui/app-dropdown-menu.ts";
-import "../../../lib/ui/inputs/app-segmented-control.ts";
+import "../../../../lib/ui/app-divider.ts";
+import "../../../../lib/ui/app-dropdown-menu.ts";
+import "../../../../lib/ui/inputs/app-segmented-control.ts";
 import {
   applyThemePreference,
   getThemePreference,
   saveThemePreference,
-} from "../../../lib/settings.ts";
+} from "../../../../lib/settings.ts";
 
 export type EditorTopbar = HTMLElement & {
   closeMenu(): void;

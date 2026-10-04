@@ -2,7 +2,7 @@ import type { WritableFileHandle } from "./types.ts";
 import { chapter } from "./data.ts";
 import { storeHandle } from "./storage.ts";
 import { editorStore, state } from "./state.ts";
-import { isEpubFilename, parseEpub } from "../../../lib/epub.ts";
+import { isEpubFilename, parseEpub } from "../../../../lib/epub.ts";
 
 const CHAPTER_NUMBER_PATTERN = /\b(chapter\s+)\d+\b/i;
 
