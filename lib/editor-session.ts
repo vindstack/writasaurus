@@ -1,7 +1,7 @@
 import { basename } from "@std/path";
 import { clearLastFilePath, loadLastFilePath, saveLastFilePath } from "./desktop.ts";
 import { epubFilename, generateEpub, isEpubFilename, parseEpub } from "./epub.ts";
-import type { Manuscript } from "../src/features/editor/client/types.ts";
+import type { Manuscript } from "./editor/types.ts";
 
 /**
  * Server-side state for the Desktop app: the manuscript file currently open on disk.

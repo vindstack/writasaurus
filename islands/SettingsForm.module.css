@@ -1,72 +1,32 @@
-@import "../../../assets/styles.css";
-
-.settings-mode {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  padding: 1.5rem;
-}
-
-.settings-container {
-  width: 100%;
-  max-width: 38rem;
+.form {
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
 }
 
-.settings-header {
-  text-align: center;
-}
-
-.settings-header .brand {
-  font-size: 1.75rem;
-  text-decoration: none;
-}
-
-.settings-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
-.settings-card h2 {
-  font-size: 1.5rem;
-}
-
-.settings-card > p {
-  line-height: 1.6;
-  color: var(--muted);
-}
-
-.settings-group {
+.group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.settings-label {
+.label {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
 
-.settings-label strong {
+.label strong {
   color: var(--text);
   font-size: 1rem;
 }
 
-.settings-help {
+.help {
   color: var(--muted);
   font-size: 0.85rem;
 }
 
-.settings-checkbox {
+.checkbox {
   align-items: center;
   color: var(--text);
   cursor: pointer;
@@ -74,14 +34,14 @@
   gap: 0.5rem;
 }
 
-.settings-checkbox input {
+.checkbox input {
   accent-color: var(--accent);
   block-size: 1rem;
   inline-size: 1rem;
 }
 
-.settings-select,
-.settings-input {
+.select,
+.input {
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: 0.4rem;
@@ -89,42 +49,40 @@
   color: var(--text);
   font: inherit;
   font-size: 1rem;
-  padding: 0.65rem 0.85rem;
   outline: none;
+  padding: 0.65rem 0.85rem;
   width: 100%;
 }
 
-.settings-select {
+.select {
   cursor: pointer;
 }
 
-.settings-select:focus-visible,
-.settings-input:focus-visible {
+.select:focus-visible,
+.input:focus-visible {
   border-color: var(--accent);
 }
 
-.settings-preview {
+.preview {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-.preview-label {
+.previewLabel {
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
-.preview-box {
+.previewBox {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
   font-family: var(
     --editor-font,
     system-ui,
@@ -136,37 +94,33 @@
     Arial,
     sans-serif
   );
+  gap: 0.75rem;
+  padding: 1.25rem;
   transition: font-family 0.15s ease;
 }
 
-.preview-heading {
+.previewHeading {
+  color: var(--text);
   font-family: inherit;
   font-size: 1.35rem;
   font-weight: 700;
-  color: var(--text);
 }
 
-.preview-body {
+.previewBody {
+  color: var(--text);
   font-family: inherit;
   font-size: 1.05rem;
   line-height: 1.7;
-  color: var(--text);
 }
 
-.settings-status {
-  font-size: 0.85rem;
+.status {
   color: var(--muted);
+  font-size: 0.85rem;
   min-height: 1.25rem;
 }
 
-.settings-actions {
+.actions {
   display: flex;
   justify-content: flex-start;
   margin-top: 0.5rem;
-}
-
-@media (max-width: 36rem) {
-  .settings-card {
-    padding: 1.25rem;
-  }
 }

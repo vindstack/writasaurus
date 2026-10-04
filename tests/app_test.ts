@@ -40,10 +40,9 @@ Deno.test("renders welcome page with open manuscript options and return to edito
   assert(!page.includes(".txt"));
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
-  assert(page.includes("/assets/features-welcome-welcome.client"));
-  assert(page.includes(".js"));
-  assert(page.includes("/assets/features-welcome-welcome.client"));
-  assert(page.includes(".css"));
+  assert(page.includes("<title>Open Manuscript — Writasaurus</title>"));
+  assert(page.includes("frsh:island:WelcomeActions"));
+  assert(page.includes('href="/about"'));
 
   const aliasResponse = await app.request("/open");
   assert(aliasResponse.status === 200);
@@ -59,10 +58,10 @@ Deno.test("renders about page with description and return to editor link", async
   assert(page.includes("Writasaurus"));
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
-  assert(page.includes("/assets/features-about-about.client"));
-  assert(page.includes(".css"));
-  assert(page.includes("/assets/features-about-about.client"));
-  assert(page.includes(".js"));
+  assert(page.includes("<title>About — Writasaurus</title>"));
+  assert(page.includes("Hello, John Smith!"));
+  assert(page.includes("Count: 0"));
+  assert(page.includes("frsh:island:AboutCounter"));
 });
 
 Deno.test("renders settings page with font options and return to editor link", async () => {
@@ -80,10 +79,20 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(page.includes("words-per-page-input"));
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
-  assert(page.includes("/assets/features-settings-settings.client"));
-  assert(page.includes(".js"));
-  assert(page.includes("/assets/features-settings-settings.client"));
-  assert(page.includes(".css"));
+  assert(page.includes("<title>Settings — Writasaurus</title>"));
+  assert(page.includes("frsh:island:SettingsForm"));
+  assert(!page.includes("writing-assistance-input"));
+});
+
+Deno.test("pages are protected by a nonce-based content security policy", async () => {
+  const response = await app.request("/about");
+  const policy = response.headers.get("content-security-policy") ?? "";
+  const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
+  assert(nonce);
+  assert(!policy.includes("'unsafe-inline'"));
+  const page = await response.text();
+  assert(page.includes(`nonce="${nonce}"`));
+  assert(!page.includes("style="));
 });
 
 Deno.test("stylesheets include view transition rules for smooth page fades", async () => {

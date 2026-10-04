@@ -1,0 +1,66 @@
+.page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.narrow {
+  max-width: 32rem;
+}
+
+.medium {
+  max-width: 36rem;
+}
+
+.wide {
+  max-width: 38rem;
+}
+
+.header {
+  text-align: center;
+}
+
+.brand {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2rem;
+}
+
+.roomy {
+  gap: 1.5rem;
+}
+
+.prose p {
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.card h2 {
+  font-size: 1.5rem;
+}
+
+@media (max-width: 36rem) {
+  .card {
+    padding: 1.25rem;
+  }
+}

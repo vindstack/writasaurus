@@ -1,6 +1,6 @@
-import type { WritableFileHandle } from "./types.ts";
-import { chapter } from "./data.ts";
-import { storeHandle } from "./storage.ts";
+import type { WritableFileHandle } from "../../../../lib/editor/types.ts";
+import { chapter } from "../../../../lib/editor/data.ts";
+import { storeHandle } from "../../../../lib/editor/storage.ts";
 import { editorStore, state } from "./state.ts";
 import { isEpubFilename, parseEpub } from "../../../../lib/epub.ts";
 

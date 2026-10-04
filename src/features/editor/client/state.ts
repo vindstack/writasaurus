@@ -1,6 +1,6 @@
 import { createStore } from "../../../framework/web-components/index.ts";
-import type { Chapter, Manuscript, WritableFileHandle } from "./types.ts";
-import { blankManuscript, count } from "./data.ts";
+import type { Chapter, Manuscript, WritableFileHandle } from "../../../../lib/editor/types.ts";
+import { blankManuscript, count } from "../../../../lib/editor/data.ts";
 
 export interface EditorState {
   manuscript: Manuscript;

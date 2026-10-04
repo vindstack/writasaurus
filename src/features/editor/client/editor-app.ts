@@ -5,7 +5,7 @@ import {
   getFontPreference,
   getThemePreference,
 } from "../../../../lib/settings.ts";
-import { blankManuscript } from "./data.ts";
+import { blankManuscript } from "../../../../lib/editor/data.ts";
 import { loadFile } from "./actions.ts";
 import { executeEditorCommand } from "./editor-commands.ts";
 import { editorEvents, toggleWritingAssistancePanel } from "./editor-events.ts";
@@ -23,7 +23,7 @@ import {
   saveLocal,
   shouldSkipWelcome,
   storeHandle,
-} from "./storage.ts";
+} from "../../../../lib/editor/storage.ts";
 
 import "./editor-canvas.ts";
 import "./editor-toolbar.ts";

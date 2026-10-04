@@ -25,9 +25,10 @@ export function isReturnToEditorShortcut(event: ShortcutEvent): boolean {
 /**
  * Registers a global keydown listener to return to the editor via Ctrl+Shift+E / Cmd+Shift+E.
  * If a custom action is provided, it is invoked; otherwise, navigates to "/".
+ * Returns a function that removes the listener.
  */
-export function registerReturnToEditorShortcut(action?: () => void): void {
-  globalThis.addEventListener("keydown", (event: Event) => {
+export function registerReturnToEditorShortcut(action?: () => void): () => void {
+  const listener = (event: Event) => {
     const keyboardEvent = event as unknown as ShortcutEvent;
     if (isReturnToEditorShortcut(keyboardEvent)) {
       if ("preventDefault" in event && typeof event.preventDefault === "function") {
@@ -39,5 +40,7 @@ export function registerReturnToEditorShortcut(action?: () => void): void {
         globalThis.location.href = "/";
       }
     }
-  });
+  };
+  globalThis.addEventListener("keydown", listener);
+  return () => globalThis.removeEventListener("keydown", listener);
 }

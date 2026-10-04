@@ -7,7 +7,7 @@ import {
   parseEpub,
   unzip,
 } from "../lib/epub.ts";
-import type { Manuscript } from "../src/features/editor/client/types.ts";
+import type { Manuscript } from "../lib/editor/types.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);

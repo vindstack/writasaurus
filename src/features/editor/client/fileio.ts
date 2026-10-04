@@ -1,5 +1,5 @@
-import type { Manuscript, WritableFileHandle } from "./types.ts";
-import { storeHandle } from "./storage.ts";
+import type { Manuscript, WritableFileHandle } from "../../../../lib/editor/types.ts";
+import { storeHandle } from "../../../../lib/editor/storage.ts";
 import { editorStore, markSaved, state } from "./state.ts";
 import { epubFilename, generateEpub } from "../../../../lib/epub.ts";
 

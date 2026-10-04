@@ -1,4 +1,4 @@
-import { createStorage } from "../../../../lib/clientstorage/clientstorage.ts";
+import { createStorage } from "../clientstorage/clientstorage.ts";
 import type { Manuscript, WritableFileHandle } from "./types.ts";
 
 export const HANDLE_KEY = "active-file-handle";

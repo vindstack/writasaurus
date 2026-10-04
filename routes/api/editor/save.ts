@@ -1,8 +1,8 @@
 import { basename } from "@std/path";
 import { define } from "../../../utils.ts";
 import { chooseFile } from "../../../lib/desktop.ts";
-import { parseManuscript } from "../../../src/features/editor/client/data.ts";
-import type { Manuscript } from "../../../src/features/editor/client/types.ts";
+import { parseManuscript } from "../../../lib/editor/data.ts";
+import type { Manuscript } from "../../../lib/editor/types.ts";
 import {
   getActivePath,
   setActivePath,

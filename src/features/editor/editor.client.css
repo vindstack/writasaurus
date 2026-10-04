@@ -1,4 +1,5 @@
 @import "../../../assets/styles.css";
+@import "../../legacy-base.css";
 
 .editor-mode {
   height: 100vh;
