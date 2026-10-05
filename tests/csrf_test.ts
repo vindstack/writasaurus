@@ -18,7 +18,7 @@ const unsafeRoutes = [
 ];
 
 const platforms = {
-  web: {},
+  web: { isDesktop: () => false },
   // Never exits the process, so the exit route can be exercised safely.
   desktop: { isDesktop: () => true, exit: () => {} },
 };
@@ -47,7 +47,7 @@ for (const [name, platform] of Object.entries(platforms)) {
     }
   });
 
-  Deno.test(`csrf (${name}): allows same-origin browser requests`, async () => {
+  Deno.test(`csrf (${name}): handles same-origin requests without exposing website APIs`, async () => {
     const app = createTestApp(platform);
     const allowed: Record<string, string>[] = [
       { origin: "http://localhost" },
@@ -56,7 +56,11 @@ for (const [name, platform] of Object.entries(platforms)) {
     ];
     for (const headers of allowed) {
       const response = await app.request("/api/editor/close", { method: "POST", headers });
-      assertEquals(response.status, 200, `close with ${JSON.stringify(headers)}.`);
+      assertEquals(
+        response.status,
+        name === "web" ? 404 : 200,
+        `close with ${JSON.stringify(headers)}.`,
+      );
     }
   });
 
@@ -65,6 +69,6 @@ for (const [name, platform] of Object.entries(platforms)) {
     const response = await app.request("/api/editor/status", {
       headers: { origin: "https://attacker.example" },
     });
-    assertEquals(response.status, 200);
+    assertEquals(response.status, name === "web" ? 404 : 200);
   });
 }

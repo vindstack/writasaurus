@@ -12,11 +12,14 @@ export interface TestApp {
  * shared with the bundle through `globalThis`.
  */
 export function createTestApp(platform: Partial<Platform> = {}): TestApp {
-  setPlatform(platform);
   return {
-    fetch: fetchApp,
+    fetch(request) {
+      setPlatform(platform);
+      return fetchApp(request);
+    },
     request(url, init) {
       const full = url.startsWith("http") ? url : `http://localhost${url}`;
+      setPlatform(platform);
       return fetchApp(new Request(full, init));
     },
   };

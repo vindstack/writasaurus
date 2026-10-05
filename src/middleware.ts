@@ -1,6 +1,20 @@
 import { defineMiddleware } from "astro:middleware";
+import { getPlatform } from "./lib/platform.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const DESKTOP_ONLY_PATHS = new Set(["/welcome", "/open", "/settings", "/about"]);
+
+function isDesktopOnlyPath(pathname: string): boolean {
+  let decodedPath = pathname;
+  try {
+    decodedPath = decodeURIComponent(pathname);
+  } catch {
+    return true;
+  }
+  const path = decodedPath.replace(/\/+$/, "") || "/";
+  return DESKTOP_ONLY_PATHS.has(path) || path === "/api/editor" ||
+    path.startsWith("/api/editor/");
+}
 
 function makeNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(18));
@@ -70,6 +84,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
     !isSameOriginRequest(context.request)
   ) {
     response = new Response("Forbidden", { status: 403 });
+  } else if (
+    !await getPlatform().isDesktop() &&
+    isDesktopOnlyPath(context.url.pathname)
+  ) {
+    response = new Response("Not Found", { status: 404 });
   } else {
     response = await next();
   }

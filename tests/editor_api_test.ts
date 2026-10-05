@@ -10,8 +10,12 @@ function assertEquals<T>(actual: T, expected: T): void {
   }
 }
 
+function createDesktopApp() {
+  return createTestApp({ isDesktop: () => true });
+}
+
 Deno.test("editor-api: status reports desktop and active file properties", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const res = await app.request("/api/editor/status");
   assertEquals(res.status, 200);
   const data = await res.json();
@@ -21,7 +25,7 @@ Deno.test("editor-api: status reports desktop and active file properties", async
 });
 
 Deno.test("editor-api: close resets active file state", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const closeRes = await app.request("/api/editor/close", {
     method: "POST",
     headers: { origin: "http://localhost" },
@@ -38,7 +42,7 @@ Deno.test("editor-api: close resets active file state", async () => {
 });
 
 Deno.test("editor-api: save validates request payload", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const invalidPayloads = [
     null,
     {},
@@ -61,7 +65,7 @@ Deno.test("editor-api: save validates request payload", async () => {
 });
 
 Deno.test("editor-api: save returns 204 if no file chosen", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   await app.request("/api/editor/close", {
     method: "POST",
     headers: { origin: "http://localhost" },
@@ -98,7 +102,7 @@ Deno.test("editor-api: exit invokes the configured desktop shutdown callback", a
 });
 
 Deno.test("editor-api: open returns 204 if no file chosen", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const res = await app.request("/api/editor/open", {
     method: "POST",
     headers: { origin: "http://localhost" },
@@ -107,7 +111,7 @@ Deno.test("editor-api: open returns 204 if no file chosen", async () => {
 });
 
 Deno.test("editor-api: save-epub validates request payload", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const invalidPayloads = [
     null,
     {},
@@ -130,7 +134,7 @@ Deno.test("editor-api: save-epub validates request payload", async () => {
 });
 
 Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
-  const app = createTestApp();
+  const app = createDesktopApp();
   const res = await app.request("/api/editor/save-epub", {
     method: "POST",
     headers: {

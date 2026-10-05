@@ -2,7 +2,7 @@
   align-items: stretch;
   background: var(--surface-sunken);
   border: 1px solid var(--border);
-  border-radius: 0.4rem;
+  border-radius: var(--radius-control);
   box-sizing: border-box;
   display: flex;
   flex: 1;
@@ -16,7 +16,7 @@
   align-items: center;
   background: transparent;
   border: 0;
-  border-radius: 0.3rem;
+  border-radius: calc(var(--radius-control) - 0.15rem);
   color: var(--text);
   cursor: pointer;
   display: flex;

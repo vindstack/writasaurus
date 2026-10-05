@@ -1,0 +1,10 @@
+.switcher {
+  flex: 0 0 auto;
+  width: 12rem;
+}
+
+@media (max-width: 30rem) {
+  .switcher {
+    width: 10.5rem;
+  }
+}

@@ -44,14 +44,19 @@ deno task check
 - `astro.config.ts` configures Astro SSR with the Deno adapter; `app.ts`, `server.ts`, and
   `desktop.ts` connect the generated server to the web and native Desktop runtimes.
 
-## Editor
+## Website and Desktop
 
-The editor is the root route (`/`). It stores the active manuscript in localStorage, remembers
-granted file handles in IndexedDB, and integrates with native desktop file dialogs or the File
-System Access API when available. It supports a Save button, Ctrl/Cmd+S saving, multiple chapters,
-Markdown import/export, EPUB export, drag-and-drop opening, and live word, page, and character
-counts. Browsers without direct file access use normal uploads and downloads. On Desktop, local
-writing assistance (Harper) highlights spelling and grammar issues.
+The website serves the Writasaurus marketing page at `/` and the public license agreement at
+`/agreement`. The “Download now” button is a placeholder: visitors must accept the agreement before
+it enables, and clicking it explains that downloads are coming soon. The agreement is a
+plain-language draft and has not been reviewed by a lawyer.
+
+In Deno Desktop, `/` opens the editor. Editor-only pages and `/api/editor/*` return 404 outside
+Desktop mode. The editor stores the active manuscript in localStorage, remembers granted file
+handles in IndexedDB, and integrates with native desktop file dialogs or the File System Access API
+when available. It supports a Save button, Ctrl/Cmd+S saving, multiple chapters, Markdown
+import/export, EPUB export, drag-and-drop opening, and live word, page, and character counts. On
+Desktop, local writing assistance (Harper) highlights spelling and grammar issues.
 
 ## Secure defaults
 

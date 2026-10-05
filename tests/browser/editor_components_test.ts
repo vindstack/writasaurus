@@ -87,12 +87,22 @@ function browserTest(name: string, fn: () => Promise<void>): void {
   });
 }
 
+function editorTestHandler(desktop: boolean): (request: Request) => Response | Promise<Response> {
+  const app = createTestApp({ isDesktop: () => desktop }).fetch;
+  return (request) =>
+    new URL(request.url).pathname === "/api/editor/status"
+      ? Response.json({ isDesktop: desktop, activeFile: null, activePath: null })
+      : app(request);
+}
+
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
-  desktop = false,
+  desktop = true,
 ): Promise<void> {
-  const app = createTestApp(desktop ? { isDesktop: () => true } : {}).fetch;
-  const server = Deno.serve({ hostname: "127.0.0.1", port: 0, onListen() {} }, app);
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    editorTestHandler(desktop),
+  );
   const address = server.addr as Deno.NetAddr;
   const browser = await launchBrowser();
   const page = await browser.newPage();
@@ -145,6 +155,26 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     assert(
       chapterTitle === `Chapter ${initialChapters + 1}: Untitled`,
       `Unexpected new chapter title: ${chapterTitle}`,
+    );
+  });
+});
+
+browserTest("browser: editor uses the Writasaurus green theme tokens", async () => {
+  await withEditorPage(async (page) => {
+    const colors = await page.evaluate(() => {
+      document.documentElement.dataset.theme = "light";
+      const root = getComputedStyle(document.documentElement);
+      return {
+        background: root.getPropertyValue("--bg").trim(),
+        accent: root.getPropertyValue("--accent").trim(),
+        accentStrong: root.getPropertyValue("--accent-strong").trim(),
+      };
+    });
+    assert(colors.background === "#f5f4ec", `Unexpected editor background: ${colors.background}`);
+    assert(colors.accent === "#52714e", `Unexpected editor accent: ${colors.accent}`);
+    assert(
+      colors.accentStrong === "#344f35",
+      `Unexpected editor strong accent: ${colors.accentStrong}`,
     );
   });
 });
@@ -687,7 +717,7 @@ browserTest(
   async () => {
     const server = Deno.serve(
       { hostname: "127.0.0.1", port: 0, onListen() {} },
-      createTestApp().fetch,
+      editorTestHandler(true),
     );
     const address = server.addr as Deno.NetAddr;
     const browser = await launchBrowser();
@@ -707,3 +737,80 @@ browserTest(
     }
   },
 );
+
+browserTest("browser: download placeholder requires agreement acceptance", async () => {
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    createTestApp({ isDesktop: () => false }).fetch,
+  );
+  const address = server.addr as Deno.NetAddr;
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://${address.hostname}:${address.port}/`);
+    const checkbox = page.getByTestId("agreement-acceptance");
+    const download = page.getByTestId("download-button");
+    assert(await download.isDisabled(), "Download should be disabled before consent.");
+    assert(
+      await page.getByTestId("download-notice").count() === 0,
+      "The coming-soon notice should not appear before clicking.",
+    );
+
+    await checkbox.check();
+    await page.waitForFunction(() =>
+      document.querySelector<HTMLButtonElement>('[data-testid="download-button"]')?.disabled ===
+        false
+    );
+    await download.click();
+    await page.getByTestId("download-notice").waitFor();
+    assert(
+      (await page.getByTestId("download-notice").textContent())?.trim() ===
+        "Downloads are coming soon.",
+      "The accepted CTA should explain that downloads are coming soon.",
+    );
+  } finally {
+    await browser.close();
+    await server.shutdown();
+  }
+});
+
+browserTest("browser: marketing theme switcher updates shared light and dark colors", async () => {
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    createTestApp({ isDesktop: () => false }).fetch,
+  );
+  const address = server.addr as Deno.NetAddr;
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://${address.hostname}:${address.port}/`);
+    const themeControl = page.getByRole("group", { name: "Color theme" });
+    await themeControl.getByRole("button", { name: "Dark" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+    assert(
+      await page.evaluate(() => getComputedStyle(document.body).backgroundColor) ===
+        "rgb(23, 32, 24)",
+      "Expected the dark marketing palette.",
+    );
+
+    await page.goto(`http://${address.hostname}:${address.port}/agreement`);
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+    const agreementTheme = page.getByRole("group", { name: "Color theme" });
+    assert(
+      await agreementTheme.getByRole("button", { name: "Dark" }).getAttribute("aria-pressed") ===
+        "true",
+      "Expected the agreement page to retain the selected theme.",
+    );
+
+    await agreementTheme.getByRole("button", { name: "Light" }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.theme === "light");
+    assert(
+      await page.evaluate(() => getComputedStyle(document.body).backgroundColor) ===
+        "rgb(245, 244, 236)",
+      "Expected the light marketing palette.",
+    );
+  } finally {
+    await browser.close();
+    await server.shutdown();
+  }
+});

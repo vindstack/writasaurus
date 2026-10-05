@@ -1,11 +1,14 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import EditorApp from "../components/islands/EditorApp.vue";
+import MarketingHome from "../components/MarketingHome.astro";
 import { getPlatform } from "../lib/platform.ts";
 
 const isDesktop = await getPlatform().isDesktop();
 ---
 
-<BaseLayout title="Writasaurus">
-  <EditorApp isDesktop={isDesktop} client:load />
+<BaseLayout title={isDesktop ? "Writasaurus" : "Writasaurus — A calmer space for long-form writing"}>
+  {isDesktop
+    ? <EditorApp isDesktop={isDesktop} client:load />
+    : <MarketingHome />}
 </BaseLayout>

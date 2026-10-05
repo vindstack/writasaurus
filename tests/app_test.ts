@@ -4,7 +4,7 @@ function assert(condition: unknown): asserts condition {
   if (!condition) throw new Error("Assertion failed");
 }
 
-const app = createTestApp();
+const app = createTestApp({ isDesktop: () => true });
 
 Deno.test("renders the editor on the root route as a single island", async () => {
   const response = await app.request("/");
@@ -75,7 +75,7 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(page.includes("Return to Editor"));
   assert(page.includes("<title>Settings — Writasaurus</title>"));
   assert(page.includes('component-url="/_astro/SettingsForm.'));
-  assert(!page.includes("writing-assistance-input"));
+  assert(page.includes("writing-assistance-input"));
 });
 
 Deno.test("pages are protected by a nonce-based content security policy", async () => {
@@ -113,4 +113,73 @@ Deno.test("returns 404 for missing routes and protected manifest", async () => {
 
   const manifest = await app.request("/manifest.json");
   assert(manifest.status === 404);
+});
+
+Deno.test("renders the marketing homepage and gates its download placeholder", async () => {
+  const website = createTestApp({ isDesktop: () => false });
+  const response = await website.request("/");
+  assert(response.status === 200);
+  const page = await response.text();
+  assert(page.includes("<title>Writasaurus — A calmer space for long-form writing</title>"));
+  assert(page.includes("Make room for the story only you can tell."));
+  assert(page.includes("Writasaurus is for personal use"));
+  assert(page.includes('href="/agreement"'));
+  assert(page.includes('component-url="/_astro/DownloadConsent.'));
+  assert(page.includes('data-testid="agreement-acceptance"'));
+  assert(page.includes('data-testid="download-button" disabled'));
+  assert(!page.includes('component-url="/_astro/EditorApp.'));
+  assert(!page.includes('id="editor"'));
+});
+
+Deno.test("publishes the application license and EPUB ownership terms", async () => {
+  const website = createTestApp({ isDesktop: () => false });
+  const response = await website.request("/agreement");
+  assert(response.status === 200);
+  const page = await response.text();
+  assert(page.includes("<title>Writasaurus License Agreement</title>"));
+  assert(page.includes("your own personal use"));
+  assert(page.includes("You may not copy"));
+  assert(page.includes("You retain ownership"));
+  assert(page.includes("You may keep, use, and distribute"));
+  assert(page.includes("has not been reviewed by a lawyer"));
+  assert(page.includes('aria-label="Writasaurus home"'));
+  assert(page.includes("Back to home"));
+
+  const stylesheets = [...page.matchAll(/href="(\/[^"]+\.css[^"]*)"/g)].map(
+    (match) => match[1],
+  );
+  const css = await Promise.all(
+    stylesheets.map(async (href) => await (await website.request(href)).text()),
+  );
+  assert(css.some((sheet) => sheet.includes("#f5f4ec")));
+  assert(css.some((sheet) => sheet.includes("#344f35")));
+});
+
+Deno.test("hides Desktop app routes and APIs from the website", async () => {
+  const website = createTestApp({ isDesktop: () => false });
+  for (
+    const path of [
+      "/welcome",
+      "/open",
+      "/settings",
+      "/about",
+      "/api/editor",
+      "/api/editor/status",
+    ]
+  ) {
+    const response = await website.request(path);
+    if (response.status !== 404) {
+      throw new Error(`Expected ${path} to be hidden from website mode`);
+    }
+  }
+
+  const post = await website.request("/api/editor/save", {
+    method: "POST",
+    headers: {
+      origin: "http://localhost",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ content: "private API" }),
+  });
+  assert(post.status === 404);
 });
