@@ -1,20 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#15803d" />
-      <stop offset="50%" stop-color="#16a34a" />
-      <stop offset="100%" stop-color="#22c55e" />
-    </linearGradient>
-  </defs>
-  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#g)" />
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#2a6f97" />
   <!-- Cute stylized dinosaur silhouette -->
   <path
     d="M 38 12 C 48 12 52 16 52 22 C 52 25 49 27 45 27 L 42 27 C 43 30 43 34 40 37 C 38 40 37 42 37 46 L 41 46 C 42 46 43 47 43 48 C 43 49 42 50 41 50 L 33 50 C 32 50 31 49 31 48 C 31 44 33 42 33 39 C 30 40 27 39 24 37 C 21 34 18 30 14 28 C 11 27 10 25 12 25 C 14 25 18 27 22 26 C 25 24 28 20 31 16 C 33 13 35 12 38 12 Z"
     fill="#ffffff" />
   <!-- Eye -->
-  <circle cx="44" cy="18" r="2" fill="#15803d" />
+  <circle cx="44" cy="18" r="2" fill="#2a6f97" />
   <!-- Tiny arm with a quill/pen -->
-  <path d="M 35 32 C 37 34 38 34 41 33" stroke="#15803d" stroke-width="2" stroke-linecap="round"
+  <path d="M 35 32 C 37 34 38 34 41 33" stroke="#2a6f97" stroke-width="2" stroke-linecap="round"
     fill="none" />
   <path d="M 40 31 L 46 27 C 47 26 48 27 47 28 L 41 34 Z" fill="#facc15" />
 </svg>
