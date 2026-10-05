@@ -1,5 +1,5 @@
-import type { Chapter, Manuscript } from "../features/editor/client/types.ts";
-import { chapter } from "../features/editor/client/data.ts";
+import type { Chapter, Manuscript } from "./editor/types.ts";
+import { chapter } from "./editor/data.ts";
 import { createSlugFromString } from "./utilties/string-utilities.ts";
 
 const CRC_TABLE = new Uint32Array(256);

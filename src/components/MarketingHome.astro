@@ -1,0 +1,60 @@
+---
+import DownloadConsent from "./islands/DownloadConsent.vue";
+import ThemeSwitcher from "./islands/ThemeSwitcher.vue";
+import styles from "./MarketingHome.module.css";
+---
+
+<main class={styles.page}>
+  <header class={styles.header}>
+    <a class={styles.brand} href="/" aria-label="Writasaurus home">Writasaurus</a>
+    <div class={styles.headerActions}>
+      <ThemeSwitcher client:load />
+    </div>
+  </header>
+
+  <section class={styles.hero} aria-labelledby="hero-title">
+    <div class={styles.copy}>
+      <p class={styles.eyebrow}>A writing space for the long haul</p>
+      <h1 id="hero-title">Make room for the story only you can tell.</h1>
+      <p class={styles.intro}>
+        Writasaurus is a focused, local-first manuscript editor for writers who think in chapters.
+        Shape your draft, keep your work on your device, and export it as an EPUB when it is ready.
+      </p>
+      <p class={styles.licenseNote}>
+        Writasaurus is for personal use and may not be copied or redistributed. Your EPUBs remain
+        yours.
+      </p>
+      <DownloadConsent client:load />
+      <p class={styles.privacyNote}>Your writing stays yours and on your device.</p>
+    </div>
+    <div class={styles.art} aria-hidden="true">
+      <div class={styles.paper}>
+        <span class={styles.paperLabel}>A NEW CHAPTER</span>
+        <span class={styles.line} />
+        <span class={styles.line} />
+        <span class={styles.lineShort} />
+        <span class={styles.chapter}>01</span>
+      </div>
+      <span class={styles.spark}>✦</span>
+    </div>
+  </section>
+
+  <section class={styles.features} aria-label="Writasaurus features">
+    <article>
+      <h2>Made for manuscripts</h2>
+      <p>Organize chapters, follow your word count, and stay with the work in front of you.</p>
+    </article>
+    <article>
+      <h2>Your work, your files</h2>
+      <p>Write locally and export a portable EPUB you own and can keep, use, or share.</p>
+    </article>
+    <article>
+      <h2>Quiet by design</h2>
+      <p>A calm writing environment keeps the focus on your ideas, not the interface.</p>
+    </article>
+  </section>
+
+  <footer class={styles.footer}>
+    <span>© Writasaurus</span>
+  </footer>
+</main>

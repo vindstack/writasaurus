@@ -83,7 +83,10 @@ export async function chooseFile(
 export function checkIsDesktop(): Promise<boolean> {
   try {
     return Promise.resolve(
-      Boolean(Deno.env.get("DENO_SERVE_ADDRESS") || Deno.env.get("DENO_DESKTOP")),
+      Boolean(
+        Deno.env.get("DENO_SERVE_ADDRESS") || Deno.env.get("DENO_DESKTOP") ||
+          Deno.env.get("WRITASAURUS_DESKTOP"),
+      ),
     );
   } catch {
     return Promise.resolve(false);

@@ -2,84 +2,66 @@
 
 ## Commands
 
-This is a Deno 2 project; use Deno tasks and JSR imports rather than npm tooling.
+This is a Deno 2 project built on Astro and Vue. Use Deno tasks and import-map dependencies; never
+use Node.js or npm commands.
 
-- `deno task dev` builds assets, then serves the browser app at `http://localhost:8000` with
-  server-side watch mode.
-- `deno task dev:assets` watches and rebuilds browser TypeScript and CSS. Run it in a second
-  terminal with `deno task dev` when changing client assets.
-- `deno task build` bundles browser assets into `dist/assets/` (hash files and manifest are
-  optional, disabled by default; enable with `--hash` and `--manifest`).
-- `deno task start` serves an existing production build.
-- `deno task desktop:dev` builds and runs the Deno Desktop app with HMR for server handler changes.
-  Restart it after changing client TypeScript or CSS.
+- `deno task dev` starts Astro at `http://localhost:8000` with HMR.
+- `deno task build` builds the app into `dist/` (generated, gitignored).
+- `deno task start` serves the generated Astro server build.
+- `deno task desktop:dev` runs Astro's development server in a Deno Desktop window.
 - `deno task desktop` builds the native application for the current platform into `desktop/`.
 - `deno task check` runs formatting checks, linting, type checks, and the full test suite.
 
-`dist/` is generated and gitignored. In a clean checkout, run `deno task build` before
-`deno task check` or any test that imports `src/app.ts`.
-
 Only run tests after making changes; never run tests preemptively before changes have been made.
-Always run tests using the `deno task test` command only. Browser tests are included as part of
-`deno task test` and should run after changes.
+Always run tests using `deno task test` only. It builds first and includes the Playwright browser
+tests.
 
-When granting permissions, specify the minimal `--allow-*` flags needed (e.g. `--allow-read=...`)
-rather than defaulting to `-A`. Use `deno <subcommand> --help` to verify flags and
-`deno doc <specifier>` to inspect library APIs directly in the terminal. Always check
-`deno desktop --help` before searching the web when looking for how to use Deno Desktop or
-troubleshooting Deno Desktop.
+When granting permissions, specify the minimal `--allow-*` flags needed rather than defaulting to
+`-A`. Use `deno <subcommand> --help` to verify flags and `deno doc <specifier>` to inspect library
+APIs. Always check `deno desktop --help` before searching the web for Deno Desktop help.
 
-Source-only tests such as `tests/html_test.ts` and `tests/csrf_test.ts` do not require a prior asset
-build. Formatting is configured for 100-column lines, semicolons, and double quotes.
+Formatting is configured for 100-column lines, semicolons, and double quotes.
+
+Never commit code; leave committing to the user.
 
 ## Architecture
 
-Writasaurus is a local-first manuscript editor with one application core and two launch modes:
+Writasaurus is a local-first manuscript editor with an Astro app and two launch modes:
 
-- `src/web.server.ts` is the normal HTTP entry point. `src/desktop.server.ts` is the Deno Desktop
-  entry point and creates the native browser window through the side-effect import of
-  `src/desktop/desktop.app.ts`.
-- `src/app.ts` constructs the custom router, loads the asset manifest, installs global CSRF
-  middleware, provides the shared route context (`asset`, `isDesktop`, and `json`), and registers
-  all feature routes.
-- `src/routes/routes.ts` is the route composition root. Feature routes must be registered before the
-  final `/*` static-file route, which serves `dist/` and deliberately hides `/manifest.json`.
-- Each feature under `src/features/` colocates route registration, server-rendered views, browser
-  entry points, and CSS. Views use the shared layout; browser behavior is loaded as external modules
-  from hashed asset URLs.
-- `src/framework/` is the small application framework: routing wraps `@std/http/unstable-route`,
-  HTML templates escape interpolated values, `createView` converts templates to CSP-protected
-  responses, and the bundler builds browser assets.
-- The editor client is split into a module-level state object plus focused action, persistence,
-  file-I/O, component, serialization, and UI modules. Manuscripts are persisted in `localStorage`
-  and saved to disk via the Save button or Ctrl+S; browser file handles are persisted separately in
-  IndexedDB.
-- File access has two paths. In browsers, the File System Access API is preferred with upload and
-  download fallbacks. In Desktop, `/api/editor/*` routes use native OS dialogs and Deno file APIs,
-  and remember the last opened path in the platform application-data directory.
-- Markdown files use JSON frontmatter and `<!-- chapter: ... -->` separators. Editor content is
-  maintained as HTML in memory and converted at the Markdown import/export boundary.
+- `astro.config.ts` configures Astro SSR with the Deno adapter and Vue integration. `app.ts` serves
+  the generated server and static assets; `server.ts` is the web entry point. `desktop.ts` and
+  `desktop.dev.ts` launch production and development Desktop windows with explicit window sizing.
+- `src/pages/` contains Astro pages and JSON APIs under `src/pages/api/editor/`. `src/layouts/`
+  provides the shared document shell, and `src/middleware.ts` enforces same-origin requests and a
+  nonce-based CSP.
+- `src/components/` contains Astro components and Vue SFCs with colocated CSS Modules. Interactive
+  Vue components are hydrated by Astro only where needed.
+- `src/lib/` contains editor, EPUB, Markdown, settings, storage, and platform logic.
+- `src/styles/global.css` is the global stylesheet; files in `public/` are served as-is.
+- `lib/editor/state.ts` uses `@preact/signals` for shared application state; Vue SFCs bridge signal
+  values into Vue reactivity. Do not introduce Preact UI components.
 
-## Repository conventions
+Editor behavior notes:
 
-- Add browser entry files under `src/features/` with a `.client.ts` or `.client.css` suffix.
-  `src/bundle.ts` discovers them recursively; do not maintain a manual entry list.
-- Resolve built assets in views with `ctx.asset("features/.../...client.ts")` using the path
-  relative to `src/`. Never hard-code generated filenames from `dist/assets/`.
-- Build HTML with the `html` tagged template and compose views with `createView` and `baseLayout`.
-  Interpolated strings are escaped automatically. Use `raw()` only for content already known to be
-  safe; nested `html` results are the normal way to insert markup.
-- Keep scripts and styles external. HTML responses enforce a strict CSP that does not permit inline
-  script or style content.
-- Route modules mutate the supplied `Router` and return it. Register new feature route modules in
-  `src/routes/routes.ts`; keep the static catch-all last.
-- All unsafe HTTP methods must remain same-origin. Tests calling POST/PUT/DELETE routes through
-  `app.request()` need an `Origin` header matching the request URL, normally
-  `origin: "http://localhost"`.
-- Test routes without starting a server by creating an app and using `app.request()`. Existing tests
-  use small local assertion helpers rather than a separate assertion library.
-- Preserve browser/Desktop parity when changing open, save, close, or restore behavior. Browser
-  state uses `fileHandle`/`canWrite`; Desktop state uses `desktopFileLoaded` and the server-owned
-  active path.
-- Use explicit `.ts` extensions for local imports and the aliases in `deno.json` for standard
-  library dependencies (`jsr:@std/...`). Do not use legacy URL imports (`https://deno.land/x/...`).
+- The writing area is an uncontrolled contenteditable. Mount content imperatively only when the
+  active chapter changes so the caret never moves; do not make it a controlled component.
+- Manuscripts persist in `localStorage`; browser file handles persist in IndexedDB. Browsers use the
+  File System Access API with upload/download fallbacks; Desktop uses `/api/editor/*` routes.
+- Markdown files use JSON frontmatter and `<!-- chapter: ... -->` separators.
+- Deno Desktop's webview is WebKitGTK; `::highlight()` does not paint on text in anonymous block
+  boxes, so the editor normalizes content into block elements.
+
+## Conventions
+
+- Styling uses CSS Modules only (`Foo.module.css` beside an Astro or Vue component). No Tailwind,
+  inline styles, or `style` attributes. Add global rules to `src/styles/global.css` only for tokens,
+  reset, and document defaults.
+- Prefer `data-*` attributes (not CSS class names) as test hooks, since module class names are
+  hashed.
+- Use explicit `.ts`/`.vue` extensions for local imports and import-map aliases from `deno.json`.
+- `src/middleware.ts` enforces same-origin CSRF checks based on `Sec-Fetch-Site` and `Origin`, and
+  attaches the CSP nonce. Client `fetch` calls need no manual headers. Browser POST tests should
+  send `origin: "http://localhost"`.
+- API tests exercise the built app through `tests/helpers.ts`; browser tests live in
+  `tests/browser/` and use Playwright.
+- Preserve browser/Desktop parity when changing open, save, close, or restore behavior.

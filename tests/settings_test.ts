@@ -189,4 +189,3 @@ Deno.test("settings: applyThemePreference updates data-theme attribute", () => {
   applyThemePreference("dark");
   applyThemePreference("auto");
 });
-

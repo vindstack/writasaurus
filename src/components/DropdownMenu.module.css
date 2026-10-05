@@ -1,0 +1,42 @@
+.root {
+  display: inline-flex;
+  position: relative;
+}
+
+.trigger {
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.popover {
+  display: none;
+  margin-top: 4px;
+  position: absolute;
+  top: 100%;
+  z-index: 1000;
+}
+
+.open {
+  animation: menu-enter 0.15s ease-out;
+  display: block;
+}
+
+.bottom-start {
+  left: 0;
+}
+
+.bottom-end {
+  right: 0;
+}
+
+@keyframes menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
