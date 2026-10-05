@@ -1,4 +1,4 @@
-import { chromium, type Page } from "playwright";
+import type { Page } from "playwright";
 import { createTestApp } from "../helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
@@ -6,6 +6,21 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
 }
 
 async function launchBrowser() {
+  const nodeFs = await import("node:fs");
+  const existsSync = nodeFs.default.existsSync;
+  nodeFs.default.existsSync = (path) => {
+    if (
+      path === "/proc/sys/fs/binfmt_misc/WSLInterop" ||
+      path === "/run/WSL"
+    ) return false;
+    return existsSync(path);
+  };
+  let chromium: typeof import("playwright").chromium;
+  try {
+    ({ chromium } = await import("playwright"));
+  } finally {
+    nodeFs.default.existsSync = existsSync;
+  }
   const customPath = Deno.env.get("PLAYWRIGHT_CHROME_PATH");
   if (customPath) {
     return await chromium.launch({
@@ -57,6 +72,21 @@ const STAT_BUTTON = 'button[title="Cycle statistics (Ctrl+G)"]';
 const PANEL = '[data-testid="assistance-panel"]';
 const ISSUES = `${PANEL} li[data-category="spelling"]`;
 
+function browserTest(name: string, fn: () => Promise<void>): void {
+  Deno.test({
+    name,
+    fn,
+    permissions: {
+      read: true,
+      write: true,
+      env: true,
+      net: true,
+      run: true,
+      sys: ["homedir", "osRelease"],
+    },
+  });
+}
+
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
   desktop = false,
@@ -90,7 +120,7 @@ async function withEditorPage(
   }
 }
 
-Deno.test("browser: editor app renders its shell and adds a chapter", async () => {
+browserTest("browser: editor app renders its shell and adds a chapter", async () => {
   await withEditorPage(async (page) => {
     await page.waitForSelector("header #manuscript-title");
     await page.waitForSelector("#editor");
@@ -119,7 +149,7 @@ Deno.test("browser: editor app renders its shell and adds a chapter", async () =
   });
 });
 
-Deno.test("browser: chapter delete control renders visible neutral text", async () => {
+browserTest("browser: chapter delete control renders visible neutral text", async () => {
   await withEditorPage(async (page) => {
     await openSidebar(page);
     const deleteButton = page.locator('[data-drag-item] button[title="Delete chapter"]');
@@ -145,7 +175,7 @@ Deno.test("browser: chapter delete control renders visible neutral text", async 
   });
 });
 
-Deno.test("browser: dragging a chapter handle reorders chapters", async () => {
+browserTest("browser: dragging a chapter handle reorders chapters", async () => {
   await withEditorPage(async (page) => {
     await openSidebar(page);
     const addChapter = page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" });
@@ -189,7 +219,7 @@ Deno.test("browser: dragging a chapter handle reorders chapters", async () => {
   });
 });
 
-Deno.test("browser: save status shows the saved indicator", async () => {
+browserTest("browser: save status shows the saved indicator", async () => {
   await withEditorPage(async (page) => {
     const status = page.locator("#save-status");
     assert((await status.textContent())?.includes("Saved"), "Expected the Saved message");
@@ -205,7 +235,7 @@ async function chapterWords(page: Page): Promise<number> {
   return Number(text.match(/Chapter: ([\d,]+) words/)?.[1]?.replace(/,/g, "") ?? -1);
 }
 
-Deno.test("browser: status bar renders live stats from the editor store", async () => {
+browserTest("browser: status bar renders live stats from the editor store", async () => {
   await withEditorPage(async (page) => {
     const before = await chapterWords(page);
     assert(before >= 0, "Expected the status bar to render chapter words");
@@ -238,47 +268,50 @@ Deno.test("browser: status bar renders live stats from the editor store", async 
   });
 });
 
-Deno.test("browser: status bar rotates chapter, manuscript, and daily writing stats", async () => {
-  await withEditorPage(async (page) => {
-    const stats = page.locator(STAT_BUTTON);
+browserTest(
+  "browser: status bar rotates chapter, manuscript, and daily writing stats",
+  async () => {
+    await withEditorPage(async (page) => {
+      const stats = page.locator(STAT_BUTTON);
 
-    const chapterStats = (await stats.textContent())?.trim();
-    assert(chapterStats?.startsWith("Chapter:"), `Expected chapter stats, got ${chapterStats}`);
-    assert(chapterStats?.includes("pages"), `Expected chapter pages, got ${chapterStats}`);
-    assert(
-      !chapterStats?.includes("characters"),
-      `Expected no chapter characters, got ${chapterStats}`,
-    );
+      const chapterStats = (await stats.textContent())?.trim();
+      assert(chapterStats?.startsWith("Chapter:"), `Expected chapter stats, got ${chapterStats}`);
+      assert(chapterStats?.includes("pages"), `Expected chapter pages, got ${chapterStats}`);
+      assert(
+        !chapterStats?.includes("characters"),
+        `Expected no chapter characters, got ${chapterStats}`,
+      );
 
-    await stats.click();
-    const manuscriptStats = (await stats.textContent())?.trim();
-    assert(
-      manuscriptStats?.startsWith("Manuscript:"),
-      `Expected manuscript stats, got ${manuscriptStats}`,
-    );
+      await stats.click();
+      const manuscriptStats = (await stats.textContent())?.trim();
+      assert(
+        manuscriptStats?.startsWith("Manuscript:"),
+        `Expected manuscript stats, got ${manuscriptStats}`,
+      );
 
-    await stats.click();
-    const dailyStats = (await stats.textContent())?.trim();
-    assert(
-      dailyStats === "Daily Goal: 0 / 1,500 words",
-      `Expected default daily goal stats, got ${dailyStats}`,
-    );
+      await stats.click();
+      const dailyStats = (await stats.textContent())?.trim();
+      assert(
+        dailyStats === "Daily Goal: 0 / 1,500 words",
+        `Expected default daily goal stats, got ${dailyStats}`,
+      );
 
-    // Verify Ctrl+G shortcut cycles stats and hint is present
-    const kbdHint = page.locator("footer kbd", { hasText: "Ctrl+G" });
-    assert(await kbdHint.isVisible(), "Expected Ctrl+G kbd hint to be visible");
-    assert((await kbdHint.textContent())?.trim() === "Ctrl+G", "Expected Ctrl+G text in hint");
+      // Verify Ctrl+G shortcut cycles stats and hint is present
+      const kbdHint = page.locator("footer kbd", { hasText: "Ctrl+G" });
+      assert(await kbdHint.isVisible(), "Expected Ctrl+G kbd hint to be visible");
+      assert((await kbdHint.textContent())?.trim() === "Ctrl+G", "Expected Ctrl+G text in hint");
 
-    await page.keyboard.press("Control+g");
-    const cycledChapterStats = (await stats.textContent())?.trim();
-    assert(
-      cycledChapterStats?.startsWith("Chapter:"),
-      `Expected Ctrl+G to cycle back to Chapter stats, got ${cycledChapterStats}`,
-    );
-  });
-});
+      await page.keyboard.press("Control+g");
+      const cycledChapterStats = (await stats.textContent())?.trim();
+      assert(
+        cycledChapterStats?.startsWith("Chapter:"),
+        `Expected Ctrl+G to cycle back to Chapter stats, got ${cycledChapterStats}`,
+      );
+    });
+  },
+);
 
-Deno.test("browser: Desktop writing assistance corrects a local spelling warning", async () => {
+browserTest("browser: Desktop writing assistance corrects a local spelling warning", async () => {
   await withEditorPage(async (page) => {
     const panel = page.locator(PANEL);
     await panel.waitFor({ state: "attached" });
@@ -350,65 +383,68 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
   }, true);
 });
 
-Deno.test("browser: writing assistance color codes issues and navigates to the active one", async () => {
-  await withEditorPage(async (page) => {
-    await page.locator(PANEL).waitFor({ state: "attached" });
-    await page.keyboard.press("Control+n");
+browserTest(
+  "browser: writing assistance color codes issues and navigates to the active one",
+  async () => {
+    await withEditorPage(async (page) => {
+      await page.locator(PANEL).waitFor({ state: "attached" });
+      await page.keyboard.press("Control+n");
 
-    // A long chapter keeps the reported issue off screen until the panel scrolls to it.
-    await page.locator("#editor").evaluate((element) => {
-      const filler = Array.from({ length: 60 }, () => "<p>All is well in this chapter.</p>");
-      element.innerHTML = `${filler.join("")}<p>This is teh cat.</p>`;
-      element.dispatchEvent(new Event("input", { bubbles: true }));
-    });
+      // A long chapter keeps the reported issue off screen until the panel scrolls to it.
+      await page.locator("#editor").evaluate((element) => {
+        const filler = Array.from({ length: 60 }, () => "<p>All is well in this chapter.</p>");
+        element.innerHTML = `${filler.join("")}<p>This is teh cat.</p>`;
+        element.dispatchEvent(new Event("input", { bubbles: true }));
+      });
 
-    const issue = page.locator(`${ISSUES} [data-issue]`);
-    await issue.waitFor({ state: "visible", timeout: 60_000 });
-    assert(
-      (await page.locator(`${ISSUES} [data-kind]`)
-        .textContent())?.trim() === "Spelling",
-      "Expected the issue to be labelled with its category",
-    );
+      const issue = page.locator(`${ISSUES} [data-issue]`);
+      await issue.waitFor({ state: "visible", timeout: 60_000 });
+      assert(
+        (await page.locator(`${ISSUES} [data-kind]`)
+          .textContent())?.trim() === "Spelling",
+        "Expected the issue to be labelled with its category",
+      );
 
-    const colors = await page.evaluate(() => {
-      const item = document.querySelector(
-        '[data-testid="assistance-panel"] li[data-category="spelling"]',
-      )!;
-      return {
-        item: getComputedStyle(item).borderLeftColor,
-        kind: getComputedStyle(item.querySelector("[data-kind]")!).color,
-        danger: getComputedStyle(document.documentElement).getPropertyValue("--danger").trim(),
-      };
-    });
-    assert(
-      colors.item === colors.kind,
-      `Expected the spelling accent to match its label color, got ${colors.item} and ${colors.kind}`,
-    );
-    assert(colors.danger.length > 0, "Expected a danger color token to be defined");
+      const colors = await page.evaluate(() => {
+        const item = document.querySelector(
+          '[data-testid="assistance-panel"] li[data-category="spelling"]',
+        )!;
+        return {
+          item: getComputedStyle(item).borderLeftColor,
+          kind: getComputedStyle(item.querySelector("[data-kind]")!).color,
+          danger: getComputedStyle(document.documentElement).getPropertyValue("--danger").trim(),
+        };
+      });
+      assert(
+        colors.item === colors.kind,
+        `Expected the spelling accent to match its label color, got ${colors.item} and ${colors.kind}`,
+      );
+      assert(colors.danger.length > 0, "Expected a danger color token to be defined");
 
-    assert(
-      !await page.evaluate(() => CSS.highlights.has("writing-assistance-active")),
-      "Expected no active highlight before an issue is selected",
-    );
+      assert(
+        !await page.evaluate(() => CSS.highlights.has("writing-assistance-active")),
+        "Expected no active highlight before an issue is selected",
+      );
 
-    await issue.click();
-    await page.waitForFunction(() => CSS.highlights.has("writing-assistance-active"));
-    await page.waitForFunction(() =>
-      document.querySelector('[data-testid="assistance-panel"] li[data-category="spelling"]')
-        ?.getAttribute("data-active") === "true"
-    );
-    assert(
-      await page.locator(`${ISSUES} [data-issue]`)
-        .getAttribute("aria-current") === "true",
-      "Expected the selected issue to be marked as current",
-    );
-    await page.waitForFunction(() =>
-      (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0
-    );
-  }, true);
-});
+      await issue.click();
+      await page.waitForFunction(() => CSS.highlights.has("writing-assistance-active"));
+      await page.waitForFunction(() =>
+        document.querySelector('[data-testid="assistance-panel"] li[data-category="spelling"]')
+          ?.getAttribute("data-active") === "true"
+      );
+      assert(
+        await page.locator(`${ISSUES} [data-issue]`)
+          .getAttribute("aria-current") === "true",
+        "Expected the selected issue to be marked as current",
+      );
+      await page.waitForFunction(() =>
+        (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0
+      );
+    }, true);
+  },
+);
 
-Deno.test("browser: toolbar bold command formats the selected editor content", async () => {
+browserTest("browser: toolbar bold command formats the selected editor content", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#editor").evaluate((element) => {
       element.textContent = "Selected text";
@@ -428,7 +464,7 @@ Deno.test("browser: toolbar bold command formats the selected editor content", a
   });
 });
 
-Deno.test("browser: menu contains direct manuscript and save actions", async () => {
+browserTest("browser: menu contains direct manuscript and save actions", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#menu-toggle").click();
     await page.waitForFunction(() =>
@@ -468,7 +504,7 @@ Deno.test("browser: menu contains direct manuscript and save actions", async () 
   });
 });
 
-Deno.test("browser: Desktop menu and F11 toggle fullscreen", async () => {
+browserTest("browser: Desktop menu and F11 toggle fullscreen", async () => {
   await withEditorPage(async (page) => {
     await page.evaluate(() => {
       let fullscreen = false;
@@ -513,7 +549,7 @@ Deno.test("browser: Desktop menu and F11 toggle fullscreen", async () => {
   }, true);
 });
 
-Deno.test("browser: editor content never mixes text with block siblings", async () => {
+browserTest("browser: editor content never mixes text with block siblings", async () => {
   await withEditorPage(async (page) => {
     await page.locator(PANEL).waitFor({ state: "attached" });
     await page.keyboard.press("Control+n");
@@ -601,7 +637,7 @@ Deno.test("browser: editor content never mixes text with block siblings", async 
   }, true);
 });
 
-Deno.test("browser: Tab key inserts an actual tab character in the editor", async () => {
+browserTest("browser: Tab key inserts an actual tab character in the editor", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#editor").click();
     await page.keyboard.press("End");
@@ -616,52 +652,58 @@ Deno.test("browser: Tab key inserts an actual tab character in the editor", asyn
   });
 });
 
-Deno.test("browser: theme preference persists across navigation to settings, welcome, and about", async () => {
-  await withEditorPage(async (page) => {
-    // Set theme to dark via dropdown menu
-    await page.locator("#menu-toggle").click();
-    await page.waitForFunction(() =>
-      document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
+browserTest(
+  "browser: theme preference persists across navigation to settings, welcome, and about",
+  async () => {
+    await withEditorPage(async (page) => {
+      // Set theme to dark via dropdown menu
+      await page.locator("#menu-toggle").click();
+      await page.waitForFunction(() =>
+        document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
+      );
+      await page.locator('#app-menu button[value="dark"]').click();
+      assert(
+        await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
+        "Expected the dark theme to be applied",
+      );
+
+      // Navigate to /settings
+      await page.goto(new URL("/settings", page.url()).href);
+      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+
+      // Navigate to /welcome
+      await page.goto(new URL("/welcome", page.url()).href);
+      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+
+      // Navigate to /about
+      await page.goto(new URL("/about", page.url()).href);
+      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+    });
+  },
+);
+
+browserTest(
+  "browser: starting a new manuscript from the welcome page opens the editor",
+  async () => {
+    const server = Deno.serve(
+      { hostname: "127.0.0.1", port: 0, onListen() {} },
+      createTestApp().fetch,
     );
-    await page.locator('#app-menu button[value="dark"]').click();
-    assert(
-      await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
-      "Expected the dark theme to be applied",
-    );
-
-    // Navigate to /settings
-    await page.goto(new URL("/settings", page.url()).href);
-    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-
-    // Navigate to /welcome
-    await page.goto(new URL("/welcome", page.url()).href);
-    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-
-    // Navigate to /about
-    await page.goto(new URL("/about", page.url()).href);
-    await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-  });
-});
-
-Deno.test("browser: starting a new manuscript from the welcome page opens the editor", async () => {
-  const server = Deno.serve(
-    { hostname: "127.0.0.1", port: 0, onListen() {} },
-    createTestApp().fetch,
-  );
-  const address = server.addr as Deno.NetAddr;
-  const browser = await launchBrowser();
-  const page = await browser.newPage();
-  try {
-    await page.goto(`http://${address.hostname}:${address.port}/welcome`);
-    await page.locator("#welcome-new").click();
-    await page.waitForURL(`http://${address.hostname}:${address.port}/`);
-    await page.waitForSelector('[data-ready="true"]');
-    assert(
-      await page.locator("#manuscript-title").inputValue() === "Untitled Manuscript",
-      "Expected the new manuscript title to render in the editor",
-    );
-  } finally {
-    await browser.close();
-    await server.shutdown();
-  }
-});
+    const address = server.addr as Deno.NetAddr;
+    const browser = await launchBrowser();
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://${address.hostname}:${address.port}/welcome`);
+      await page.locator("#welcome-new").click();
+      await page.waitForURL(`http://${address.hostname}:${address.port}/`);
+      await page.waitForSelector('[data-ready="true"]');
+      assert(
+        await page.locator("#manuscript-title").inputValue() === "Untitled Manuscript",
+        "Expected the new manuscript title to render in the editor",
+      );
+    } finally {
+      await browser.close();
+      await server.shutdown();
+    }
+  },
+);

@@ -1,7 +1,8 @@
 # Writasaurus
 
-A local-first manuscript editor built with [Deno Fresh](https://fresh.deno.dev) (Vite), Preact, and
-`@preact/signals`. Styling uses CSS Modules. Deno Desktop packages it in a native webview.
+A local-first manuscript editor built with [Astro](https://astro.build), Vue single-file components,
+and Deno. Styling uses CSS Modules. Deno Desktop packages the server-rendered app in a native
+webview.
 
 ## Run
 
@@ -21,11 +22,11 @@ deno task start
 Desktop:
 
 ```sh
-deno task desktop:dev   # build and run with HMR for server handlers
+deno task desktop:dev   # run Astro's dev server in a native window
 deno task desktop       # package for the current platform into desktop/
 ```
 
-Check formatting, linting, types, and tests (unit and Playwright browser tests):
+Check formatting, linting, types, and unit and Playwright browser tests:
 
 ```sh
 deno task check
@@ -33,15 +34,15 @@ deno task check
 
 ## Structure
 
-- `main.ts` creates the Fresh app; `desktop.ts` (production) and `desktop.dev.ts` (Vite child
-  process) are the Desktop entries; they exist to set the window size and frameless mode, which
-  auto-detection (`deno desktop .`) cannot do.
-- `routes/` contains pages, `_app.tsx`, `_middleware.ts` (CSP), and `api/editor/*` native file APIs.
-- `islands/` contains the only hydrated components; static pages render none.
-- `components/` contains Preact components with colocated `.module.css` files.
-- `lib/` contains framework-agnostic logic (EPUB, Markdown, settings, storage, history, and the
-  signal-based `lib/editor/`).
-- `assets/styles.css` is the single global stylesheet; `static/` is served unchanged.
+- `src/pages/` contains Astro pages and API routes; `src/layouts/` provides the shared document
+  shell and `src/middleware.ts` enforces same-origin requests and the nonce-based CSP.
+- `src/components/` contains Astro components, Vue SFCs, and colocated CSS Modules. Interactive Vue
+  SFCs are hydrated by Astro only where needed.
+- `src/lib/` contains editor, EPUB, Markdown, settings, storage, history, and platform logic. The
+  editor uses signals for shared state and keeps its contenteditable surface uncontrolled.
+- `src/styles/global.css` contains global styles. Files in `public/` are served unchanged.
+- `astro.config.ts` configures Astro SSR with the Deno adapter; `app.ts`, `server.ts`, and
+  `desktop.ts` connect the generated server to the web and native Desktop runtimes.
 
 ## Editor
 
@@ -54,6 +55,6 @@ writing assistance (Harper) highlights spelling and grammar issues.
 
 ## Secure defaults
 
-Unsafe HTTP methods are same-origin only. Scripts and styles load from external files (no inline
-scripts or styles). Desktop and server tasks grant only the network, environment, and file
-permissions the app needs.
+Unsafe HTTP methods are same-origin only. The middleware applies a per-response nonce to scripts and
+styles and sets a CSP without `unsafe-inline`. Desktop and server tasks grant only the permissions
+the app needs.

@@ -11,7 +11,8 @@ Deno.test("renders the editor on the root route as a single island", async () =>
   assert(response.status === 200);
   const page = await response.text();
   assert(page.includes("<title>Writasaurus</title>"));
-  assert(page.includes("frsh:island:EditorApp"));
+  assert(page.includes("<astro-island"));
+  assert(page.includes('component-url="/_astro/EditorApp.'));
   assert(page.includes('id="editor"'));
   assert(page.includes('id="manuscript-title"'));
   assert(page.includes('id="editor-file-input"'));
@@ -34,7 +35,7 @@ Deno.test("renders welcome page with open manuscript options and return to edito
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
   assert(page.includes("<title>Open Manuscript — Writasaurus</title>"));
-  assert(page.includes("frsh:island:WelcomeActions"));
+  assert(page.includes('component-url="/_astro/WelcomeActions.'));
   assert(page.includes('href="/about"'));
 
   const aliasResponse = await app.request("/open");
@@ -54,7 +55,7 @@ Deno.test("renders about page with description and return to editor link", async
   assert(page.includes("<title>About — Writasaurus</title>"));
   assert(page.includes("Hello, John Smith!"));
   assert(page.includes("Count: 0"));
-  assert(page.includes("frsh:island:AboutCounter"));
+  assert(page.includes('component-url="/_astro/AboutCounter.'));
 });
 
 Deno.test("renders settings page with font options and return to editor link", async () => {
@@ -73,7 +74,7 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
   assert(page.includes("<title>Settings — Writasaurus</title>"));
-  assert(page.includes("frsh:island:SettingsForm"));
+  assert(page.includes('component-url="/_astro/SettingsForm.'));
   assert(!page.includes("writing-assistance-input"));
 });
 
@@ -97,7 +98,10 @@ Deno.test("stylesheets include view transition rules for smooth page fades", asy
   const sheets = await Promise.all(
     hrefs.map(async (href) => await (await app.request(href)).text()),
   );
-  const css = sheets.join("\n");
+  const inlineStyles = [...page.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].map(
+    (match) => match[1],
+  );
+  const css = [...inlineStyles, ...sheets].join("\n");
   assert(css.includes("view-transition"));
   assert(css.includes(":active"));
   assert(css.includes(":disabled"));

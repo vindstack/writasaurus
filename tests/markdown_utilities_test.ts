@@ -1,4 +1,4 @@
-import { markdownToHtml } from "../lib/utilties/markdown-utilities.ts";
+import { markdownToHtml } from "../src/lib/utilties/markdown-utilities.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);

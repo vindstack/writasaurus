@@ -1,0 +1,21 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CardPage from "../components/CardPage.astro";
+import SettingsForm from "../components/islands/SettingsForm.vue";
+import PageEffects from "../components/islands/PageEffects.vue";
+import { getPlatform } from "../lib/platform.ts";
+import styles from "./settings.module.css";
+
+const isDesktop = await getPlatform().isDesktop();
+---
+
+<BaseLayout title="Settings — Writasaurus">
+  <CardPage size="wide" brandHref="/" roomy>
+    <h2>Settings</h2>
+    <p class={styles.intro}>
+      Customize your writing environment. Preferences are stored locally on this device.
+    </p>
+    <SettingsForm isDesktop={isDesktop} client:load />
+  </CardPage>
+  <PageEffects client:load />
+</BaseLayout>

@@ -1,0 +1,11 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import EditorApp from "../components/islands/EditorApp.vue";
+import { getPlatform } from "../lib/platform.ts";
+
+const isDesktop = await getPlatform().isDesktop();
+---
+
+<BaseLayout title="Writasaurus">
+  <EditorApp isDesktop={isDesktop} client:load />
+</BaseLayout>

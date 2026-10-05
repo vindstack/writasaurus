@@ -1,5 +1,4 @@
-// Dev entry: the auto-detected Fresh path cannot size the window, so open it here
-// and point it at the Vite dev server.
+// Open the dev server in a fixed-size window; auto-detection cannot set these window options.
 const win = new Deno.BrowserWindow({
   title: "Writasaurus",
   width: 1000,

@@ -1,7 +1,7 @@
 {
   "name": "Writasaurus",
   "version": "0.1.0",
-  "exports": "./main.ts",
+  "exports": "./app.ts",
   "desktop": {
     "app": {
       "name": "Writasaurus",
@@ -22,26 +22,7 @@
       "deno.desktop",
       "dom",
       "dom.iterable"
-    ],
-    "jsx": "precompile",
-    "jsxImportSource": "preact",
-    "jsxPrecompileSkipElements": [
-      "a",
-      "img",
-      "source",
-      "body",
-      "html",
-      "head",
-      "title",
-      "meta",
-      "script",
-      "link",
-      "style",
-      "base",
-      "noscript",
-      "template"
-    ],
-    "types": ["vite/client"]
+    ]
   },
   "fmt": {
     "lineWidth": 100,
@@ -50,32 +31,31 @@
   },
   "lint": {
     "rules": {
-      "tags": ["fresh", "recommended"]
+      "tags": ["recommended"]
     }
   },
   "tasks": {
-    "build": "vite build",
-    "test:browser": "deno task build && deno test -A tests/browser",
-    "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test -A tests/browser",
-    "check": "deno fmt --check && deno lint && deno check main.ts routes/ islands/ components/ lib/ && deno task test",
-    "desktop": "deno desktop --no-check --icon=static/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
-    "desktop:dev": "deno desktop --no-check --hmr --icon=static/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts",
-    "dev": "vite --port 8000",
-    "start": "deno serve --allow-env --allow-net --allow-read _fresh/server.js"
+    "build": "astro build",
+    "test:browser": "deno task build && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
+    "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
+    "check": "deno fmt --check && deno lint && deno check app.ts desktop.ts desktop.dev.ts server.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts && astro check && deno task test",
+    "desktop": "deno task build && deno desktop --no-check --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
+    "desktop:dev": "deno desktop --no-check --hmr --icon=public/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts",
+    "dev": "astro dev --host 127.0.0.1 --port 8000",
+    "start": "deno run --allow-env --allow-net --allow-read --allow-write server.ts"
   },
   "imports": {
-    "@std/http": "jsr:@std/http@^1.1.3",
-    "@std/path": "jsr:@std/path@^1.1.4",
+    "@astrojs/check": "npm:@astrojs/check@^0.9.10",
+    "@astrojs/vue": "npm:@astrojs/vue@^7.0.3",
+    "@deno/astro-adapter": "npm:@deno/astro-adapter@^0.6.0",
     "@types/node": "npm:@types/node@^26.6.4",
-    "harper": "npm:harper.js@2.10.0",
+    "astro": "npm:astro@^7.3.5",
+    "harper.js": "npm:harper.js@2.10.0",
     "playwright": "npm:playwright@^1.63.0",
-    "fresh": "jsr:@fresh/core@^2.3.3",
-    "@fresh/plugin-vite": "jsr:@fresh/plugin-vite@^1.1.2",
-    "preact": "npm:preact@^10.29.1",
     "@preact/signals": "npm:@preact/signals@^2.9.0",
-    "vite": "npm:vite@^7.1.3",
-    "@types/babel__core": "npm:@types/babel__core@^7.20.5"
+    "typescript": "npm:typescript@^6.0.3",
+    "vue": "npm:vue@^3.5.43"
   },
   "nodeModulesDir": "manual",
-  "exclude": ["**/_fresh/*", "desktop/", "node_modules/"]
+  "exclude": ["dist/", ".astro/", "desktop/", "node_modules/"]
 }

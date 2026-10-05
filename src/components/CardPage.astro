@@ -1,0 +1,27 @@
+---
+import styles from "./CardPage.module.css";
+
+interface Props {
+  size: "narrow" | "medium" | "wide";
+  brandHref?: string;
+  roomy?: boolean;
+  prose?: boolean;
+}
+
+const { size, brandHref, roomy = false, prose = false } = Astro.props;
+---
+
+<div class={styles.page}>
+  <div class={`${styles.container} ${styles[size]}`}>
+    <header class={styles.header}>
+      {brandHref
+        ? <a class={styles.brand} href={brandHref}>Writasaurus</a>
+        : <span class={styles.brand}>Writasaurus</span>}
+    </header>
+    <main>
+      <section class:list={[styles.card, roomy && styles.roomy, prose && styles.prose]}>
+        <slot />
+      </section>
+    </main>
+  </div>
+</div>

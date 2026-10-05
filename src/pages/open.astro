@@ -1,0 +1,18 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CardPage from "../components/CardPage.astro";
+import WelcomeActions from "../components/islands/WelcomeActions.vue";
+import PageEffects from "../components/islands/PageEffects.vue";
+import { getPlatform } from "../lib/platform.ts";
+
+const isDesktop = await getPlatform().isDesktop();
+---
+
+<BaseLayout title="Open Manuscript — Writasaurus">
+  <CardPage size="narrow" brandHref="/about" roomy>
+    <h2>Open Manuscript</h2>
+    <p>Open an EPUB manuscript or begin with a blank document.</p>
+    <WelcomeActions isDesktop={isDesktop} client:load />
+  </CardPage>
+  <PageEffects client:load />
+</BaseLayout>

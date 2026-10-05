@@ -1,12 +1,6 @@
-import { type Platform, setPlatform } from "../lib/platform.ts";
+import { type Platform, setPlatform } from "../src/lib/platform.ts";
 
-interface FreshServer {
-  fetch(request: Request): Response | Promise<Response>;
-}
-
-// Loaded dynamically so type-checking never walks the generated bundle.
-const bundle = new URL("../_fresh/server.js", import.meta.url).href;
-const server = (await import(bundle)).default as FreshServer;
+import { fetchApp } from "../app.ts";
 
 export interface TestApp {
   fetch(request: Request): Response | Promise<Response>;
@@ -14,16 +8,16 @@ export interface TestApp {
 }
 
 /**
- * Exercises the built Fresh server in-process. Requires `deno task build`; platform overrides
- * are shared with the bundle through `globalThis`.
+ * Exercises the built Astro server in-process. Requires `deno task build`; platform overrides are
+ * shared with the bundle through `globalThis`.
  */
 export function createTestApp(platform: Partial<Platform> = {}): TestApp {
   setPlatform(platform);
   return {
-    fetch: (request) => server.fetch(request),
+    fetch: fetchApp,
     request(url, init) {
       const full = url.startsWith("http") ? url : `http://localhost${url}`;
-      return Promise.resolve(server.fetch(new Request(full, init)));
+      return fetchApp(new Request(full, init));
     },
   };
 }

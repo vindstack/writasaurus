@@ -2,5 +2,7 @@
 /desktop
 deno.lock
 ignore/
-_fresh/
+dist/
+.astro/
+.vite/
 node_modules/

@@ -25,7 +25,7 @@ import {
   SETTINGS_WRITING_ASSISTANCE_KEY,
   THEME_SETTINGS_KEY,
   type ThemePreference,
-} from "../lib/settings.ts";
+} from "../src/lib/settings.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
