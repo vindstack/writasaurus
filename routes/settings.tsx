@@ -2,6 +2,7 @@ import { Head } from "fresh/runtime";
 import { define } from "../utils.ts";
 import { CardPage } from "../components/CardPage.tsx";
 import SettingsForm from "../islands/SettingsForm.tsx";
+// @ts-types="../vite-env.d.ts"
 import styles from "./settings.module.css";
 
 export default define.page(async function Settings(ctx) {

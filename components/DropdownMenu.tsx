@@ -1,5 +1,6 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useRef } from "preact/hooks";
+// @ts-types="../vite-env.d.ts"
 import styles from "./DropdownMenu.module.css";
 
 interface DropdownMenuProps {

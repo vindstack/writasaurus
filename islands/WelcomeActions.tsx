@@ -5,6 +5,7 @@ import { saveLocal, setSkipWelcome, storeHandle } from "../lib/editor/storage.ts
 import { parseEpub } from "../lib/epub.ts";
 import { requestOpen } from "../lib/open-manuscript.ts";
 import { usePageEffects } from "../lib/use-page-effects.ts";
+// @ts-types="../vite-env.d.ts"
 import styles from "./WelcomeActions.module.css";
 
 interface WelcomeActionsProps {

@@ -12,7 +12,9 @@ import {
   statsIndex,
   totalWords,
 } from "../../lib/editor/state.ts";
+// @ts-types="../../vite-env.d.ts"
 import controls from "./controls.module.css";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./StatusBar.module.css";
 
 const STAT_NAMES = ["chapter", "manuscript", "daily writing goal"];
@@ -62,6 +64,7 @@ export function StatusBar() {
       >
         Chapters <kbd class={controls.kbd}>Ctrl+B</kbd>
       </button>
+      <WordCount />
       {isDesktop.value && (
         <button
           type="button"
@@ -73,7 +76,6 @@ export function StatusBar() {
           Writing Assistance <kbd class={controls.kbd}>Ctrl+N</kbd>
         </button>
       )}
-      <WordCount />
     </footer>
   );
 }

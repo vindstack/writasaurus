@@ -1,3 +1,4 @@
+// @ts-types="../vite-env.d.ts"
 import styles from "./SegmentedControl.module.css";
 
 interface SegmentedControlProps<T extends string> {

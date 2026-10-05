@@ -29,9 +29,14 @@ function loadEngine() {
 }
 
 export async function toggleAssistance(): Promise<void> {
-  const engine = await loadEngine();
-  if (assistanceOpen.peek()) engine.closeAssistance();
-  else await engine.openAssistance();
+  if (assistanceOpen.peek()) {
+    (await loadEngine()).closeAssistance();
+    return;
+  }
+  // Open the panel right away; the engine import and WebAssembly setup can be slow.
+  assistanceOpen.value = true;
+  if (assistanceStatus.peek() !== "ready") assistanceStatus.value = "loading";
+  await (await loadEngine()).openAssistance();
 }
 
 export async function closeAssistance(): Promise<void> {

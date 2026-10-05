@@ -12,6 +12,7 @@ import {
   selectWarning,
   warningCategory,
 } from "../../lib/editor/assistance-state.ts";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./AssistancePanel.module.css";
 
 const MAX_VISIBLE = 10;
@@ -53,7 +54,15 @@ export function AssistancePanel() {
           Close
         </button>
       </div>
-      <p class={styles.status} role="status" aria-live="polite">{statusText()}</p>
+      <p
+        class={styles.status}
+        role="status"
+        aria-live="polite"
+        data-status={assistanceStatus.value}
+      >
+        {assistanceStatus.value === "loading" && <span class={styles.spinner} aria-hidden="true" />}
+        {statusText()}
+      </p>
       {open && warnings.length > 0 && (
         <ol class={styles.list} ref={list}>
           {warnings.slice(0, MAX_VISIBLE).map((warning, index) => {

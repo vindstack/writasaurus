@@ -22,16 +22,21 @@ APIs. Always check `deno desktop --help` before searching the web for Deno Deskt
 
 Formatting is configured for 100-column lines, semicolons, and double quotes.
 
+Never commit code; leave committing to the user.
+
 ## Architecture
 
 Writasaurus is a local-first manuscript editor with one Fresh app and two launch modes:
 
-- `main.ts` defines the Fresh `App` (static files, `_middleware.ts`, `fsRoutes()`). `desktop.ts` is
-  the Deno Desktop entry; `lib/platform.ts` exposes the platform (desktop flag/exit) that tests and
-  the Desktop entry can override.
+- `main.ts` defines the Fresh `App` (static files, `_middleware.ts`, `fsRoutes()`). `desktop.ts` and
+  `desktop.dev.ts` are the Desktop entries (they set the 1000x700 frameless window, which
+  auto-detection cannot). `lib/platform.ts` exposes the platform (desktop flag/exit) that tests can
+  override; Desktop is detected from `DENO_SERVE_ADDRESS`, or `WRITASAURUS_DESKTOP` (set by
+  `desktop.dev.ts` for its Vite child process).
 - `routes/` holds file-based routes: pages (`*.tsx` with `define.page`), `_app.tsx` (layout),
-  `_middleware.ts` (same-origin CSRF for unsafe methods, platform state), and JSON APIs under
-  `routes/api/editor/*.ts` (native dialogs and file I/O on Desktop).
+  `main.ts` registers Fresh's `csrf()` middleware (same-origin only for unsafe methods);
+  `_middleware.ts` sets the CSP, and JSON APIs under `routes/api/editor/*.ts` (native dialogs and
+  file I/O on Desktop).
 - `islands/` holds the only interactive (hydrated) components: `EditorApp`, `SettingsForm`,
   `WelcomeActions`, `AboutCounter`, `PageEffects`. Pages that need no interactivity render no
   islands.
@@ -66,8 +71,10 @@ Editor behavior notes:
   loading after restructuring imports, check the island's entry in
   `_fresh/client/.vite/manifest.json`.
 - Use explicit `.ts`/`.tsx` extensions for local imports and the import map aliases in `deno.json`.
-- All unsafe HTTP methods must remain same-origin. Tests calling POST/PUT/DELETE routes need an
-  `Origin` header matching the request URL, normally `origin: "http://localhost"`.
+- CSRF uses Fresh's built-in `csrf()` (checks `Sec-Fetch-Site` and `Origin`; requests with neither
+  header are non-browser clients and pass). Client `fetch` calls need no manual headers. Tests that
+  simulate a browser POST should send `origin: "http://localhost"`; `tests/csrf_test.ts` covers web
+  and Desktop.
 - Test routes without a server using `createTestApp` from `tests/helpers.ts` and `app.request()`.
   Browser tests live in `tests/browser/` and use Playwright.
 - Preserve browser/Desktop parity when changing open, save, close, or restore behavior.

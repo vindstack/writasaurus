@@ -22,6 +22,7 @@ import { Sidebar } from "../components/editor/Sidebar.tsx";
 import { WritingArea } from "../components/editor/WritingArea.tsx";
 import { AssistancePanel } from "../components/editor/AssistancePanel.tsx";
 import { StatusBar } from "../components/editor/StatusBar.tsx";
+// @ts-types="../vite-env.d.ts"
 import styles from "./EditorApp.module.css";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_000;

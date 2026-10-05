@@ -14,6 +14,7 @@ import {
   saveWritingAssistancePreference,
 } from "../lib/settings.ts";
 import { usePageEffects } from "../lib/use-page-effects.ts";
+// @ts-types="../vite-env.d.ts"
 import styles from "./SettingsForm.module.css";
 
 interface SettingsFormProps {

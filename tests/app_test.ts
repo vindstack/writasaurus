@@ -83,6 +83,7 @@ Deno.test("pages are protected by a nonce-based content security policy", async 
   const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
   assert(nonce);
   assert(!policy.includes("'unsafe-inline'"));
+  assert(!policy.includes("upgrade-insecure-requests"));
   const page = await response.text();
   assert(page.includes(`nonce="${nonce}"`));
   assert(!page.includes("style="));

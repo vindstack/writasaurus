@@ -11,7 +11,9 @@ import {
   sidebarOpen,
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
+// @ts-types="../../vite-env.d.ts"
 import controls from "./controls.module.css";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./Sidebar.module.css";
 
 export function Sidebar() {

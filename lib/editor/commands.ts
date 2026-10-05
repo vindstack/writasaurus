@@ -30,7 +30,7 @@ export async function quit(): Promise<void> {
   if (hasUnsavedChanges.peek()) return;
   if (isDesktop.peek()) {
     try {
-      await fetch("/api/editor/exit", { method: "POST", headers: { origin: location.origin } });
+      await fetch("/api/editor/exit", { method: "POST" });
     } catch {
       // The native app may already be closing.
     }

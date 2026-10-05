@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import { fresh } from "@fresh/plugin-vite";
 
 export default defineConfig({
+  // @ts-ignore LSP reporting false error with fresh plugin
   plugins: [fresh()],
   build: {
     rollupOptions: {

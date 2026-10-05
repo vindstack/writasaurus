@@ -28,10 +28,7 @@ export async function startNewManuscript(): Promise<void> {
 
   if (!isDesktop.peek()) return;
   try {
-    const response = await fetch("/api/editor/close", {
-      method: "POST",
-      headers: { origin: location.origin },
-    });
+    const response = await fetch("/api/editor/close", { method: "POST" });
     if (!response.ok) throw new Error(`Could not close active manuscript: ${response.status}`);
   } catch (error) {
     console.warn("Could not clear the previously active desktop manuscript.", error);

@@ -21,7 +21,9 @@ import {
   saveMessage,
 } from "../../lib/editor/state.ts";
 import { Toolbar } from "./Toolbar.tsx";
+// @ts-types="../../vite-env.d.ts"
 import controls from "./controls.module.css";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./Topbar.module.css";
 
 const THEMES = [

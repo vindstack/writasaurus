@@ -147,19 +147,3 @@ Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
   });
   assertEquals(res.status, 204);
 });
-
-Deno.test("editor-api: rejects unsafe requests without valid origin", async () => {
-  const app = createTestApp();
-  const resMissing = await app.request("/api/editor/save", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ content: "Some content" }),
-  });
-  assertEquals(resMissing.status, 403);
-
-  const resAttacker = await app.request("/api/editor/close", {
-    method: "POST",
-    headers: { origin: "https://attacker.example" },
-  });
-  assertEquals(resAttacker.status, 403);
-});

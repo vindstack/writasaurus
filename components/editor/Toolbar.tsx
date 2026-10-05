@@ -1,6 +1,8 @@
 import { Tooltip } from "../Tooltip.tsx";
 import { runCommand } from "../../lib/editor/surface.ts";
+// @ts-types="../../vite-env.d.ts"
 import controls from "./controls.module.css";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./Toolbar.module.css";
 
 const COMMANDS = [

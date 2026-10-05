@@ -1,4 +1,5 @@
 import type { ComponentChildren } from "preact";
+// @ts-types="../vite-env.d.ts"
 import styles from "./Button.module.css";
 
 interface ButtonProps {

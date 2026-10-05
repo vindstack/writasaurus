@@ -1,3 +1,4 @@
+// @ts-types="../vite-env.d.ts"
 import styles from "./SaveStatus.module.css";
 
 interface SaveStatusProps {

@@ -13,6 +13,7 @@ import {
   renameChapter,
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
+// @ts-types="../../vite-env.d.ts"
 import styles from "./WritingArea.module.css";
 
 export function WritingArea() {

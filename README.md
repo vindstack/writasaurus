@@ -33,9 +33,10 @@ deno task check
 
 ## Structure
 
-- `main.ts` creates the Fresh app; `desktop.ts` is the Deno Desktop entry.
-- `routes/` contains pages, `_app.tsx`, `_middleware.ts` (CSRF), and `api/editor/*` native file
-  APIs.
+- `main.ts` creates the Fresh app; `desktop.ts` (production) and `desktop.dev.ts` (Vite child
+  process) are the Desktop entries; they exist to set the window size and frameless mode, which
+  auto-detection (`deno desktop .`) cannot do.
+- `routes/` contains pages, `_app.tsx`, `_middleware.ts` (CSP), and `api/editor/*` native file APIs.
 - `islands/` contains the only hydrated components; static pages render none.
 - `components/` contains Preact components with colocated `.module.css` files.
 - `lib/` contains framework-agnostic logic (EPUB, Markdown, settings, storage, history, and the
