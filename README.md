@@ -1,8 +1,7 @@
 # Writasaurus
 
-A local-first manuscript editor built with Deno and the deno standard library, with no other
-dependencies. Deno serves the application, bundles browser TypeScript and CSS, and Deno Desktop
-packages it in a native webview.
+A local-first manuscript editor built with [Deno Fresh](https://fresh.deno.dev) (Vite), Preact, and
+`@preact/signals`. Styling uses CSS Modules. Deno Desktop packages it in a native webview.
 
 ## Run
 
@@ -10,11 +9,7 @@ packages it in a native webview.
 deno task dev
 ```
 
-Open <http://localhost:8000>. For live frontend rebuilds, run this in a second terminal:
-
-```sh
-deno task dev:assets
-```
+Open <http://localhost:8000>.
 
 Production:
 
@@ -23,27 +18,14 @@ deno task build
 deno task start
 ```
 
-Desktop development:
+Desktop:
 
 ```sh
-deno task desktop:dev
+deno task desktop:dev   # build and run with HMR for server handlers
+deno task desktop       # package for the current platform into desktop/
 ```
 
-This passes `src/desktop.server.ts` explicitly so Desktop uses plain Deno HMR. Restart the task
-after changing client TypeScript or CSS; server handler edits use HMR.
-
-Build the desktop application configured for the current platform:
-
-```sh
-deno task desktop
-```
-
-Desktop builds are written under `desktop/`. Deno Desktop selects a private loopback port, embeds
-the bundled output, and opens the application in a native webview. Both desktop tasks pass
-`src/assets/static/desktop-icon.png` through Deno Desktop's `--icon` option; replace that PNG to
-change the packaged app icon.
-
-Check formatting, linting, TypeScript types, and tests:
+Check formatting, linting, types, and tests (unit and Playwright browser tests):
 
 ```sh
 deno task check
@@ -51,39 +33,26 @@ deno task check
 
 ## Structure
 
-- `src/app.ts` creates the router and shared application context.
-- `src/features/` colocates each feature's routes, views, browser TypeScript, and CSS.
-- `src/views/` contains shared HTML template literal layouts.
-- `src/framework/` contains routing, safe HTML templates, and asset resolving helpers.
-- `src/assets/` contains shared CSS and static files.
-- `src/assets/static/` contains unchanged files copied directly to the root of `dist/`.
+- `main.ts` creates the Fresh app; `desktop.ts` is the Deno Desktop entry.
+- `routes/` contains pages, `_app.tsx`, `_middleware.ts` (CSRF), and `api/editor/*` native file
+  APIs.
+- `islands/` contains the only hydrated components; static pages render none.
+- `components/` contains Preact components with colocated `.module.css` files.
+- `lib/` contains framework-agnostic logic (EPUB, Markdown, settings, storage, history, and the
+  signal-based `lib/editor/`).
+- `assets/styles.css` is the single global stylesheet; `static/` is served unchanged.
 
 ## Editor
 
 The editor is the root route (`/`). It stores the active manuscript in localStorage, remembers
 granted file handles in IndexedDB, and integrates with native desktop file dialogs or the File
 System Access API when available. It supports a Save button, Ctrl/Cmd+S saving, multiple chapters,
-Markdown import/export, drag-and-drop opening, a sample manuscript, and live word, page, and
-character counts. Browsers without direct file access use normal uploads and downloads.
-
-## Browser assets
-
-`src/bundle.ts` auto-loads browser TypeScript and CSS from `src/features/` and passes them to the
-reusable bundler in `src/framework/bundle/bundle.ts`. The bundler also handles Deno's `--watch`
-argument. Client TypeScript uses the `[name].client.ts` convention and CSS uses `[name].client.css`.
-`deno task build` bundles each entry to `dist/assets/`. Hash files and manifest are optional and
-disabled by default; pass `--hash` and `--manifest` to enable them.
-
-`src/framework/assets.ts` exposes `ctx.asset(path)`, which resolves a registered source path such as
-`features/editor/editor.client.ts` to its built URL. Feature views create their own escaped
-stylesheet and script tags and pass them through the base layout's `scripts` slot.
-
-Files under `src/assets/static/` bypass bundling and hashing. For example,
-`src/assets/static/robots.txt` is copied to `dist/robots.txt`.
+Markdown import/export, EPUB export, drag-and-drop opening, and live word, page, and character
+counts. Browsers without direct file access use normal uploads and downloads. On Desktop, local
+writing assistance (Harper) highlights spelling and grammar issues.
 
 ## Secure defaults
 
-Tagged template literal function `html` automatically escapes interpolated strings. All script and
-style loading uses external files (no inline scripts), so the root route sends a strict
-Content-Security-Policy (`script-src 'self'; style-src 'self'`) without needing a nonce. Desktop and
-server tasks grant only the network, environment, and file permissions needed by the application.
+Unsafe HTTP methods are same-origin only. Scripts and styles load from external files (no inline
+scripts or styles). Desktop and server tasks grant only the network, environment, and file
+permissions the app needs.

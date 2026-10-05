@@ -2,84 +2,72 @@
 
 ## Commands
 
-This is a Deno 2 project; use Deno tasks and JSR imports rather than npm tooling.
+This is a Deno 2 project built on Deno Fresh 2 (Vite) and Preact. Use Deno tasks and JSR imports;
+never use Node.js or npm commands.
 
-- `deno task dev` builds assets, then serves the browser app at `http://localhost:8000` with
-  server-side watch mode.
-- `deno task dev:assets` watches and rebuilds browser TypeScript and CSS. Run it in a second
-  terminal with `deno task dev` when changing client assets.
-- `deno task build` bundles browser assets into `dist/assets/` (hash files and manifest are
-  optional, disabled by default; enable with `--hash` and `--manifest`).
-- `deno task start` serves an existing production build.
+- `deno task dev` starts the Vite dev server at `http://localhost:8000` with HMR.
+- `deno task build` builds the app into `_fresh/` (generated, gitignored).
+- `deno task start` serves an existing production build (`_fresh/server.js`).
 - `deno task desktop:dev` builds and runs the Deno Desktop app with HMR for server handler changes.
-  Restart it after changing client TypeScript or CSS.
 - `deno task desktop` builds the native application for the current platform into `desktop/`.
 - `deno task check` runs formatting checks, linting, type checks, and the full test suite.
 
-`dist/` is generated and gitignored. In a clean checkout, run `deno task build` before
-`deno task check` or any test that imports `src/app.ts`.
-
 Only run tests after making changes; never run tests preemptively before changes have been made.
-Always run tests using the `deno task test` command only. Browser tests are included as part of
-`deno task test` and should run after changes.
+Always run tests using the `deno task test` command only. It builds first (tests run against
+`_fresh/server.js`) and includes the Playwright browser tests.
 
-When granting permissions, specify the minimal `--allow-*` flags needed (e.g. `--allow-read=...`)
-rather than defaulting to `-A`. Use `deno <subcommand> --help` to verify flags and
-`deno doc <specifier>` to inspect library APIs directly in the terminal. Always check
-`deno desktop --help` before searching the web when looking for how to use Deno Desktop or
-troubleshooting Deno Desktop.
+When granting permissions, specify the minimal `--allow-*` flags needed rather than defaulting to
+`-A`. Use `deno <subcommand> --help` to verify flags and `deno doc <specifier>` to inspect library
+APIs. Always check `deno desktop --help` before searching the web for Deno Desktop help.
 
-Source-only tests such as `tests/html_test.ts` and `tests/csrf_test.ts` do not require a prior asset
-build. Formatting is configured for 100-column lines, semicolons, and double quotes.
+Formatting is configured for 100-column lines, semicolons, and double quotes.
 
 ## Architecture
 
-Writasaurus is a local-first manuscript editor with one application core and two launch modes:
+Writasaurus is a local-first manuscript editor with one Fresh app and two launch modes:
 
-- `src/web.server.ts` is the normal HTTP entry point. `src/desktop.server.ts` is the Deno Desktop
-  entry point and creates the native browser window through the side-effect import of
-  `src/desktop/desktop.app.ts`.
-- `src/app.ts` constructs the custom router, loads the asset manifest, installs global CSRF
-  middleware, provides the shared route context (`asset`, `isDesktop`, and `json`), and registers
-  all feature routes.
-- `src/routes/routes.ts` is the route composition root. Feature routes must be registered before the
-  final `/*` static-file route, which serves `dist/` and deliberately hides `/manifest.json`.
-- Each feature under `src/features/` colocates route registration, server-rendered views, browser
-  entry points, and CSS. Views use the shared layout; browser behavior is loaded as external modules
-  from hashed asset URLs.
-- `src/framework/` is the small application framework: routing wraps `@std/http/unstable-route`,
-  HTML templates escape interpolated values, `createView` converts templates to CSP-protected
-  responses, and the bundler builds browser assets.
-- The editor client is split into a module-level state object plus focused action, persistence,
-  file-I/O, component, serialization, and UI modules. Manuscripts are persisted in `localStorage`
-  and saved to disk via the Save button or Ctrl+S; browser file handles are persisted separately in
-  IndexedDB.
-- File access has two paths. In browsers, the File System Access API is preferred with upload and
-  download fallbacks. In Desktop, `/api/editor/*` routes use native OS dialogs and Deno file APIs,
-  and remember the last opened path in the platform application-data directory.
-- Markdown files use JSON frontmatter and `<!-- chapter: ... -->` separators. Editor content is
-  maintained as HTML in memory and converted at the Markdown import/export boundary.
+- `main.ts` defines the Fresh `App` (static files, `_middleware.ts`, `fsRoutes()`). `desktop.ts` is
+  the Deno Desktop entry; `lib/platform.ts` exposes the platform (desktop flag/exit) that tests and
+  the Desktop entry can override.
+- `routes/` holds file-based routes: pages (`*.tsx` with `define.page`), `_app.tsx` (layout),
+  `_middleware.ts` (same-origin CSRF for unsafe methods, platform state), and JSON APIs under
+  `routes/api/editor/*.ts` (native dialogs and file I/O on Desktop).
+- `islands/` holds the only interactive (hydrated) components: `EditorApp`, `SettingsForm`,
+  `WelcomeActions`, `AboutCounter`, `PageEffects`. Pages that need no interactivity render no
+  islands.
+- `components/` holds Preact components, each with a colocated `.module.css`. `components/editor/`
+  holds the editor UI pieces composed by `islands/EditorApp.tsx`.
+- `lib/` holds framework-agnostic logic: EPUB/Markdown, settings, storage, history, and
+  `lib/editor/` (signal-based editor state, contenteditable surface helpers, file I/O, commands,
+  Harper-based writing assistance).
+- `assets/styles.css` is the only global stylesheet (reset, tokens, document typography, view
+  transitions, `::highlight()` rules). `static/` is served as-is.
 
-## Repository conventions
+Editor behavior notes:
 
-- Add browser entry files under `src/features/` with a `.client.ts` or `.client.css` suffix.
-  `src/bundle.ts` discovers them recursively; do not maintain a manual entry list.
-- Resolve built assets in views with `ctx.asset("features/.../...client.ts")` using the path
-  relative to `src/`. Never hard-code generated filenames from `dist/assets/`.
-- Build HTML with the `html` tagged template and compose views with `createView` and `baseLayout`.
-  Interpolated strings are escaped automatically. Use `raw()` only for content already known to be
-  safe; nested `html` results are the normal way to insert markup.
-- Keep scripts and styles external. HTML responses enforce a strict CSP that does not permit inline
-  script or style content.
-- Route modules mutate the supplied `Router` and return it. Register new feature route modules in
-  `src/routes/routes.ts`; keep the static catch-all last.
-- All unsafe HTTP methods must remain same-origin. Tests calling POST/PUT/DELETE routes through
-  `app.request()` need an `Origin` header matching the request URL, normally
-  `origin: "http://localhost"`.
-- Test routes without starting a server by creating an app and using `app.request()`. Existing tests
-  use small local assertion helpers rather than a separate assertion library.
-- Preserve browser/Desktop parity when changing open, save, close, or restore behavior. Browser
-  state uses `fileHandle`/`canWrite`; Desktop state uses `desktopFileLoaded` and the server-owned
-  active path.
-- Use explicit `.ts` extensions for local imports and the aliases in `deno.json` for standard
-  library dependencies (`jsr:@std/...`). Do not use legacy URL imports (`https://deno.land/x/...`).
+- State is `@preact/signals` in `lib/editor/state.ts`; use signals rather than stores/event buses.
+- The writing area is an uncontrolled contenteditable; content is mounted imperatively only when the
+  active chapter changes so the caret never moves. Do not make it a controlled component.
+- Manuscripts persist in `localStorage`; browser file handles persist in IndexedDB. Browsers use the
+  File System Access API with upload/download fallbacks; Desktop uses `/api/editor/*` routes.
+- Markdown files use JSON frontmatter and `<!-- chapter: ... -->` separators.
+- Deno Desktop's webview is WebKitGTK; `::highlight()` does not paint on text in anonymous block
+  boxes, so the editor normalizes content into block elements.
+
+## Conventions
+
+- Styling uses CSS Modules only (`Foo.module.css` beside `Foo.tsx`). No Tailwind, no inline styles,
+  no `style` attributes. Add global rules to `assets/styles.css` only for tokens/reset/document
+  defaults.
+- Prefer `data-*` attributes (not CSS class names) as test hooks, since module class names are
+  hashed.
+- Fresh only links the CSS of a route/island entry. `vite.config.ts` pins `lib/editor/` shared
+  modules into an `editor-lib` chunk so the `EditorApp` island entry owns its CSS; if CSS stops
+  loading after restructuring imports, check the island's entry in
+  `_fresh/client/.vite/manifest.json`.
+- Use explicit `.ts`/`.tsx` extensions for local imports and the import map aliases in `deno.json`.
+- All unsafe HTTP methods must remain same-origin. Tests calling POST/PUT/DELETE routes need an
+  `Origin` header matching the request URL, normally `origin: "http://localhost"`.
+- Test routes without a server using `createTestApp` from `tests/helpers.ts` and `app.request()`.
+  Browser tests live in `tests/browser/` and use Playwright.
+- Preserve browser/Desktop parity when changing open, save, close, or restore behavior.
