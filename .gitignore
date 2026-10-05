@@ -1,6 +1,5 @@
 .data/
 /desktop
-dist/
 deno.lock
 ignore/
 _fresh/

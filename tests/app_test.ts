@@ -6,24 +6,17 @@ function assert(condition: unknown): asserts condition {
 
 const app = createTestApp();
 
-Deno.test("renders editor on root route with its registered asset entries", async () => {
+Deno.test("renders the editor on the root route as a single island", async () => {
   const response = await app.request("/");
   assert(response.status === 200);
   const page = await response.text();
-  assert(page.includes("Writasaurus"));
-  assert(page.includes("<editor-app></editor-app>"));
-  assert(!page.includes("<editor-sidebar"));
-  assert(!page.includes("<editor-toolbar"));
-  assert(!page.includes("<editor-canvas"));
-  assert(!page.includes("<editor-modal"));
-  assert(!page.includes('id="chapter-list"'));
-  assert(!page.includes('id="save-file"'));
-  assert(!page.includes('contenteditable="true"'));
-  assert(!page.includes("app.js"));
-  assert(page.includes("/assets/features-editor-editor.client"));
-  assert(page.includes(".js"));
-  assert(page.includes("/assets/features-editor-editor.client"));
-  assert(page.includes(".css"));
+  assert(page.includes("<title>Writasaurus</title>"));
+  assert(page.includes("frsh:island:EditorApp"));
+  assert(page.includes('id="editor"'));
+  assert(page.includes('id="manuscript-title"'));
+  assert(page.includes('id="editor-file-input"'));
+  assert(!page.includes("<editor-app"));
+  assert(!page.includes("style="));
 });
 
 Deno.test("renders welcome page with open manuscript options and return to editor link", async () => {
@@ -98,11 +91,12 @@ Deno.test("pages are protected by a nonce-based content security policy", async 
 Deno.test("stylesheets include view transition rules for smooth page fades", async () => {
   const response = await app.request("/");
   const page = await response.text();
-  const cssMatch = page.match(/href="(\/assets\/features-editor-editor\.client[^"]*\.css)"/);
-  assert(cssMatch !== null);
-  const cssRes = await app.request(cssMatch[1]);
-  assert(cssRes.status === 200);
-  const css = await cssRes.text();
+  const hrefs = [...page.matchAll(/href="(\/[^"]+\.css[^"]*)"/g)].map((match) => match[1]);
+  assert(hrefs.length > 0);
+  const sheets = await Promise.all(
+    hrefs.map(async (href) => await (await app.request(href)).text()),
+  );
+  const css = sheets.join("\n");
   assert(css.includes("view-transition"));
   assert(css.includes(":active"));
   assert(css.includes(":disabled"));

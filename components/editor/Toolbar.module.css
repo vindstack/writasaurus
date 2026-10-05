@@ -1,0 +1,12 @@
+.toolbar {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+@media (max-width: 36rem) {
+  .toolbar {
+    display: none;
+  }
+}

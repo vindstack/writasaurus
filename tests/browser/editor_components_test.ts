@@ -46,6 +46,17 @@ async function launchBrowser() {
   });
 }
 
+async function openSidebar(page: Page): Promise<void> {
+  const sidebar = page.getByTestId("chapters-sidebar");
+  if (await sidebar.getAttribute("data-collapsed") === "true") {
+    await page.getByRole("button", { name: "Toggle chapters panel" }).click();
+  }
+}
+
+const STAT_BUTTON = 'button[title="Cycle statistics (Ctrl+G)"]';
+const PANEL = '[data-testid="assistance-panel"]';
+const ISSUES = `${PANEL} li[data-category="spelling"]`;
+
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
   desktop = false,
@@ -71,7 +82,7 @@ async function withEditorPage(
       sessionStorage.setItem("writasaurus-session:skip-welcome", "true");
     });
     await page.goto(`http://${address.hostname}:${address.port}/`);
-    await page.waitForFunction(() => customElements.get("editor-toolbar") !== undefined);
+    await page.waitForSelector('[data-ready="true"]');
     await test(page);
   } finally {
     await browser.close();
@@ -81,22 +92,25 @@ async function withEditorPage(
 
 Deno.test("browser: editor app renders its shell and adds a chapter", async () => {
   await withEditorPage(async (page) => {
-    await page.waitForSelector("editor-app > editor-topbar", { state: "attached" });
-    await page.waitForSelector("editor-app editor-sidebar", { state: "attached" });
-    await page.waitForSelector("editor-app editor-writing-area #editor", { state: "attached" });
-    await page.locator("editor-sidebar").evaluate((element) => {
-      (element as HTMLElement & { expand(): void }).expand();
-    });
+    await page.waitForSelector("header #manuscript-title");
+    await page.waitForSelector("#editor");
+    await openSidebar(page);
 
-    const initialChapters = await page.locator("editor-sidebar .chapter-item").count();
+    const items = page.locator("[data-drag-item]");
+    const initialChapters = await items.count();
     assert(initialChapters > 0, "Expected the editor to render at least one chapter");
 
-    await page.locator("editor-sidebar .sidebar-heading button").click();
+    await page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" }).click();
     await page.waitForFunction(
-      (count) => document.querySelectorAll(".chapter-item").length === count + 1,
+      (count) => document.querySelectorAll("[data-drag-item]").length === count + 1,
       initialChapters,
     );
 
+    await page.waitForFunction(
+      (expected) =>
+        (document.querySelector("#chapter-title") as HTMLInputElement).value === expected,
+      `Chapter ${initialChapters + 1}: Untitled`,
+    ).catch(() => {});
     const chapterTitle = await page.locator("#chapter-title").inputValue();
     assert(
       chapterTitle === `Chapter ${initialChapters + 1}: Untitled`,
@@ -107,10 +121,8 @@ Deno.test("browser: editor app renders its shell and adds a chapter", async () =
 
 Deno.test("browser: chapter delete control renders visible neutral text", async () => {
   await withEditorPage(async (page) => {
-    await page.locator("editor-sidebar").evaluate((element) => {
-      (element as HTMLElement & { expand(): void }).expand();
-    });
-    const deleteButton = page.locator(".chapter-item .delete-chapter");
+    await openSidebar(page);
+    const deleteButton = page.locator('[data-drag-item] button[title="Delete chapter"]');
 
     assert(await deleteButton.isVisible(), "Expected the chapter delete button to be visible");
     assert(
@@ -124,7 +136,7 @@ Deno.test("browser: chapter delete control renders visible neutral text", async 
 
     const colors = await deleteButton.evaluate((element) => ({
       button: getComputedStyle(element).color,
-      text: getComputedStyle(document.querySelector(".chapter-title")!).color,
+      text: getComputedStyle(document.querySelector("[data-chapter-title]")!).color,
     }));
     assert(
       colors.button === colors.text,
@@ -135,24 +147,23 @@ Deno.test("browser: chapter delete control renders visible neutral text", async 
 
 Deno.test("browser: dragging a chapter handle reorders chapters", async () => {
   await withEditorPage(async (page) => {
-    await page.locator("editor-sidebar").evaluate((element) => {
-      (element as HTMLElement & { expand(): void }).expand();
-    });
-    const addChapter = page.locator("editor-sidebar .sidebar-heading button");
+    await openSidebar(page);
+    const addChapter = page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" });
     await addChapter.click();
     await addChapter.click();
-    await page.waitForFunction(() => document.querySelectorAll(".chapter-item").length === 3);
+    await page.waitForFunction(() => document.querySelectorAll("[data-drag-item]").length === 3);
 
     const chapterTitle = page.locator("#chapter-title");
-    await page.locator(".chapter-item").nth(0).locator(".chapter-title").click();
+    await page.locator("[data-drag-item]").nth(0).locator("[data-chapter-title]").click();
     await chapterTitle.fill("Opening Chapter 1");
-    await page.locator(".chapter-item").nth(1).locator(".chapter-title").click();
+    await page.locator("[data-drag-item]").nth(1).locator("[data-chapter-title]").click();
     await chapterTitle.fill("Chapter 2: Middle");
-    await page.locator(".chapter-item").nth(2).locator(".chapter-title").click();
+    await page.locator("[data-drag-item]").nth(2).locator("[data-chapter-title]").click();
     await chapterTitle.fill("Appendix");
 
-    const source = await page.locator(".chapter-item").nth(0).locator(".drag-handle").boundingBox();
-    const destination = await page.locator(".chapter-item").nth(2).boundingBox();
+    const source = await page.locator("[data-drag-item]").nth(0).locator("[data-drag-handle]")
+      .boundingBox();
+    const destination = await page.locator("[data-drag-item]").nth(2).boundingBox();
     assert(source && destination, "Expected draggable chapter handles");
 
     await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
@@ -164,15 +175,13 @@ Deno.test("browser: dragging a chapter handle reorders chapters", async () => {
     );
     await page.mouse.up();
 
-    const titles = await page.locator(".chapter-title").allTextContents();
+    const titles = await page.locator("[data-chapter-title]").allTextContents();
     assert(
       titles.join("|") === "Chapter 1: Middle|Appendix|Opening Chapter 3",
       `Unexpected reordered titles: ${titles.join("|")}`,
     );
 
-    const status = await page.locator("#save-status").evaluate((element) =>
-      element.shadowRoot?.textContent ?? ""
-    );
+    const status = await page.locator("#save-status").textContent() ?? "";
     assert(
       status.includes("Unsaved changes"),
       "Expected chapter reordering to mark the manuscript dirty",
@@ -180,35 +189,20 @@ Deno.test("browser: dragging a chapter handle reorders chapters", async () => {
   });
 });
 
-Deno.test("browser: save status renders observed attribute updates", async () => {
+Deno.test("browser: save status shows the saved indicator", async () => {
   await withEditorPage(async (page) => {
     const status = page.locator("#save-status");
-    await status.evaluate((element) => {
-      element.setAttribute("status", "saved");
-      element.setAttribute("message", "Saved");
-    });
-
-    await page.waitForFunction(() => {
-      const status = document.querySelector("#save-status");
-      const indicator = status?.shadowRoot?.querySelector(".save-status-indicator.saved");
-      return indicator?.textContent === "" && status?.shadowRoot?.textContent?.includes("Saved");
-    });
-
-    const color = await status.evaluate((element) => {
-      const indicator = element.shadowRoot?.querySelector<HTMLElement>(".save-status-indicator");
-      return indicator ? getComputedStyle(indicator).backgroundColor : "";
-    });
+    assert((await status.textContent())?.includes("Saved"), "Expected the Saved message");
+    const color = await status.locator("[data-indicator]").evaluate((element) =>
+      getComputedStyle(element).backgroundColor
+    );
     assert(color === "rgb(134, 201, 163)", `Expected saved indicator color, got ${color}`);
   });
 });
 
-function chapterWords(page: Page): Promise<number> {
-  return page.evaluate(() => {
-    const wordCount = document.querySelector("editor-statusbar")?.shadowRoot
-      ?.querySelector("word-count");
-    const text = wordCount?.shadowRoot?.textContent ?? "";
-    return Number(text.match(/Chapter: ([\d,]+) words/)?.[1]?.replace(/,/g, "") ?? -1);
-  });
+async function chapterWords(page: Page): Promise<number> {
+  const text = await page.locator(STAT_BUTTON).textContent() ?? "";
+  return Number(text.match(/Chapter: ([\d,]+) words/)?.[1]?.replace(/,/g, "") ?? -1);
 }
 
 Deno.test("browser: status bar renders live stats from the editor store", async () => {
@@ -221,15 +215,14 @@ Deno.test("browser: status bar renders live stats from the editor store", async 
     await page.keyboard.type(" Hello brave new world");
 
     await page.waitForFunction(
-      (expected) => {
-        const wordCount = document.querySelector("editor-statusbar")?.shadowRoot
-          ?.querySelector("word-count");
-        return wordCount?.shadowRoot?.textContent?.includes(`Chapter: ${expected} words`) === true;
-      },
-      before + 4,
+      ([selector, expected]) =>
+        document.querySelector(selector as string)?.textContent?.includes(
+          `Chapter: ${expected} words`,
+        ) === true,
+      [STAT_BUTTON, before + 4] as const,
     );
 
-    const stats = page.locator("editor-statusbar").locator("word-count").locator("button");
+    const stats = page.locator(STAT_BUTTON);
     await stats.click();
     await stats.click();
     assert(
@@ -237,9 +230,7 @@ Deno.test("browser: status bar renders live stats from the editor store", async 
       "Expected today’s writing progress to include newly written words",
     );
 
-    const saveStatus = await page.locator("#save-status").evaluate((element) =>
-      element.shadowRoot?.textContent ?? ""
-    );
+    const saveStatus = await page.locator("#save-status").textContent() ?? "";
     assert(
       saveStatus.includes("Unsaved changes"),
       `Expected the topbar to show unsaved changes, got ${saveStatus}`,
@@ -249,8 +240,7 @@ Deno.test("browser: status bar renders live stats from the editor store", async 
 
 Deno.test("browser: status bar rotates chapter, manuscript, and daily writing stats", async () => {
   await withEditorPage(async (page) => {
-    const wordCount = page.locator("editor-statusbar").locator("word-count");
-    const stats = wordCount.locator("button");
+    const stats = page.locator(STAT_BUTTON);
 
     const chapterStats = (await stats.textContent())?.trim();
     assert(chapterStats?.startsWith("Chapter:"), `Expected chapter stats, got ${chapterStats}`);
@@ -275,7 +265,7 @@ Deno.test("browser: status bar rotates chapter, manuscript, and daily writing st
     );
 
     // Verify Ctrl+G shortcut cycles stats and hint is present
-    const kbdHint = wordCount.locator("kbd");
+    const kbdHint = page.locator("footer kbd", { hasText: "Ctrl+G" });
     assert(await kbdHint.isVisible(), "Expected Ctrl+G kbd hint to be visible");
     assert((await kbdHint.textContent())?.trim() === "Ctrl+G", "Expected Ctrl+G text in hint");
 
@@ -290,7 +280,7 @@ Deno.test("browser: status bar rotates chapter, manuscript, and daily writing st
 
 Deno.test("browser: Desktop writing assistance corrects a local spelling warning", async () => {
   await withEditorPage(async (page) => {
-    const panel = page.locator(".writing-assistance-sidebar");
+    const panel = page.locator(PANEL);
     await panel.waitFor({ state: "attached" });
     await page.locator("#editor").fill("This is teh cat.");
     await page.waitForTimeout(750);
@@ -299,19 +289,21 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
       "Expected writing assistance to remain inactive while its panel is closed",
     );
 
-    await page.locator("editor-statusbar").getByRole("button", {
+    await page.locator("footer").getByRole("button", {
       name: "Toggle writing assistance panel",
     }).click();
     await page.waitForFunction(() => {
-      const panel = document.querySelector(".writing-assistance-sidebar");
-      if (!panel || panel.classList.contains("collapsed")) return false;
+      const panel = document.querySelector('[data-testid="assistance-panel"]');
+      if (!panel || panel.getAttribute("data-collapsed") === "true") return false;
       const bounds = panel.getBoundingClientRect();
       return bounds.left < innerWidth && bounds.right > 0;
     });
     try {
       await page.waitForFunction(
         () =>
-          document.querySelector(".writing-assistance-sidebar")?.textContent?.includes("1 issue"),
+          document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes(
+            "1 issue",
+          ),
         undefined,
         { timeout: 60_000 },
       );
@@ -327,8 +319,8 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
 
     await page.keyboard.press("Control+n");
     await page.waitForFunction(() =>
-      document.querySelector(".writing-assistance-sidebar")?.classList.contains("collapsed") ===
-        true
+      document.querySelector('[data-testid="assistance-panel"]')?.getAttribute("data-collapsed") ===
+        "true"
     );
     assert(
       !await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling")),
@@ -336,7 +328,7 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
     );
     await page.keyboard.press("Control+n");
     await page.waitForFunction(() =>
-      document.querySelector(".writing-assistance-sidebar")?.textContent?.includes("1 issue")
+      document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes("1 issue")
     );
 
     await panel.getByRole("button", { name: "Replace with “the”" }).click();
@@ -347,7 +339,7 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
     await page.locator("#editor").fill("They is here.");
     await page.waitForFunction(
       () =>
-        document.querySelector(".writing-assistance-sidebar")?.textContent?.includes(
+        document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes(
           "Make the verb agree with its subject.",
         ) === true,
     );
@@ -360,7 +352,7 @@ Deno.test("browser: Desktop writing assistance corrects a local spelling warning
 
 Deno.test("browser: writing assistance color codes issues and navigates to the active one", async () => {
   await withEditorPage(async (page) => {
-    await page.locator(".writing-assistance-sidebar").waitFor({ state: "attached" });
+    await page.locator(PANEL).waitFor({ state: "attached" });
     await page.keyboard.press("Control+n");
 
     // A long chapter keeps the reported issue off screen until the panel scrolls to it.
@@ -370,19 +362,21 @@ Deno.test("browser: writing assistance color codes issues and navigates to the a
       element.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    const issue = page.locator(".writing-assistance-list li.spelling .writing-assistance-issue");
+    const issue = page.locator(`${ISSUES} [data-issue]`);
     await issue.waitFor({ state: "visible", timeout: 60_000 });
     assert(
-      (await page.locator(".writing-assistance-list li.spelling .writing-assistance-kind")
+      (await page.locator(`${ISSUES} [data-kind]`)
         .textContent())?.trim() === "Spelling",
       "Expected the issue to be labelled with its category",
     );
 
     const colors = await page.evaluate(() => {
-      const item = document.querySelector(".writing-assistance-list li.spelling")!;
+      const item = document.querySelector(
+        '[data-testid="assistance-panel"] li[data-category="spelling"]',
+      )!;
       return {
         item: getComputedStyle(item).borderLeftColor,
-        kind: getComputedStyle(item.querySelector(".writing-assistance-kind")!).color,
+        kind: getComputedStyle(item.querySelector("[data-kind]")!).color,
         danger: getComputedStyle(document.documentElement).getPropertyValue("--danger").trim(),
       };
     });
@@ -400,18 +394,16 @@ Deno.test("browser: writing assistance color codes issues and navigates to the a
     await issue.click();
     await page.waitForFunction(() => CSS.highlights.has("writing-assistance-active"));
     await page.waitForFunction(() =>
-      document.querySelector(".writing-assistance-list li.spelling")?.classList.contains(
-        "active",
-      ) ===
-        true
+      document.querySelector('[data-testid="assistance-panel"] li[data-category="spelling"]')
+        ?.getAttribute("data-active") === "true"
     );
     assert(
-      await page.locator(".writing-assistance-list li.spelling .writing-assistance-issue")
+      await page.locator(`${ISSUES} [data-issue]`)
         .getAttribute("aria-current") === "true",
       "Expected the selected issue to be marked as current",
     );
     await page.waitForFunction(() =>
-      (document.querySelector(".editor-viewport")?.scrollTop ?? 0) > 0
+      (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0
     );
   }, true);
 });
@@ -427,7 +419,7 @@ Deno.test("browser: toolbar bold command formats the selected editor content", a
       selection?.addRange(range);
     });
 
-    await page.locator('editor-toolbar >> button[data-command="bold"]').click();
+    await page.locator('button[data-command="bold"]').click();
 
     const formatted = await page.locator("#editor").evaluate((element) => {
       return element.querySelector("b, strong")?.textContent;
@@ -440,7 +432,7 @@ Deno.test("browser: menu contains direct manuscript and save actions", async () 
   await withEditorPage(async (page) => {
     await page.locator("#menu-toggle").click();
     await page.waitForFunction(() =>
-      document.querySelector("#app-menu")?.getAttribute("open") === "true"
+      document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
     );
     const menu = page.locator("#app-menu");
     assert(
@@ -464,14 +456,14 @@ Deno.test("browser: menu contains direct manuscript and save actions", async () 
     );
 
     // Clicking theme segmented control options keeps the menu open
-    await menu.locator('app-segmented-control button[value="dark"]').click();
+    await menu.locator('button[value="dark"]').click();
     assert(
-      await page.locator("#app-menu").getAttribute("open") === "true",
+      await page.locator("#app-menu").getAttribute("data-open") === "true",
       "Expected menu to stay open after toggling theme",
     );
     assert(
-      await page.evaluate(() => document.documentElement.dataset.theme),
-      "dark",
+      await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
+      "Expected the dark theme to be applied",
     );
   });
 });
@@ -515,7 +507,7 @@ Deno.test("browser: Desktop menu and F11 toggle fullscreen", async () => {
     await page.keyboard.press("F11");
     await page.waitForFunction(() => document.documentElement.dataset.testFullscreen !== "true");
     assert(
-      await page.locator("#app-menu").getAttribute("open") === "false",
+      await page.locator("#app-menu").getAttribute("data-open") === "false",
       "Expected F11 to work while the menu is open and close the menu",
     );
   }, true);
@@ -523,7 +515,7 @@ Deno.test("browser: Desktop menu and F11 toggle fullscreen", async () => {
 
 Deno.test("browser: editor content never mixes text with block siblings", async () => {
   await withEditorPage(async (page) => {
-    await page.locator(".writing-assistance-sidebar").waitFor({ state: "attached" });
+    await page.locator(PANEL).waitFor({ state: "attached" });
     await page.keyboard.press("Control+n");
 
     // Contenteditable routinely produces this shape: a bare text node beside generated
@@ -536,7 +528,7 @@ Deno.test("browser: editor content never mixes text with block siblings", async 
     });
 
     await page.waitForFunction(() =>
-      document.querySelectorAll(".writing-assistance-list li").length >= 3
+      document.querySelectorAll('[data-testid="assistance-panel"] li').length >= 3
     );
 
     const stray = await page.locator("#editor").evaluate((element) => {
@@ -629,12 +621,12 @@ Deno.test("browser: theme preference persists across navigation to settings, wel
     // Set theme to dark via dropdown menu
     await page.locator("#menu-toggle").click();
     await page.waitForFunction(() =>
-      document.querySelector("#app-menu")?.getAttribute("open") === "true"
+      document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
     );
-    await page.locator('#app-menu app-segmented-control button[value="dark"]').click();
+    await page.locator('#app-menu button[value="dark"]').click();
     assert(
-      await page.evaluate(() => document.documentElement.dataset.theme),
-      "dark",
+      await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
+      "Expected the dark theme to be applied",
     );
 
     // Navigate to /settings
@@ -649,4 +641,27 @@ Deno.test("browser: theme preference persists across navigation to settings, wel
     await page.goto(new URL("/about", page.url()).href);
     await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
   });
+});
+
+Deno.test("browser: starting a new manuscript from the welcome page opens the editor", async () => {
+  const server = Deno.serve(
+    { hostname: "127.0.0.1", port: 0, onListen() {} },
+    createTestApp().fetch,
+  );
+  const address = server.addr as Deno.NetAddr;
+  const browser = await launchBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://${address.hostname}:${address.port}/welcome`);
+    await page.locator("#welcome-new").click();
+    await page.waitForURL(`http://${address.hostname}:${address.port}/`);
+    await page.waitForSelector('[data-ready="true"]');
+    assert(
+      await page.locator("#manuscript-title").inputValue() === "Untitled Manuscript",
+      "Expected the new manuscript title to render in the editor",
+    );
+  } finally {
+    await browser.close();
+    await server.shutdown();
+  }
 });

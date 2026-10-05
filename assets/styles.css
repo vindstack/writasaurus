@@ -188,3 +188,21 @@ h1 {
     animation: none !important;
   }
 }
+
+/* Writing assistance highlights are registered by name through the CSS Custom Highlight API. */
+::highlight(writing-assistance-spelling) {
+  background: color-mix(in srgb, var(--danger) 24%, transparent);
+  text-decoration: underline wavy var(--danger);
+}
+
+::highlight(writing-assistance-grammar) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  text-decoration: underline wavy var(--accent);
+}
+
+/* Outranks the category highlights so the selected issue reads as current. */
+::highlight(writing-assistance-active) {
+  background: var(--accent);
+  color: var(--accent-text);
+  text-decoration: underline solid var(--accent-text);
+}

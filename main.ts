@@ -1,5 +1,4 @@
 import { App, staticFiles } from "fresh";
-import { createApp as createLegacyApp } from "./src/app.ts";
 import { isCsrfSafe } from "./lib/security/csrf.ts";
 import { getPlatform } from "./lib/platform.ts";
 import { type State } from "./utils.ts";
@@ -15,7 +14,3 @@ app.use((ctx) => {
 });
 
 app.fsRoutes();
-
-// Pages that have not been migrated to Fresh routes yet are still served by the legacy router.
-const legacy = createLegacyApp({ isDesktop: () => getPlatform().isDesktop() });
-app.all("/*", (ctx) => legacy.fetch(ctx.req));

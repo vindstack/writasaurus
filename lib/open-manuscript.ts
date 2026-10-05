@@ -1,4 +1,4 @@
-import type { WritableFileHandle } from "./editor/types.ts";
+import type { Manuscript, WritableFileHandle } from "./editor/types.ts";
 
 const picker = globalThis as unknown as {
   showOpenFilePicker?: (options: object) => Promise<WritableFileHandle[]>;
@@ -12,7 +12,7 @@ export const EPUB_TYPES = [{
 export type OpenRequest =
   | { kind: "cancelled" }
   /** Desktop: the server opened the file and now owns the active path. */
-  | { kind: "desktop" }
+  | { kind: "desktop"; name: string; manuscript?: Manuscript }
   /** No usable native picker; the caller should open its file input. */
   | { kind: "input" }
   | { kind: "file"; file: File; handle: WritableFileHandle };
@@ -32,7 +32,8 @@ export async function requestOpen(isDesktop: boolean): Promise<OpenRequest> {
       const response = await fetch("/api/editor/open", { method: "POST" });
       if (response.status === 204) return { kind: "cancelled" };
       if (!response.ok) throw new Error(`File open failed: ${response.status}`);
-      return { kind: "desktop" };
+      const result = await response.json().catch(() => ({}));
+      return { kind: "desktop", name: String(result.name ?? ""), manuscript: result.manuscript };
     } catch (error) {
       console.error("Desktop open failed:", error);
       alert("The manuscript could not be opened.");
