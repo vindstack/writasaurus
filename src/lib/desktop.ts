@@ -80,13 +80,17 @@ export async function chooseFile(
   }
 }
 
+export function hasDesktopMarker(
+  denoDesktop: string | undefined,
+  writasaurusDesktop: string | undefined,
+): boolean {
+  return Boolean(denoDesktop || writasaurusDesktop);
+}
+
 export function checkIsDesktop(): Promise<boolean> {
   try {
     return Promise.resolve(
-      Boolean(
-        Deno.env.get("DENO_SERVE_ADDRESS") || Deno.env.get("DENO_DESKTOP") ||
-          Deno.env.get("WRITASAURUS_DESKTOP"),
-      ),
+      hasDesktopMarker(Deno.env.get("DENO_DESKTOP"), Deno.env.get("WRITASAURUS_DESKTOP")),
     );
   } catch {
     return Promise.resolve(false);
