@@ -57,5 +57,10 @@
     "vue": "npm:vue@^3.5.43"
   },
   "nodeModulesDir": "manual",
-  "exclude": ["dist/", ".astro/", "desktop/", "node_modules/"]
+  "exclude": ["dist/", ".astro/", "desktop/", "node_modules/"],
+  "deploy": {
+    "org": "vindstack",
+    "app": "writasaurus"
+  }
 }
+
