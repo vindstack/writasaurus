@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { isReleaseManifest, type ReleaseManifest } from "../../lib/releases.ts";
-import styles from "./DownloadConsent.module.css";
 
 const accepted = ref(false);
 const loading = ref(true);
@@ -56,33 +55,33 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div :class="styles.group">
-    <div :class="styles.acceptance">
+  <div class="group">
+    <div class="acceptance">
       <label>
         <input v-model="accepted" type="checkbox" data-testid="agreement-acceptance" />
         <span>I agree to the</span>
       </label>
       <a href="/agreement">Writasaurus License Agreement</a>.
     </div>
-    <p v-if="loading" :class="styles.notice" role="status" data-testid="download-loading">
+    <p v-if="loading" class="notice" role="status" data-testid="download-loading">
       Checking for the latest release…
     </p>
-    <p v-else-if="errorMessage" :class="styles.error" role="alert" data-testid="download-error">
+    <p v-else-if="errorMessage" class="error" role="alert" data-testid="download-error">
       {{ errorMessage }}
     </p>
     <template v-else-if="release">
-      <p :class="styles.version" data-testid="release-version">
+      <p class="version" data-testid="release-version">
         Writasaurus {{ release.version }}
       </p>
-      <div :class="styles.downloads" data-testid="platform-downloads">
+      <div class="downloads" data-testid="platform-downloads">
         <div
-          :class="styles.downloadControl"
+          class="downloadControl"
           :data-disabled="!accepted"
           data-testid="download-control"
         >
           <a
             v-if="accepted && selectedArtifact"
-            :class="styles.download"
+            class="download"
             :href="selectedArtifact.url"
             :download="selectedArtifact.fileName"
             :data-testid="`download-${selectedPlatform}`"
@@ -91,17 +90,17 @@ onMounted(async () => {
           </a>
           <button
             v-else
-            :class="[styles.download, styles.disabled]"
+            :class="['download', 'disabled']"
             type="button"
             disabled
             :data-testid="`download-${selectedPlatform}`"
           >
             Download for {{ selectedPlatformLabel }}
           </button>
-          <label :class="styles.platform">
+          <label class="platform">
             <select
               v-model="selectedPlatform"
-              :class="styles.platformSelect"
+              class="platformSelect"
               aria-label="Select operating system"
               data-testid="operating-system-select"
             >
@@ -109,13 +108,172 @@ onMounted(async () => {
                 {{ platform.label }}
               </option>
             </select>
-            <span :class="styles.platformArrow" aria-hidden="true" />
+            <span class="platformArrow" aria-hidden="true" />
           </label>
         </div>
       </div>
-      <p v-if="!accepted" :class="styles.notice" role="status">
+      <p v-if="!accepted" class="notice" role="status">
         Agree to the license to enable this download.
       </p>
     </template>
   </div>
 </template>
+
+<style scoped>
+.group {
+  display: grid;
+  gap: 0.8rem;
+  max-width: 25rem;
+}
+
+.acceptance {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  gap: 0.6rem;
+  line-height: 1.5;
+}
+
+.acceptance label {
+  align-items: flex-start;
+  display: inline-flex;
+  gap: 0.6rem;
+}
+
+.acceptance input {
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0.2rem 0 0 0.1rem;
+  width: 1rem;
+}
+
+.acceptance a {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-underline-offset: 0.18em;
+}
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.downloadControl {
+  align-items: stretch;
+  display: inline-flex;
+  max-width: 100%;
+}
+
+.downloadControl[data-disabled="true"] {
+  opacity: 0.55;
+}
+
+.platform {
+  align-items: center;
+  background: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
+  border-left-color: color-mix(in srgb, var(--accent-strong-text) 35%, var(--accent-strong));
+  border-radius: 0 var(--radius-control) var(--radius-control) 0;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  margin-left: -1px;
+  position: relative;
+  width: 3rem;
+}
+
+.platformSelect {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  cursor: pointer;
+  height: 100%;
+  inset: 0;
+  opacity: 0;
+  position: absolute;
+  width: 100%;
+  z-index: 1;
+}
+
+.platformArrow {
+  border-bottom: 2px solid var(--accent-strong-text);
+  border-right: 2px solid var(--accent-strong-text);
+  height: 0.45rem;
+  margin-top: -0.2rem;
+  pointer-events: none;
+  transform: rotate(45deg);
+  width: 0.45rem;
+}
+
+.download {
+  align-items: center;
+  background: var(--accent-strong);
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+  color: var(--accent-strong-text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1rem;
+  font-family: inherit;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0.7rem 1.2rem;
+  text-decoration: none;
+  transition: opacity 120ms ease, transform 80ms ease;
+}
+
+.disabled {
+  cursor: not-allowed;
+}
+
+.download:hover {
+  background: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
+}
+
+.download:disabled:hover {
+  background: var(--accent-strong);
+}
+
+.platform:hover {
+  background: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
+}
+
+.download:active {
+  transform: translateY(1px);
+}
+
+.download:focus-visible,
+.acceptance input:focus-visible,
+.platformSelect:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+.notice {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
+.version {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .download {
+    transition: none;
+  }
+}
+</style>

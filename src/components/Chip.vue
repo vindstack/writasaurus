@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import styles from "./Chip.module.css";
 
 withDefaults(defineProps<{ variant?: "default" | "accent" | "outline" }>(), {
   variant: "default",
@@ -7,5 +6,38 @@ withDefaults(defineProps<{ variant?: "default" | "accent" | "outline" }>(), {
 </script>
 
 <template>
-  <span :class="[styles.chip, styles[variant]]"><slot /></span>
+  <span :class="['chip', variant]"><slot /></span>
 </template>
+
+<style scoped>
+.chip {
+  align-items: center;
+  border-radius: 9999px;
+  box-sizing: border-box;
+  display: inline-flex;
+  font-size: 0.85rem;
+  font-weight: 500;
+  gap: 0.35rem;
+  line-height: 1.2;
+  padding: 0.3rem 0.75rem;
+  user-select: none;
+}
+
+.default {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.accent {
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  color: var(--accent-text);
+}
+</style>

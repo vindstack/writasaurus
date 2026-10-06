@@ -53,11 +53,11 @@ Editor behavior notes:
 
 ## Conventions
 
-- Styling uses CSS Modules only (`Foo.module.css` beside an Astro or Vue component). No Tailwind,
-  inline styles, or `style` attributes. Add global rules to `src/styles/global.css` only for tokens,
-  reset, and document defaults.
-- Prefer `data-*` attributes (not CSS class names) as test hooks, since module class names are
-  hashed.
+- Keep component styles local: use `<style>` in Astro components and `<style scoped>` in Vue SFCs.
+  No Tailwind, inline styles, or `style` attributes. Add global rules to `src/styles/global.css`
+  only for tokens, reset, and document defaults.
+- Prefer `data-*` attributes (not CSS class names) as test hooks because component styles are
+  implementation details.
 - Use explicit `.ts`/`.vue` extensions for local imports and import-map aliases from `deno.json`.
 - `src/middleware.ts` enforces same-origin CSRF checks based on `Sec-Fetch-Site` and `Origin`, and
   attaches the CSP nonce. Client `fetch` calls need no manual headers. Browser POST tests should

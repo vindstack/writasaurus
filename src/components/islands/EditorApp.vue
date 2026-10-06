@@ -18,7 +18,6 @@ import {
   statsIndex,
 } from "../../lib/editor/state.ts";
 import { effect } from "@preact/signals";
-import styles from "./EditorApp.module.css";
 import Topbar from "../editor/Topbar.vue";
 import Sidebar from "../editor/Sidebar.vue";
 import WritingArea from "../editor/WritingArea.vue";
@@ -131,13 +130,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div :class="styles.app" :data-ready="String(ready)">
+  <div class="app" :data-ready="String(ready)">
     <Topbar
       :on-new="() => void startNewManuscript()"
       :on-open="() => void openManuscript(fileInput.value)"
     />
-    <main :class="styles.main">
-      <div :class="styles.workspace">
+    <main class="main">
+      <div class="workspace">
         <Sidebar />
         <WritingArea />
         <AssistancePanel />
@@ -159,3 +158,37 @@ onUnmounted(() => {
     />
   </div>
 </template>
+
+<style scoped>
+.app {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  max-width: 100vw;
+  overflow: hidden;
+  width: 100vw;
+}
+
+.main {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  width: 100%;
+}
+
+.workspace {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+}
+
+@media (max-width: 55rem) {
+  .app {
+    height: 100dvh;
+  }
+}
+</style>

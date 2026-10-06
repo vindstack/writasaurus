@@ -7,7 +7,6 @@ import {
   type ThemePreference,
 } from "../../lib/settings.ts";
 import SegmentedControl from "../SegmentedControl.vue";
-import styles from "./ThemeSwitcher.module.css";
 
 const options = [
   { value: "light", label: "Light" },
@@ -30,7 +29,7 @@ function changeTheme(next: string): void {
 </script>
 
 <template>
-  <div :class="styles.switcher">
+  <div class="switcher">
     <SegmentedControl
       name="Color theme"
       :value="theme"
@@ -39,3 +38,16 @@ function changeTheme(next: string): void {
     />
   </div>
 </template>
+
+<style scoped>
+.switcher {
+  flex: 0 0 auto;
+  width: 12rem;
+}
+
+@media (max-width: 30rem) {
+  .switcher {
+    width: 10.5rem;
+  }
+}
+</style>

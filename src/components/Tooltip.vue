@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import styles from "./Tooltip.module.css";
 
 withDefaults(defineProps<{ content: string; position?: "top" | "bottom" }>(), {
   position: "top",
@@ -7,10 +6,56 @@ withDefaults(defineProps<{ content: string; position?: "top" | "bottom" }>(), {
 </script>
 
 <template>
-  <span :class="styles.tooltip">
+  <span class="tooltip">
     <slot />
-    <span :class="[styles.bubble, styles[position]]" role="tooltip" aria-hidden="true">
+    <span :class="['bubble', position]" role='tooltip' aria-hidden='true'>
       {{ content }}
     </span>
   </span>
 </template>
+
+<style scoped>
+.tooltip {
+  display: inline-flex;
+  position: relative;
+}
+
+.bubble {
+  background: var(--text);
+  border-radius: 0.35rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  color: var(--surface);
+  font-size: 0.78rem;
+  font-weight: 500;
+  left: 50%;
+  line-height: 1.3;
+  max-width: 220px;
+  opacity: 0;
+  padding: 0.35rem 0.6rem;
+  pointer-events: none;
+  position: absolute;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  white-space: nowrap;
+  z-index: 1000;
+}
+
+.top {
+  bottom: 100%;
+  margin-bottom: 6px;
+  transform: translateX(-50%) translateY(-4px);
+}
+
+.bottom {
+  margin-top: 6px;
+  top: 100%;
+  transform: translateX(-50%) translateY(4px);
+}
+
+.tooltip:hover .bubble,
+.tooltip:focus-within .bubble {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+</style>

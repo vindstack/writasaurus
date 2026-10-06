@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
-import styles from "./DropdownMenu.module.css";
 
 const props = withDefaults(defineProps<{
   id?: string;
@@ -32,12 +31,12 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
 </script>
 
 <template>
-  <div :class="styles.root" :id="id" ref="root" :data-open="String(open)">
-    <div :class="styles.trigger" @click="emit('open-change', !open)">
+  <div class="root" :id="id" ref="root" :data-open="String(open)">
+    <div class="trigger" @click="emit('open-change', !open)">
       <slot name="trigger" />
     </div>
     <div
-      :class="[styles.popover, styles[placement], open && styles.open]"
+      :class="['popover', placement, open && 'open']"
       role="menu"
       @click="onMenuClick"
     >
@@ -45,3 +44,48 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
     </div>
   </div>
 </template>
+
+<style scoped>
+.root {
+  display: inline-flex;
+  position: relative;
+}
+
+.trigger {
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.popover {
+  display: none;
+  margin-top: 4px;
+  position: absolute;
+  top: 100%;
+  z-index: 1000;
+}
+
+.open {
+  animation: dropdown-menu-enter 0.15s ease-out;
+  display: block;
+}
+
+.bottom-start {
+  left: 0;
+}
+
+.bottom-end {
+  right: 0;
+}
+
+@keyframes dropdown-menu-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+</style>

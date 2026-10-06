@@ -1,5 +1,4 @@
 ---
-import styles from "./CardPage.module.css";
 
 interface Props {
   size: "narrow" | "medium" | "wide";
@@ -11,17 +10,86 @@ interface Props {
 const { size, brandHref, roomy = false, prose = false } = Astro.props;
 ---
 
-<div class={styles.page}>
-  <div class={`${styles.container} ${styles[size]}`}>
-    <header class={styles.header}>
+<div class="page">
+  <div class={`container ${size}`}>
+    <header class="header">
       {brandHref
-        ? <a class={styles.brand} href={brandHref}>Writasaurus</a>
-        : <span class={styles.brand}>Writasaurus</span>}
+        ? <a class="brand" href={brandHref}>Writasaurus</a>
+        : <span class="brand">Writasaurus</span>}
     </header>
     <main>
-      <section class:list={[styles.card, roomy && styles.roomy, prose && styles.prose]}>
+      <section class:list={["card", roomy && "roomy", prose && "prose"]}>
         <slot />
       </section>
     </main>
   </div>
 </div>
+
+<style>
+.page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.narrow {
+  max-width: 32rem;
+}
+
+.medium {
+  max-width: 36rem;
+}
+
+.wide {
+  max-width: 38rem;
+}
+
+.header {
+  text-align: center;
+}
+
+.brand {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2rem;
+}
+
+.roomy {
+  gap: 1.5rem;
+}
+
+.prose :global(p) {
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.card :global(h2) {
+  font-size: 1.5rem;
+}
+
+@media (max-width: 36rem) {
+  .card {
+    padding: 1.25rem;
+  }
+}
+</style>

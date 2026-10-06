@@ -1,7 +1,15 @@
 <script setup lang="ts">
-import styles from "./Divider.module.css";
 </script>
 
 <template>
-  <div :class="styles.divider" role="separator" aria-orientation="horizontal" />
+  <div class="divider" role="separator" aria-orientation="horizontal" />
 </template>
+
+<style scoped>
+.divider {
+  background-color: var(--border);
+  height: 1px;
+  margin: 0.35rem 0;
+  width: 100%;
+}
+</style>

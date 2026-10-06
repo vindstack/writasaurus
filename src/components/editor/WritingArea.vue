@@ -15,7 +15,6 @@ import {
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
-import styles from "./WritingArea.module.css";
 
 const chapterState = useSignalValue(activeChapter);
 const desktopState = useSignalValue(isDesktop);
@@ -67,19 +66,19 @@ const assistanceEnabled = () => desktopState.value && getWritingAssistancePrefer
 </script>
 
 <template>
-  <div :class="styles.viewport" data-editor-viewport>
-    <section :class="styles.area">
+  <div class="viewport" data-editor-viewport>
+    <section class="area">
       <input
         ref="title"
         id="chapter-title"
-        :class="styles.title"
+        class="title"
         aria-label="Chapter title"
         @input="renameChapter(($event.currentTarget as HTMLInputElement).value); scheduleHistoryCapture()"
       />
       <div
         ref="editor"
         id="editor"
-        :class="styles.canvas"
+        class="canvas"
         contenteditable
         role="textbox"
         aria-multiline="true"
@@ -100,3 +99,107 @@ const assistanceEnabled = () => desktopState.value && getWritingAssistancePrefer
     </section>
   </div>
 </template>
+
+<style scoped>
+.viewport {
+  box-sizing: border-box;
+  display: block;
+  flex: 1 1 auto;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.area {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0 auto;
+  max-width: 36rem;
+  min-height: 100%;
+  min-width: 0;
+  padding: 1rem 1.5rem;
+  width: 100%;
+}
+
+.title {
+  background: transparent;
+  border: 0;
+  box-sizing: border-box;
+  color: var(--text);
+  font-family: var(
+    --editor-font,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.5rem;
+  margin: 0;
+  min-width: 0;
+  outline: 0;
+  padding: 0.25rem 0;
+  width: 100%;
+}
+
+.canvas {
+  box-sizing: border-box;
+  display: block;
+  flex: 1 1 auto;
+  font-family: var(
+    --editor-font,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif
+  );
+  font-size: 1rem;
+  line-height: 1.75;
+  min-height: 0;
+  min-width: 0;
+  outline: 0;
+  overflow: visible;
+  overflow-wrap: break-word;
+  padding: 0.5rem 0 4rem;
+  tab-size: 4;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+@media (max-width: 55rem) {
+  .area {
+    max-width: 100%;
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 36rem) {
+  .area {
+    padding: 0.65rem 0.75rem;
+  }
+
+  .title {
+    font-size: 1.125rem;
+    line-height: 1.25rem;
+  }
+
+  .canvas {
+    line-height: 1.6;
+    padding-top: 0.5rem;
+  }
+}
+</style>

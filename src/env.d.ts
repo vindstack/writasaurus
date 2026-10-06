@@ -30,11 +30,6 @@ declare const Deno: {
   };
 };
 
-declare module "*.module.css" {
-  const classes: Record<string, string>;
-  export default classes;
-}
-
 declare module "jsr:@std/http@^1.1.1/file-server" {
   export function serveFile(request: Request, filePath: string): Promise<Response>;
 }

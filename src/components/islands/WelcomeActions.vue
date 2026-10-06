@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import Button from "../Button.vue";
-import styles from "./WelcomeActions.module.css";
 import { blankManuscript, parseManuscript, SAMPLE_NOVEL } from "../../lib/editor/data.ts";
 import { saveLocal, setSkipWelcome, storeHandle } from "../../lib/editor/storage.ts";
 import { parseEpub } from "../../lib/epub.ts";
@@ -69,7 +68,7 @@ async function onFileChosen(event: Event): Promise<void> {
 </script>
 
 <template>
-  <div :class="styles.actions">
+  <div class="actions">
     <Button variant="primary" block id="welcome-open" @click="open">Browse Local File</Button>
     <Button block id="welcome-new" @click="startFrom(blankManuscript())">
       Start New Manuscript
@@ -90,10 +89,10 @@ async function onFileChosen(event: Event): Promise<void> {
       @change="onFileChosen"
     />
   </div>
-  <div :class="styles.footer">
+  <div class="footer">
     <a
       href="/"
-      :class="styles.returnLink"
+      class="returnLink"
       title="Return to Editor (Ctrl+Shift+E)"
       @click="setSkipWelcome()"
     >
@@ -101,3 +100,27 @@ async function onFileChosen(event: Event): Promise<void> {
     </a>
   </div>
 </template>
+
+<style scoped>
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.footer {
+  margin-top: 0.5rem;
+  text-align: center;
+}
+
+.returnLink {
+  color: var(--muted);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.returnLink:hover {
+  color: var(--text);
+}
+</style>

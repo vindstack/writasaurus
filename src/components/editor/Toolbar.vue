@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { runCommand } from "../../lib/editor/surface.ts";
-import controls from "./controls.module.css";
-import styles from "./Toolbar.module.css";
+import Button from "../Button.vue";
 import Tooltip from "../Tooltip.vue";
 
 const commands = [
@@ -12,16 +11,16 @@ const commands = [
 </script>
 
 <template>
-  <div :class="styles.toolbar" role="toolbar" aria-label="Formatting">
+  <div class="toolbar" role="toolbar" aria-label="Formatting">
     <Tooltip
       v-for="{ command, tip, label } in commands"
       :key="command"
       :content="tip"
       position="bottom"
     >
-      <button
-        type="button"
-        :class="[controls.button, controls.small]"
+      <Button
+        variant="editor"
+        size="small"
         :data-command="command"
         @mousedown.prevent
         @click="runCommand(command)"
@@ -29,7 +28,23 @@ const commands = [
         <strong v-if="command === 'bold'">{{ label }}</strong>
         <em v-else-if="command === 'italic'">{{ label }}</em>
         <template v-else>{{ label }}</template>
-      </button>
+      </Button>
     </Tooltip>
   </div>
 </template>
+
+<style scoped>
+.toolbar {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+}
+
+@media (max-width: 36rem) {
+  .toolbar {
+    display: none;
+  }
+}
+
+</style>
