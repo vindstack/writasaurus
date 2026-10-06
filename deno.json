@@ -10,7 +10,7 @@
     "output": {
       "linux": "./desktop/Writasaurus.AppImage",
       "windows": "./desktop/Writasaurus.msi",
-      "macos": "./desktop/Writasaurus.app"
+      "macos": "./desktop/Writasaurus"
     }
   },
   "compilerOptions": {
@@ -38,11 +38,12 @@
     "build": "astro build",
     "test:browser": "deno task build && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
     "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
-    "check": "deno fmt --check && deno lint && deno check app.ts desktop.ts desktop.dev.ts server.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts && astro check && deno task test",
+    "check": "deno fmt --check && deno lint && deno check app.ts desktop.ts desktop.dev.ts server.ts scripts/*.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts src/pages/api/releases/*.ts && astro check && deno task test",
     "desktop": "deno task build && deno desktop --no-check --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
     "desktop:dev": "deno desktop --no-check --hmr --icon=public/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts",
     "dev": "astro dev --host 127.0.0.1 --port 8000",
-    "start": "deno run --allow-env --allow-net --allow-read --allow-write server.ts"
+    "start": "deno run --allow-env --allow-net --allow-read --allow-write server.ts",
+    "release:desktop": "deno run --env-file=.env --allow-read=deno.json,public/desktop-icon.png,desktop --allow-write=desktop --allow-run=deno --allow-env=WRITASAURUS_R2_ACCOUNT_ID,WRITASAURUS_R2_ACCESS_KEY_ID,WRITASAURUS_R2_SECRET_ACCESS_KEY,WRITASAURUS_R2_BUCKET,WRITASAURUS_RELEASES_PUBLIC_URL scripts/release-desktop.ts"
   },
   "imports": {
     "@astrojs/check": "npm:@astrojs/check@^0.9.10",
@@ -63,4 +64,3 @@
     "app": "writasaurus"
   }
 }
-

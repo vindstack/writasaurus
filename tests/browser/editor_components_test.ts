@@ -747,26 +747,72 @@ browserTest("browser: download placeholder requires agreement acceptance", async
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
+    await page.route("**/api/releases/latest", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          version: "1.2.3",
+          releasedAt: "2026-10-05T12:00:00.000Z",
+          releaseUrl: "https://downloads.example/releases/v1.2.3/release.json",
+          artifacts: {
+            linux: {
+              label: "Linux",
+              fileName: "Writasaurus.AppImage",
+              url: "https://downloads.example/releases/v1.2.3/Writasaurus.AppImage",
+              sizeBytes: 10,
+              sha256: "a".repeat(64),
+            },
+            macos: {
+              label: "macOS",
+              fileName: "Writasaurus-macos.tar.gz",
+              url: "https://downloads.example/releases/v1.2.3/Writasaurus-macos.tar.gz",
+              sizeBytes: 10,
+              sha256: "b".repeat(64),
+            },
+            windows: {
+              label: "Windows",
+              fileName: "Writasaurus.msi",
+              url: "https://downloads.example/releases/v1.2.3/Writasaurus.msi",
+              sizeBytes: 10,
+              sha256: "c".repeat(64),
+            },
+          },
+        }),
+      });
+    });
     await page.goto(`http://${address.hostname}:${address.port}/`);
     const checkbox = page.getByTestId("agreement-acceptance");
-    const download = page.getByTestId("download-button");
-    assert(await download.isDisabled(), "Download should be disabled before consent.");
     assert(
-      await page.getByTestId("download-notice").count() === 0,
-      "The coming-soon notice should not appear before clicking.",
+      await page.getByTestId("platform-downloads").count() === 0,
+      "Downloads should remain hidden until license consent.",
     );
 
     await checkbox.check();
-    await page.waitForFunction(() =>
-      document.querySelector<HTMLButtonElement>('[data-testid="download-button"]')?.disabled ===
-        false
-    );
-    await download.click();
-    await page.getByTestId("download-notice").waitFor();
+    await page.getByTestId("platform-downloads").waitFor();
+    const versionText = await page.getByTestId("release-version").textContent();
     assert(
-      (await page.getByTestId("download-notice").textContent())?.trim() ===
-        "Downloads are coming soon.",
-      "The accepted CTA should explain that downloads are coming soon.",
+      versionText?.trim() === "Writasaurus 1.2.3",
+      `Expected the latest release version to be shown, got ${JSON.stringify(versionText)}.`,
+    );
+    for (
+      const [platform, fileName] of [
+        ["linux", "Writasaurus.AppImage"],
+        ["macos", "Writasaurus-macos.tar.gz"],
+        ["windows", "Writasaurus.msi"],
+      ]
+    ) {
+      const link = page.getByTestId(`download-${platform}`);
+      assert(await link.getAttribute("download") === fileName, `Expected ${platform} download.`);
+      assert(
+        (await link.getAttribute("href"))?.includes(`/v1.2.3/${fileName}`),
+        `Expected ${platform} to link to the latest immutable artifact.`,
+      );
+    }
+    await checkbox.uncheck();
+    assert(
+      await page.getByTestId("platform-downloads").count() === 0,
+      "Unchecking consent should hide the download links.",
     );
   } finally {
     await browser.close();
