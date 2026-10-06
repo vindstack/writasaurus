@@ -130,21 +130,6 @@ Deno.test("renders the marketing homepage and gates its download placeholder", a
   assert(!page.includes('id="editor"'));
 });
 
-Deno.test("reports missing release download configuration", async () => {
-  const previous = Deno.env.get("WRITASAURUS_RELEASES_PUBLIC_URL");
-  Deno.env.delete("WRITASAURUS_RELEASES_PUBLIC_URL");
-  try {
-    const response = await createTestApp({ isDesktop: () => false }).request(
-      "/api/releases/latest",
-    );
-    assert(response.status === 503);
-    const payload = await response.json();
-    assert(payload.error === "Release downloads are not configured.");
-  } finally {
-    if (previous !== undefined) Deno.env.set("WRITASAURUS_RELEASES_PUBLIC_URL", previous);
-  }
-});
-
 Deno.test("publishes the application license and EPUB ownership terms", async () => {
   const website = createTestApp({ isDesktop: () => false });
   const response = await website.request("/agreement");

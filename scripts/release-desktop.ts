@@ -1,18 +1,10 @@
 import {
   isPublicHttpsUrl,
-  isReleaseManifest,
   isSemanticVersion,
   type ReleaseArtifact,
   type ReleaseManifest,
 } from "../src/lib/releases.ts";
-import {
-  bucketStorageBytes,
-  objectExists,
-  putObject,
-  type R2Credentials,
-  readObject,
-  requestR2,
-} from "./r2.ts";
+import { bucketStorageBytes, objectExists, putObject, type R2Credentials } from "./r2.ts";
 
 interface DesktopConfig {
   output: Record<"linux" | "macos" | "windows", string>;
@@ -430,22 +422,9 @@ async function verifyNotPublished(
 ): Promise<void> {
   const releaseKey = `${releasePrefix}/v${version}/release.json`;
   if (await objectExists(credentials, releaseKey)) {
-    throw new Error(`Version ${version} is already published; release paths are immutable.`);
-  }
-  const latestBytes = await readObject(credentials, "latest.json");
-  if (!latestBytes) return;
-  let latest: unknown;
-  try {
-    latest = JSON.parse(new TextDecoder().decode(latestBytes));
-  } catch {
-    throw new Error("The existing latest.json is invalid; refusing to overwrite release metadata.");
-  }
-  if (!isReleaseManifest(latest)) {
-    throw new Error("The existing latest.json has an unsupported release manifest.");
-  }
-  if (compareVersions(version, latest.version) <= 0) {
     throw new Error(
-      `Version ${version} must be newer than currently published version ${latest.version}.`,
+      `Version ${version} is already published; release paths are immutable. ` +
+        `If needed, run: deno task release:latest ${version}`,
     );
   }
 }
@@ -465,22 +444,19 @@ async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<
   await Deno.mkdir(outputDir, { recursive: true });
   const json = `${JSON.stringify(manifest, null, 2)}\n`;
   await Deno.writeTextFile(`${outputDir}/release.json`, json);
-  await Deno.writeTextFile("desktop/release-dry-run/latest.json", json);
   console.log(`Dry run complete. Metadata preview: ${outputDir}/release.json`);
   console.log("No Cloudflare credentials were read and no R2 API requests or uploads were made.");
 }
 
 async function publish(
-  version: string,
   manifest: ReleaseManifest,
   artifacts: BuiltArtifact[],
   credentials: R2Credentials,
 ): Promise<void> {
   const releaseBytes = new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
-  const latestBytes = releaseBytes;
   const currentStorage = await bucketStorageBytes(credentials);
   const addedBytes = artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
-    releaseBytes.byteLength + latestBytes.byteLength;
+    releaseBytes.byteLength;
   if (currentStorage + addedBytes > R2_FREE_STORAGE_BYTES) {
     throw new Error(
       `Publishing would exceed the 10 GB R2 free storage allowance ` +
@@ -504,7 +480,7 @@ async function publish(
     console.log(`Verified ${artifact.key}`);
   }
 
-  const releaseKey = `${releasePrefix}/v${version}/release.json`;
+  const releaseKey = `${releasePrefix}/v${manifest.version}/release.json`;
   await putObject(credentials, releaseKey, releaseBytes, {
     contentType: "application/json",
     immutable: true,
@@ -512,34 +488,9 @@ async function publish(
   });
   console.log(`Verified ${releaseKey}`);
 
-  const latestHead = await requestR2("HEAD", "latest.json", credentials);
-  let latestCondition: { ifMatch: string } | { immutable: true };
-  if (latestHead.status === 404) {
-    latestCondition = { immutable: true };
-  } else if (latestHead.ok) {
-    const etag = latestHead.headers.get("etag");
-    if (!etag) throw new Error("R2 latest.json response did not include an ETag.");
-    const currentBytes = await readObject(credentials, "latest.json");
-    if (!currentBytes) {
-      throw new Error("latest.json disappeared during publication; refusing to overwrite it.");
-    }
-    const current: unknown = JSON.parse(new TextDecoder().decode(currentBytes));
-    if (!isReleaseManifest(current) || compareVersions(version, current.version) <= 0) {
-      throw new Error(
-        `A newer or conflicting release was published while building ${version}; latest.json was not changed.`,
-      );
-    }
-    latestCondition = { ifMatch: etag };
-  } else {
-    throw new Error(`Could not inspect latest.json before updating it (${latestHead.status}).`);
-  }
-  await putObject(credentials, "latest.json", latestBytes, {
-    contentType: "application/json",
-    cacheControl: "public, max-age=60, s-maxage=300, stale-while-revalidate=600",
-    ...latestCondition,
-  });
-  console.log("Verified latest.json");
-  console.log(`\nPublished Writasaurus ${version}. Public metadata: ${manifest.releaseUrl}`);
+  console.log(
+    `\nPublished Writasaurus ${manifest.version}. Public metadata: ${manifest.releaseUrl}`,
+  );
 }
 
 async function main(): Promise<void> {
@@ -567,7 +518,7 @@ async function main(): Promise<void> {
   if (dryRun) {
     await writeDryRun(version, manifest);
   } else {
-    await publish(version, manifest, artifacts, credentials!);
+    await publish(manifest, artifacts, credentials!);
   }
 }
 

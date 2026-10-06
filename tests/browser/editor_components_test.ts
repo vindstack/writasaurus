@@ -738,7 +738,7 @@ browserTest(
   },
 );
 
-browserTest("browser: download placeholder requires agreement acceptance", async () => {
+browserTest("browser: download detects OS and requires agreement", async () => {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
     createTestApp({ isDesktop: () => false }).fetch,
@@ -747,7 +747,7 @@ browserTest("browser: download placeholder requires agreement acceptance", async
   const browser = await launchBrowser();
   const page = await browser.newPage();
   try {
-    await page.route("**/api/releases/latest", async (route) => {
+    await page.route("**/latest.json", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -783,17 +783,36 @@ browserTest("browser: download placeholder requires agreement acceptance", async
     });
     await page.goto(`http://${address.hostname}:${address.port}/`);
     const checkbox = page.getByTestId("agreement-acceptance");
+    await page.getByTestId("platform-downloads").waitFor();
+    const detectedPlatform = await page.evaluate(() => {
+      const platform = navigator.platform.toLowerCase();
+      const userAgent = navigator.userAgent.toLowerCase();
+      if (platform.includes("win") || userAgent.includes("windows")) return "windows";
+      if (platform.includes("mac") || userAgent.includes("macintosh")) return "macos";
+      return "linux";
+    });
     assert(
-      await page.getByTestId("platform-downloads").count() === 0,
-      "Downloads should remain hidden until license consent.",
+      await page.getByTestId("operating-system-select").inputValue() === detectedPlatform,
+      `Expected the detected operating system ${detectedPlatform} to be selected.`,
+    );
+    assert(
+      await page.getByTestId(`download-${detectedPlatform}`).isDisabled(),
+      "The detected operating system's download should be disabled before agreement.",
+    );
+    assert(
+      await page.getByTestId("download-control").getAttribute("data-disabled") === "true",
+      "The download control should look disabled before agreement.",
     );
 
-    await checkbox.check();
-    await page.getByTestId("platform-downloads").waitFor();
     const versionText = await page.getByTestId("release-version").textContent();
     assert(
       versionText?.trim() === "Writasaurus 1.2.3",
       `Expected the latest release version to be shown, got ${JSON.stringify(versionText)}.`,
+    );
+    await checkbox.check();
+    assert(
+      await page.getByTestId("download-control").getAttribute("data-disabled") === "false",
+      "Accepting the agreement should enable the download control.",
     );
     for (
       const [platform, fileName] of [
@@ -802,7 +821,9 @@ browserTest("browser: download placeholder requires agreement acceptance", async
         ["windows", "Writasaurus.msi"],
       ]
     ) {
+      await page.getByTestId("operating-system-select").selectOption(platform);
       const link = page.getByTestId(`download-${platform}`);
+      assert(!await link.isDisabled(), `Expected ${platform} download to be enabled.`);
       assert(await link.getAttribute("download") === fileName, `Expected ${platform} download.`);
       assert(
         (await link.getAttribute("href"))?.includes(`/v1.2.3/${fileName}`),
@@ -811,8 +832,8 @@ browserTest("browser: download placeholder requires agreement acceptance", async
     }
     await checkbox.uncheck();
     assert(
-      await page.getByTestId("platform-downloads").count() === 0,
-      "Unchecking consent should hide the download links.",
+      await page.getByTestId("download-windows").isDisabled(),
+      "Unchecking consent should disable the selected download.",
     );
   } finally {
     await browser.close();

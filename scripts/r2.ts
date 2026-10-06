@@ -239,6 +239,89 @@ export async function putObject(
   }
 }
 
+function decodeXmlText(value: string): string {
+  if (value.replace(/&[^;]*;/g, "").includes("&")) {
+    throw new Error("R2 returned invalid XML text.");
+  }
+  const decoded = value.replace(/&([^;]*);/g, (_entity, name: string) => {
+    switch (name) {
+      case "amp":
+        return "&";
+      case "lt":
+        return "<";
+      case "gt":
+        return ">";
+      case "quot":
+        return '"';
+      case "apos":
+        return "'";
+      default: {
+        const codePoint = /^#x[0-9a-f]+$/i.test(name)
+          ? Number.parseInt(name.slice(2), 16)
+          : /^#\d+$/.test(name)
+          ? Number.parseInt(name.slice(1), 10)
+          : Number.NaN;
+        if (
+          !Number.isInteger(codePoint) ||
+          codePoint < 0x20 && ![0x09, 0x0a, 0x0d].includes(codePoint) ||
+          codePoint > 0x10ffff || codePoint >= 0xd800 && codePoint <= 0xdfff
+        ) {
+          throw new Error(`R2 returned invalid XML entity &${name};.`);
+        }
+        return String.fromCodePoint(codePoint);
+      }
+    }
+  });
+  return decoded;
+}
+
+function xmlTagText(xml: string, tagName: string): string {
+  const matches = [...xml.matchAll(new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g"))];
+  if (matches.length !== 1) {
+    throw new Error(`R2 returned invalid bucket-list XML: expected one ${tagName} value.`);
+  }
+  return decodeXmlText(matches[0][1].trim());
+}
+
+export function parseBucketListing(xml: string): {
+  sizes: number[];
+  truncated: boolean;
+  continuationToken?: string;
+} {
+  if (!/<ListBucketResult(?:\s[^>]*)?>[\s\S]*<\/ListBucketResult>/.test(xml)) {
+    throw new Error("R2 returned invalid bucket-list XML.");
+  }
+  const openingContents = [...xml.matchAll(/<Contents(?:\s[^>]*)?>/g)].length;
+  const closingContents = [...xml.matchAll(/<\/Contents>/g)].length;
+  if (openingContents !== closingContents) {
+    throw new Error("R2 returned invalid bucket-list XML: malformed Contents entry.");
+  }
+
+  const sizes: number[] = [];
+  for (const [, content] of xml.matchAll(/<Contents(?:\s[^>]*)?>([\s\S]*?)<\/Contents>/g)) {
+    const sizeText = xmlTagText(content, "Size");
+    if (!/^\d+$/.test(sizeText)) {
+      throw new Error("R2 returned an invalid object size; cannot confirm storage usage.");
+    }
+    const size = Number(sizeText);
+    if (!Number.isSafeInteger(size)) {
+      throw new Error("R2 returned an invalid object size; cannot confirm storage usage.");
+    }
+    sizes.push(size);
+  }
+
+  const truncatedText = xmlTagText(xml, "IsTruncated");
+  if (truncatedText !== "true" && truncatedText !== "false") {
+    throw new Error("R2 returned invalid bucket-list XML: invalid IsTruncated value.");
+  }
+  if (truncatedText === "false") return { sizes, truncated: false };
+  const continuationToken = xmlTagText(xml, "NextContinuationToken");
+  if (!continuationToken) {
+    throw new Error("R2 indicated more objects without a continuation token.");
+  }
+  return { sizes, truncated: true, continuationToken };
+}
+
 export async function bucketStorageBytes(credentials: R2Credentials): Promise<number> {
   let total = 0;
   let continuationToken: string | undefined;
@@ -252,27 +335,14 @@ export async function bucketStorageBytes(credentials: R2Credentials): Promise<nu
           "cannot confirm the free-tier storage limit.",
       );
     }
-    const xml = new DOMParser().parseFromString(await response.text(), "application/xml");
-    if (xml.querySelector("parsererror")) {
-      throw new Error("R2 returned invalid bucket-list XML; cannot confirm storage usage.");
-    }
-    for (const content of xml.getElementsByTagName("Contents")) {
-      const sizeText = content.getElementsByTagName("Size")[0]?.textContent;
-      if (!sizeText || !/^\d+$/.test(sizeText)) {
-        throw new Error("R2 returned an invalid object size; cannot confirm storage usage.");
-      }
-      total += Number(sizeText);
+    const listing = parseBucketListing(await response.text());
+    for (const size of listing.sizes) {
+      total += size;
       if (!Number.isSafeInteger(total)) {
         throw new Error("R2 bucket size exceeds the safe storage accounting range.");
       }
     }
-    const truncated = xml.getElementsByTagName("IsTruncated")[0]?.textContent === "true";
-    continuationToken = truncated
-      ? xml.getElementsByTagName("NextContinuationToken")[0]?.textContent ?? undefined
-      : undefined;
-    if (truncated && !continuationToken) {
-      throw new Error("R2 indicated more objects without a continuation token.");
-    }
+    continuationToken = listing.truncated ? listing.continuationToken : undefined;
   } while (continuationToken);
   return total;
 }

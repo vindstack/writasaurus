@@ -48,9 +48,8 @@ deno task check
 
 The website serves the Writasaurus marketing page at `/` and the public license agreement at
 `/agreement`. Visitors must accept the agreement before the page reveals the current Linux, macOS,
-and Windows downloads. The page reads release metadata from the public R2 `latest.json` through
-`/api/releases/latest`. The agreement is a plain-language draft and has not been reviewed by a
-lawyer.
+and Windows downloads. The page reads release metadata from the website's deployed `/latest.json`
+file. The agreement is a plain-language draft and has not been reviewed by a lawyer.
 
 In Deno Desktop, `/` opens the editor. Editor-only pages and `/api/editor/*` return 404 outside
 Desktop mode. The editor stores the active manuscript in localStorage, remembers granted file
@@ -86,11 +85,11 @@ The command builds the web bundle, then explicitly cross-compiles an x86-64 Linu
 Silicon macOS application bundle, and an x86-64 Windows MSI. It archives the macOS bundle as a
 `.tar.gz`, verifies the non-empty outputs, calculates SHA-256 checksums, and uploads to immutable
 `releases/v<version>/` paths. It verifies uploaded sizes/checksum metadata before writing
-`release.json` and updating `latest.json`. Existing versions cannot be overwritten, and older
-versions cannot replace the latest pointer. The macOS download must be extracted before moving the
-app into Applications. A macOS build made on a non-macOS host is unsigned; one made on macOS is
-ad-hoc signed by default. Neither is notarized, so Gatekeeper may require users to approve it
-manually.
+`release.json`. Existing versions cannot be overwritten. The separate `release:latest` task updates
+the website's `public/latest.json` pointer after a version is published. The macOS download must be
+extracted before moving the app into Applications. A macOS build made on a non-macOS host is
+unsigned; one made on macOS is ad-hoc signed by default. Neither is notarized, so Gatekeeper may
+require users to approve it manually.
 
 This workflow uses only R2's Standard storage class, S3-compatible API operations, public bucket
 delivery, and Cloudflare edge caching—no Workers, Infrequent Access, or multipart-upload feature. It
@@ -109,10 +108,19 @@ deno task release:desktop 1.2.3 --dry-run
 
 Dry runs still build and checksum all three packages and write a metadata preview under
 `desktop/release-dry-run/`. Deno Desktop may download the required cross-compilation runtime and
-backend components. To use the local public URL while running the website locally, start its task
-with `deno task --env-file=.env dev`. In production, configure only
-`WRITASAURUS_RELEASES_PUBLIC_URL` on the server so `/api/releases/latest` can fetch the public
-`latest.json`; R2 credentials are needed only on the machine publishing releases.
+backend components.
+
+After publishing, generate or update the website's latest-release pointer from the versioned,
+validated metadata:
+
+```sh
+deno task release:latest 1.2.3
+```
+
+This writes `public/latest.json`; deploy the website with that updated file so the download page
+serves the selected version. The task reads the published `release.json` from the public R2 URL and
+refuses to replace a newer local pointer. It does not require R2 credentials or upload anything to
+R2.
 
 ## Secure defaults
 
