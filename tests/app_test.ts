@@ -121,8 +121,8 @@ Deno.test("renders the marketing homepage and gates its download placeholder", a
   assert(response.status === 200);
   const page = await response.text();
   assert(page.includes("<title>Writasaurus — A calmer space for long-form writing</title>"));
-  assert(page.includes("Make room for the story only you can tell."));
-  assert(page.includes("Writasaurus is for personal use"));
+  assert(page.includes("A quiet, private space for your next chapter."));
+  assert(page.includes("Writasaurus is licensed for personal use"));
   assert(page.includes('href="/agreement"'));
   assert(page.includes('component-url="/_astro/DownloadConsent.'));
   assert(page.includes('data-testid="agreement-acceptance"'));

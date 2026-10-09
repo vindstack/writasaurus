@@ -39,7 +39,7 @@
     "test:browser": "deno task build && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
     "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
     "check": "deno fmt --check && deno lint && deno check app.ts desktop.ts desktop.dev.ts server.ts scripts/*.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts src/pages/api/releases/*.ts && astro check && deno task test",
-    "desktop": "deno task build && deno desktop --no-check --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
+    "desktop": "deno task build && deno desktop --no-check --include=dist/ --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
     "desktop:dev": "deno desktop --no-check --hmr --icon=public/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts",
     "dev": "deno task --env-file=.env dev:server",
     "dev:server": "astro dev --host 127.0.0.1 --port 8000",
@@ -66,6 +66,4 @@
     "app": "writasaurus"
   }
 }
-
-
 

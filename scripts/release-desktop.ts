@@ -322,10 +322,11 @@ async function buildDesktopTargets(): Promise<Record<"linux" | "macos" | "window
     const args = [
       "desktop",
       "--no-check",
+      "--include=dist/",
       `--target=${options.target}`,
       `--output=./${paths[platform]}`,
       ...(options.icon ? ["--icon=public/desktop-icon.png"] : []),
-      "--allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP",
+      "--allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV",
       "--allow-net",
       "--allow-read",
       "--allow-write",

@@ -26,6 +26,10 @@ deno task desktop:dev   # run Astro's dev server in a native window
 deno task desktop       # package for the current platform into desktop/
 ```
 
+Desktop packages embed `dist/`, including the dynamically loaded Astro server and client assets, so
+they run without the source checkout. On Linux, launch `./desktop/Writasaurus.AppImage` from a
+terminal to see startup errors.
+
 Check formatting, linting, types, and unit and Playwright browser tests:
 
 ```sh

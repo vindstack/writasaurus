@@ -1,28 +1,28 @@
 {
-  "version": "0.0.2",
-  "releasedAt": "2026-10-06T21:12:59.799Z",
-  "releaseUrl": "https://writasaurus.vindstack.com/releases/v0.0.2/release.json",
+  "version": "0.0.3",
+  "releasedAt": "2026-10-09T20:26:35.624Z",
+  "releaseUrl": "https://writasaurus.vindstack.com/releases/v0.0.3/release.json",
   "artifacts": {
     "linux": {
       "label": "Linux",
       "fileName": "Writasaurus.AppImage",
-      "url": "https://writasaurus.vindstack.com/releases/v0.0.2/Writasaurus.AppImage",
-      "sizeBytes": 166054392,
-      "sha256": "82010e9ddd4e950773953cef23b549beb350c0b2d3e0e80a3590ff3019b79853"
+      "url": "https://writasaurus.vindstack.com/releases/v0.0.3/Writasaurus.AppImage",
+      "sizeBytes": 176138744,
+      "sha256": "daa9ba7b13ce2c4b1afc98251bc3eadfae325bfad3fb6898baed470d834343e8"
     },
     "macos": {
       "label": "macOS",
       "fileName": "Writasaurus-macos.tar.gz",
-      "url": "https://writasaurus.vindstack.com/releases/v0.0.2/Writasaurus-macos.tar.gz",
-      "sizeBytes": 160733519,
-      "sha256": "37adf12012869d636d5da77e7aa346c74c7aa09507e622d39efd51fa0151f302"
+      "url": "https://writasaurus.vindstack.com/releases/v0.0.3/Writasaurus-macos.tar.gz",
+      "sizeBytes": 170946362,
+      "sha256": "e8f9fc4ce1011ceff975080f558f460d8128fe2a48ec137c5170e92cbd27efb6"
     },
     "windows": {
       "label": "Windows",
       "fileName": "Writasaurus.msi",
-      "url": "https://writasaurus.vindstack.com/releases/v0.0.2/Writasaurus.msi",
-      "sizeBytes": 157446144,
-      "sha256": "be17d2d5a9a5c839400d720dd11d3219003fc275d9fd4c9043866523038cac62"
+      "url": "https://writasaurus.vindstack.com/releases/v0.0.3/Writasaurus.msi",
+      "sizeBytes": 167591936,
+      "sha256": "19a70de884f5ed6b2877c4132ea9d430898ae2c345b4411894a66995f5efd168"
     }
   }
 }
