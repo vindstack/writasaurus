@@ -1,11 +1,12 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
 ---
 
 <BaseLayout title="Writasaurus License Agreement">
   <main class="page">
     <header class="header">
-      <a class="brand" href="/" aria-label="Writasaurus home">Writasaurus</a>
+      <BrandMark href="/" />
       <div class="headerActions">
         <a class="headerLink" href="/">Back to home</a>
       </div>
@@ -113,15 +114,6 @@ import BaseLayout from "../layouts/BaseLayout.astro";
   align-items: center;
   display: flex;
   gap: 1.25rem;
-}
-
-.brand {
-  color: var(--accent-strong);
-  font-family: var(--font-display);
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  text-decoration: none;
 }
 
 .headerLink,

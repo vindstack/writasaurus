@@ -1,4 +1,5 @@
 ---
+import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
 
 interface Props {
   size: "narrow" | "medium" | "wide";
@@ -13,9 +14,7 @@ const { size, brandHref, roomy = false, prose = false } = Astro.props;
 <div class="page">
   <div class={`container ${size}`}>
     <header class="header">
-      {brandHref
-        ? <a class="brand" href={brandHref}>Writasaurus</a>
-        : <span class="brand">Writasaurus</span>}
+      <BrandMark href={brandHref} />
     </header>
     <main>
       <section class:list={["card", roomy && "roomy", prose && "prose"]}>
@@ -55,13 +54,6 @@ const { size, brandHref, roomy = false, prose = false } = Astro.props;
 
 .header {
   text-align: center;
-}
-
-.brand {
-  font-family: ui-serif, Georgia, serif;
-  font-size: 1.75rem;
-  font-weight: 700;
-  text-decoration: none;
 }
 
 .card {

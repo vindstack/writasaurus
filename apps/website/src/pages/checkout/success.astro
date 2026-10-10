@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import SitePage from "../../components/SitePage.astro";
 import { decryptLicenseKey, hashText } from "../../lib/license-crypto.ts";
 import { isLocalMockEnabled, fulfillConfirmedStripePurchase } from "../../lib/payment-service.ts";
 import { getLicenseStore } from "../../lib/store.ts";
@@ -37,8 +38,7 @@ Astro.response.headers.set("referrer-policy", "no-referrer");
 ---
 
 <BaseLayout title="Writasaurus purchase">
-  <main>
-    <a href="/">Writasaurus</a>
+  <SitePage>
     <h1>Thank you</h1>
     <p role="status">{message}</p>
     {revealedKey && <section aria-label="Your license key">
@@ -48,5 +48,5 @@ Astro.response.headers.set("referrer-policy", "no-referrer");
     </section>}
     {purchaseEmail && <p>Purchase details were sent to <strong>{purchaseEmail}</strong>.</p>}
     <p><a href="/account">Go to your account</a></p>
-  </main>
+  </SitePage>
 </BaseLayout>

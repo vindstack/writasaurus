@@ -14,6 +14,7 @@ import {
   warningCategory,
 } from "../../lib/editor/assistance-state.ts";
 import { useSignalValue } from "../vue-signals.ts";
+import SlideoutPanel from "./SlideoutPanel.vue";
 
 const MAX_VISIBLE = 10;
 const open = useSignalValue(assistanceOpen);
@@ -43,10 +44,11 @@ onUnmounted(() => stopFocusWatch?.());
 </script>
 
 <template>
-  <aside
-    :class="['panel', !open && 'collapsed']"
-    aria-label="Writing assistance"
-    :data-collapsed="String(!open)"
+  <SlideoutPanel
+    :open="open"
+    side="right"
+    label="Writing assistance"
+    class="assistancePanel"
     data-testid="assistance-panel"
   >
     <div class="heading">
@@ -101,32 +103,16 @@ onUnmounted(() => stopFocusWatch?.());
         </div>
       </li>
     </ol>
-  </aside>
+  </SlideoutPanel>
 </template>
 
 <style scoped>
-.panel {
+.assistancePanel {
   align-content: start;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  box-sizing: border-box;
   color: var(--muted);
-  display: grid;
-  flex: 0 0 19rem;
   font-size: 0.75rem;
   gap: 0.75rem;
   grid-auto-rows: max-content;
-  min-width: 19rem;
-  overflow-y: auto;
-  padding: 0.75rem;
-  transition:
-    margin 0.2s,
-    transform 0.2s;
-  width: 19rem;
-}
-
-.collapsed {
-  margin-right: -19rem;
 }
 
 .heading {
@@ -266,20 +252,4 @@ onUnmounted(() => stopFocusWatch?.());
   padding: 0.2rem 0.4rem;
 }
 
-@media (max-width: 55rem) {
-  .panel {
-    bottom: 0;
-    min-width: 0;
-    position: absolute;
-    right: 0;
-    top: 0;
-    width: min(19rem, 88vw);
-    z-index: 10;
-  }
-
-  .collapsed {
-    margin-right: 0;
-    transform: translateX(100%);
-  }
-}
 </style>

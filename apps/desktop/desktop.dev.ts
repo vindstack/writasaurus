@@ -8,7 +8,7 @@ const win = new Deno.BrowserWindow({
 
 const vite = new Deno.Command("deno", {
   args: ["task", "dev"],
-  cwd: new URL("./", import.meta.url),
+  cwd: Deno.cwd(),
   stdout: "inherit",
   stderr: "inherit",
 }).spawn();

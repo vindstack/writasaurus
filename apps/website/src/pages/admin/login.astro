@@ -1,11 +1,11 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import SitePage from "../../components/SitePage.astro";
 const sent = Astro.url.searchParams.get("sent") === "1";
 ---
 
 <BaseLayout title="Writasaurus administration sign-in">
-  <main>
-    <a href="/">Writasaurus</a>
+  <SitePage>
     <h1>Administration sign-in</h1>
     {sent && <p role="status">If this is the configured administrator address, a code has been sent.</p>}
     <form action="/api/admin/request" method="post">
@@ -20,5 +20,5 @@ const sent = Astro.url.searchParams.get("sent") === "1";
       <input id="code" name="code" inputmode="numeric" pattern="[0-9]{8}" required maxlength="8" />
       <button type="submit">Sign in</button>
     </form>}
-  </main>
+  </SitePage>
 </BaseLayout>

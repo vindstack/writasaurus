@@ -35,10 +35,10 @@ defineProps<{ status: "saved" | "unsaved" | ""; message: string; id?: string }>(
 }
 
 .saved {
-  background-color: #86c9a3;
+  background-color: var(--success);
 }
 
 .unsaved {
-  background-color: #e6a6c7;
+  background-color: var(--accent-warm);
 }
 </style>

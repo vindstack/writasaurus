@@ -1,13 +1,13 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
+import SitePage from "../components/SitePage.astro";
 const cancelled = Astro.url.searchParams.get("cancelled") === "1";
 const mockPayments = Deno.env.get("PAYMENT_PROVIDER") === "mock" &&
   Deno.env.get("DENO_DEPLOYMENT_ID") === undefined;
 ---
 
 <BaseLayout title="Buy Writasaurus">
-  <main>
-    <a href="/">Writasaurus</a>
+  <SitePage>
     <h1>Get Writasaurus</h1>
     <p>One-time purchase: <strong>$59.99 USD</strong>. Includes desktop app updates and a license
       for up to two devices.</p>
@@ -20,5 +20,5 @@ const mockPayments = Deno.env.get("PAYMENT_PROVIDER") === "mock" &&
     </form>
     {mockPayments && <p>Local mock payments are enabled. No real payment will be taken.</p>}
     <p><a href="/agreement">Terms and conditions</a></p>
-  </main>
+  </SitePage>
 </BaseLayout>

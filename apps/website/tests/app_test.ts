@@ -8,7 +8,7 @@ Deno.test("website root always renders the paid marketing page", async () => {
   const response = await request("/");
   assert(response.status === 200);
   const page = await response.text();
-  assert(page.includes("A quiet, private space for your next chapter."));
+  assert(page.includes("Make room for the novel inside you."));
   assert(page.includes("$59.99 USD"));
   assert(page.includes('href="/checkout"'));
   assert(page.includes('href="/account"'));

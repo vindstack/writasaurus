@@ -14,6 +14,7 @@ import {
 import { useSignalValue } from "../vue-signals.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import Chip from "../../../../../packages/shared/ui/components/Chip.vue";
+import SlideoutPanel from "./SlideoutPanel.vue";
 
 const manuscriptState = useSignalValue(manuscript);
 const activeIndex = useSignalValue(activeChapterIndex);
@@ -42,10 +43,11 @@ function choose(index: number): void {
 </script>
 
 <template>
-  <aside
-    :class="['sidebar', !isOpen && 'collapsed']"
-    aria-label="Chapters"
-    :data-collapsed="String(!isOpen)"
+  <SlideoutPanel
+    :open="isOpen"
+    side="left"
+    label="Chapters"
+    class="sidebar"
     data-testid="chapters-sidebar"
   >
     <div class="heading">
@@ -94,25 +96,12 @@ function choose(index: number): void {
     <span id="sidebar-stats" class="stats">
       {{ manuscriptState.chapters.length }} chapter{{ manuscriptState.chapters.length === 1 ? "" : "s" }}
     </span>
-  </aside>
+  </SlideoutPanel>
 </template>
 
 <style scoped>
 .sidebar {
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: grid;
   grid-template-rows: auto 1fr auto;
-  min-width: 19rem;
-  padding: 0.75rem;
-  transition:
-    margin 0.2s,
-    transform 0.2s;
-  width: 19rem;
-}
-
-.collapsed {
-  margin-left: -19rem;
 }
 
 .heading {
@@ -237,24 +226,6 @@ function choose(index: number): void {
 .stats {
   color: var(--muted);
   font-size: 0.72rem;
-}
-
-@media (max-width: 55rem) {
-  .sidebar {
-    bottom: 0;
-    left: 0;
-    margin-left: 0;
-    min-width: 0;
-    position: absolute;
-    top: 0;
-    width: min(19rem, 88vw);
-    z-index: 10;
-  }
-
-  .collapsed {
-    margin-left: 0;
-    transform: translateX(-100%);
-  }
 }
 
 </style>

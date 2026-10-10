@@ -1,5 +1,6 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
+import SitePage from "../../components/SitePage.astro";
 import { getSession } from "../../lib/auth.ts";
 import { getLicenseStore } from "../../lib/store.ts";
 
@@ -15,8 +16,7 @@ const status = Astro.url.searchParams.get("status");
 ---
 
 <BaseLayout title="Writasaurus license administration">
-  <main>
-    <a href="/">Writasaurus</a>
+  <SitePage width="wide">
     <h1>License administration</h1>
     <p>Signed in as {session.email}.</p>
     {status === "updated" && <p role="status">License changes saved.</p>}
@@ -57,5 +57,5 @@ const status = Astro.url.searchParams.get("status");
       </ul>
     </section>)}
     <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
-  </main>
+  </SitePage>
 </BaseLayout>

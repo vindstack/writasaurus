@@ -64,8 +64,8 @@ const emit = defineEmits<{ change: [value: string] }>();
 
 .option[aria-pressed="true"] {
   background: var(--surface);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
-  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+  color: var(--accent-strong);
   font-weight: 600;
 }
 

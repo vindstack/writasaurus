@@ -130,6 +130,29 @@ async function withEditorPage(
   }
 }
 
+browserTest("browser: chapters and assistance share the same slideout shell", async () => {
+  await withEditorPage(async (page) => {
+    const styles = await page.evaluate(() => {
+      const chapters = document.querySelector('[data-testid="chapters-sidebar"]');
+      const assistance = document.querySelector('[data-testid="assistance-panel"]');
+      return {
+        chaptersClass: chapters?.classList.contains("slideoutPanel"),
+        assistanceClass: assistance?.classList.contains("slideoutPanel"),
+        chaptersRadius: chapters && getComputedStyle(chapters).borderRadius,
+        assistanceRadius: assistance && getComputedStyle(assistance).borderRadius,
+      };
+    });
+    assert(
+      styles.chaptersClass && styles.assistanceClass,
+      "Expected both panels to use the shared slideout",
+    );
+    assert(
+      styles.chaptersRadius === styles.assistanceRadius && styles.chaptersRadius === "0px",
+      `Expected square panel edges, got ${styles.chaptersRadius} and ${styles.assistanceRadius}`,
+    );
+  });
+});
+
 browserTest("browser: editor app renders its shell and adds a chapter", async () => {
   await withEditorPage(async (page) => {
     await page.waitForSelector("header #manuscript-title");
@@ -171,12 +194,12 @@ browserTest("browser: editor tokens follow the system color scheme", async () =>
       };
     });
     assert(
-      lightColors.background === "#f4f8fc",
+      lightColors.background === "#f5f2e9",
       `Unexpected light background: ${lightColors.background}`,
     );
-    assert(lightColors.accent === "#397eaf", `Unexpected light accent: ${lightColors.accent}`);
+    assert(lightColors.accent === "#596b46", `Unexpected light accent: ${lightColors.accent}`);
     assert(
-      lightColors.accentStrong === "#245f8c",
+      lightColors.accentStrong === "#405234",
       `Unexpected light strong accent: ${lightColors.accentStrong}`,
     );
 
@@ -185,18 +208,47 @@ browserTest("browser: editor tokens follow the system color scheme", async () =>
       const root = getComputedStyle(document.documentElement);
       return {
         background: root.getPropertyValue("--bg").trim(),
+        surface: root.getPropertyValue("--surface").trim(),
+        surfaceSunken: root.getPropertyValue("--surface-sunken").trim(),
         accent: root.getPropertyValue("--accent").trim(),
         accentStrong: root.getPropertyValue("--accent-strong").trim(),
       };
     });
     assert(
-      darkColors.background === "#111b25",
+      darkColors.background === "#242321",
       `Unexpected dark background: ${darkColors.background}`,
     );
-    assert(darkColors.accent === "#83bce5", `Unexpected dark accent: ${darkColors.accent}`);
+    assert(darkColors.surface === "#302e2b", `Unexpected dark surface: ${darkColors.surface}`);
     assert(
-      darkColors.accentStrong === "#acd7f4",
+      darkColors.surfaceSunken === "#3b3834",
+      `Unexpected dark sunken surface: ${darkColors.surfaceSunken}`,
+    );
+    assert(darkColors.accent === "#a8ba8a", `Unexpected dark accent: ${darkColors.accent}`);
+    assert(
+      darkColors.accentStrong === "#c5d3a9",
       `Unexpected dark strong accent: ${darkColors.accentStrong}`,
+    );
+  });
+});
+
+browserTest("browser: primary link buttons keep their accessible foreground color", async () => {
+  await withEditorPage(async (page) => {
+    const colors = await page.evaluate(() => {
+      const button = document.createElement("a");
+      button.href = "/";
+      button.className = "button button--primary";
+      button.textContent = "Return to Editor";
+      document.body.append(button);
+      const styles = getComputedStyle(button);
+      return { background: styles.backgroundColor, foreground: styles.color };
+    });
+    assert(
+      colors.background === "rgb(89, 107, 70)",
+      `Expected primary olive background, got ${colors.background}`,
+    );
+    assert(
+      colors.foreground === "rgb(255, 253, 247)",
+      `Expected light text on the primary button, got ${colors.foreground}`,
     );
   });
 });
@@ -278,7 +330,7 @@ browserTest("browser: save status shows the saved indicator", async () => {
     const color = await status.locator("[data-indicator]").evaluate((element) =>
       getComputedStyle(element).backgroundColor
     );
-    assert(color === "rgb(134, 201, 163)", `Expected saved indicator color, got ${color}`);
+    assert(color === "rgb(77, 104, 75)", `Expected saved indicator color, got ${color}`);
   });
 });
 
@@ -703,7 +755,7 @@ browserTest(
         await page.waitForFunction(
           () =>
             getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() ===
-              "#111b25",
+              "#242321",
         );
       }
     });
