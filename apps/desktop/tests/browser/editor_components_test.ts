@@ -159,10 +159,10 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
   });
 });
 
-browserTest("browser: editor uses the Writasaurus green theme tokens", async () => {
+browserTest("browser: editor tokens follow the system color scheme", async () => {
   await withEditorPage(async (page) => {
-    const colors = await page.evaluate(() => {
-      document.documentElement.dataset.theme = "light";
+    await page.emulateMedia({ colorScheme: "light" });
+    const lightColors = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
       return {
         background: root.getPropertyValue("--bg").trim(),
@@ -170,11 +170,33 @@ browserTest("browser: editor uses the Writasaurus green theme tokens", async () 
         accentStrong: root.getPropertyValue("--accent-strong").trim(),
       };
     });
-    assert(colors.background === "#f5f4ec", `Unexpected editor background: ${colors.background}`);
-    assert(colors.accent === "#52714e", `Unexpected editor accent: ${colors.accent}`);
     assert(
-      colors.accentStrong === "#344f35",
-      `Unexpected editor strong accent: ${colors.accentStrong}`,
+      lightColors.background === "#f4f8fc",
+      `Unexpected light background: ${lightColors.background}`,
+    );
+    assert(lightColors.accent === "#397eaf", `Unexpected light accent: ${lightColors.accent}`);
+    assert(
+      lightColors.accentStrong === "#245f8c",
+      `Unexpected light strong accent: ${lightColors.accentStrong}`,
+    );
+
+    await page.emulateMedia({ colorScheme: "dark" });
+    const darkColors = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      return {
+        background: root.getPropertyValue("--bg").trim(),
+        accent: root.getPropertyValue("--accent").trim(),
+        accentStrong: root.getPropertyValue("--accent-strong").trim(),
+      };
+    });
+    assert(
+      darkColors.background === "#111b25",
+      `Unexpected dark background: ${darkColors.background}`,
+    );
+    assert(darkColors.accent === "#83bce5", `Unexpected dark accent: ${darkColors.accent}`);
+    assert(
+      darkColors.accentStrong === "#acd7f4",
+      `Unexpected dark strong accent: ${darkColors.accentStrong}`,
     );
   });
 });
@@ -520,17 +542,6 @@ browserTest("browser: menu contains direct manuscript and save actions", async (
       ) === "0px",
       "Expected a standard borderless menu item",
     );
-
-    // Clicking theme segmented control options keeps the menu open
-    await menu.locator('button[value="dark"]').click();
-    assert(
-      await page.locator("#app-menu").getAttribute("data-open") === "true",
-      "Expected menu to stay open after toggling theme",
-    );
-    assert(
-      await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
-      "Expected the dark theme to be applied",
-    );
   });
 });
 
@@ -683,31 +694,18 @@ browserTest("browser: Tab key inserts an actual tab character in the editor", as
 });
 
 browserTest(
-  "browser: theme preference persists across navigation to settings, welcome, and about",
+  "browser: system color scheme applies across settings, welcome, and about",
   async () => {
     await withEditorPage(async (page) => {
-      // Set theme to dark via dropdown menu
-      await page.locator("#menu-toggle").click();
-      await page.waitForFunction(() =>
-        document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
-      );
-      await page.locator('#app-menu button[value="dark"]').click();
-      assert(
-        await page.evaluate(() => document.documentElement.dataset.theme) === "dark",
-        "Expected the dark theme to be applied",
-      );
-
-      // Navigate to /settings
-      await page.goto(new URL("/settings", page.url()).href);
-      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-
-      // Navigate to /welcome
-      await page.goto(new URL("/welcome", page.url()).href);
-      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
-
-      // Navigate to /about
-      await page.goto(new URL("/about", page.url()).href);
-      await page.waitForFunction(() => document.documentElement.dataset.theme === "dark");
+      await page.emulateMedia({ colorScheme: "dark" });
+      for (const route of ["/settings", "/welcome", "/about"]) {
+        await page.goto(new URL(route, page.url()).href);
+        await page.waitForFunction(
+          () =>
+            getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() ===
+              "#111b25",
+        );
+      }
     });
   },
 );

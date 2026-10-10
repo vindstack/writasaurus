@@ -29,6 +29,11 @@ Deno.test("marketing page has nonce-based CSP and terms link", async () => {
   const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
   assert(nonce);
   const page = await response.text();
-  assert(page.includes(`nonce="${nonce}"`));
+  for (const [tag] of page.matchAll(/<(?:script|style)\b[^>]*>/gi)) {
+    assert(
+      tag.includes(`nonce="${nonce}"`),
+      "Expected inline script and style tags to use the CSP nonce",
+    );
+  }
   assert(page.includes('href="/agreement"'));
 });

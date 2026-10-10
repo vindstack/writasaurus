@@ -1,0 +1,300 @@
+@import "./reset.css";
+@import "./token.css";
+@import "./button.css";
+
+:where(html) {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  line-height: 1.55;
+  scroll-behavior: smooth;
+}
+
+:where(body) {
+  background: var(--bg);
+  color: var(--text);
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  font-weight: 650;
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+:where(h1) {
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  letter-spacing: -0.035em;
+}
+
+:where(h2) {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  letter-spacing: -0.025em;
+}
+
+:where(h3) {
+  font-size: 1.25rem;
+}
+
+:where(p, ul, ol, blockquote) {
+  max-width: 72ch;
+}
+
+:where(p + p, p + ul, p + ol, ul + p, ol + p) {
+  margin-block-start: var(--space-3);
+}
+
+:where(small, .muted) {
+  color: var(--muted);
+}
+
+:where(a) {
+  color: var(--accent-strong);
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.16em;
+}
+
+:where(a:hover) {
+  color: var(--accent);
+}
+
+:where(:focus-visible) {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  min-height: 2.5rem;
+  padding: 0.5rem 0.75rem;
+  width: 100%;
+}
+
+:where(input, select, textarea)::placeholder {
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+:where(input[type="checkbox"], input[type="radio"]) {
+  accent-color: var(--accent);
+  height: 1rem;
+  width: 1rem;
+}
+
+:where(label) {
+  display: inline-block;
+  font-weight: 550;
+  margin-block-end: var(--space-1);
+}
+
+:where(fieldset) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  min-inline-size: 0;
+  padding: var(--space-4);
+}
+
+:where(legend) {
+  font-weight: 650;
+  padding-inline: var(--space-2);
+}
+
+:where(hr, .divider) {
+  border: 0;
+  border-block-start: 1px solid var(--border);
+  margin-block: var(--space-5);
+}
+
+:where(code, kbd, pre, samp) {
+  font-family: var(--font-mono);
+}
+
+:where(code, kbd) {
+  background: var(--surface-sunken);
+  border-radius: 0.3rem;
+  padding: 0.1em 0.35em;
+}
+
+:where(pre) {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: auto;
+  padding: var(--space-4);
+}
+
+:where(table) {
+  text-align: left;
+  width: 100%;
+}
+
+:where(th, td) {
+  border-block-end: 1px solid var(--border);
+  padding: var(--space-3) var(--space-4);
+}
+
+:where(th) {
+  font-weight: 650;
+}
+
+:where(tr:hover td) {
+  background: color-mix(in srgb, var(--surface-sunken) 55%, transparent);
+}
+
+:where(details, .accordion) {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+:where(details + details) {
+  margin-block-start: var(--space-2);
+}
+
+:where(details > summary, .accordion__trigger) {
+  align-items: center;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  padding: var(--space-4);
+}
+
+:where(details > summary)::-webkit-details-marker {
+  display: none;
+}
+
+:where(details > summary)::after {
+  border-block-end: 2px solid currentColor;
+  border-inline-end: 2px solid currentColor;
+  content: "";
+  height: 0.45rem;
+  margin-inline-start: auto;
+  transform: rotate(45deg);
+  transition: transform 140ms ease;
+  width: 0.45rem;
+}
+
+:where(details[open] > summary)::after {
+  transform: rotate(225deg);
+}
+
+:where(details[open] > summary) {
+  border-block-end: 1px solid var(--border);
+}
+
+:where(details > :not(summary), .accordion__content) {
+  padding: var(--space-4);
+}
+
+:where(dialog) {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-md);
+  color: var(--text);
+  margin: auto;
+  max-height: min(85dvh, 48rem);
+  max-width: min(92vw, 36rem);
+  overflow: auto;
+  padding: var(--space-5);
+  width: 100%;
+}
+
+:where(dialog)::backdrop {
+  background: rgb(10 24 36 / 48%);
+  backdrop-filter: blur(3px);
+}
+
+:where(.card, .panel) {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-5);
+}
+
+:where(.badge, .chip) {
+  align-items: center;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--text);
+  display: inline-flex;
+  font-size: 0.8em;
+  font-weight: 600;
+  gap: var(--space-1);
+  line-height: 1.3;
+  padding: 0.2rem 0.6rem;
+}
+
+:where(.alert) {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-inline-start: 0.25rem solid var(--accent);
+  border-radius: var(--radius-control);
+  padding: var(--space-4);
+}
+
+:where(.alert--success) {
+  border-inline-start-color: var(--success);
+}
+
+:where(.alert--warning) {
+  border-inline-start-color: var(--warning);
+}
+
+:where(.alert--danger) {
+  border-inline-start-color: var(--danger);
+}
+
+:where(.stack) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+:where(.cluster) {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+:where(.grid) {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+}
+
+:where(.grid--2) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+:where(.grid--3) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+:where(.grid--4) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+:where(.container) {
+  margin-inline: auto;
+  max-width: 72rem;
+  padding-inline: var(--space-4);
+  width: 100%;
+}
+
+@media (max-width: 48rem) {
+  :where(.grid--2, .grid--3, .grid--4) {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(*, *::before, *::after) {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

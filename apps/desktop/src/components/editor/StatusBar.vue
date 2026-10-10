@@ -15,7 +15,7 @@ import {
   totalWords,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
-import Button from "../Button.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
 
 const statNames = ["chapter", "manuscript", "daily writing goal"];
 const chapterState = useSignalValue(activeChapter);
@@ -44,7 +44,7 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
 <template>
   <footer class="statusbar">
     <Button
-      variant="editor"
+      variant="quiet"
       size="small"
       class="toggle"
       aria-label="Toggle chapters panel"
@@ -67,7 +67,7 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
     </span>
     <Button
       v-if="desktopState"
-      variant="editor"
+      variant="quiet"
       size="small"
       class="toggle"
       aria-label="Toggle writing assistance panel"

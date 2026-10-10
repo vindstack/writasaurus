@@ -96,32 +96,6 @@ export const FONT_MAP: Record<FontOption, FontDefinition> = Object.fromEntries(
 
 export const DEFAULT_FONT: FontOption = "alegreya";
 export const SETTINGS_KEY = "writasaurus-settings-font";
-export type ThemePreference = "light" | "dark" | "auto";
-export const THEME_SETTINGS_KEY = "writasaurus-settings-theme";
-
-export function getThemePreference(): ThemePreference {
-  try {
-    const saved = localStorage.getItem(THEME_SETTINGS_KEY);
-    if (saved === "light" || saved === "dark" || saved === "auto") return saved;
-  } catch {
-    // Ignore storage errors in restricted contexts
-  }
-  return "auto";
-}
-
-export function saveThemePreference(theme: ThemePreference): void {
-  try {
-    localStorage.setItem(THEME_SETTINGS_KEY, theme);
-  } catch (err) {
-    console.warn("Could not save theme preference", err);
-  }
-}
-
-export function applyThemePreference(theme: ThemePreference): void {
-  if (typeof document !== "undefined") {
-    document.documentElement.dataset.theme = theme;
-  }
-}
 
 export const DEFAULT_WORDS_PER_PAGE = 300;
 export const SETTINGS_WORDS_PER_PAGE_KEY = "writasaurus-settings-words-per-page";

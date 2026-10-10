@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 withDefaults(defineProps<{ content: string; position?: "top" | "bottom" }>(), {
   position: "top",
 });
@@ -8,7 +7,7 @@ withDefaults(defineProps<{ content: string; position?: "top" | "bottom" }>(), {
 <template>
   <span class="tooltip">
     <slot />
-    <span :class="['bubble', position]" role='tooltip' aria-hidden='true'>
+    <span :class="['bubble', position]" role="tooltip" aria-hidden="true">
       {{ content }}
     </span>
   </span>
@@ -23,7 +22,7 @@ withDefaults(defineProps<{ content: string; position?: "top" | "bottom" }>(), {
 .bubble {
   background: var(--text);
   border-radius: 0.35rem;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  box-shadow: var(--shadow-md);
   color: var(--surface);
   font-size: 0.78rem;
   font-weight: 500;

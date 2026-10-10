@@ -1,5 +1,4 @@
 <script setup lang="ts">
-
 defineProps<{
   name: string;
   value: string;
@@ -31,7 +30,6 @@ const emit = defineEmits<{ change: [value: string] }>();
   background: var(--surface-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
-  box-sizing: border-box;
   display: flex;
   flex: 1;
   gap: 1px;
@@ -46,7 +44,6 @@ const emit = defineEmits<{ change: [value: string] }>();
   border: 0;
   border-radius: calc(var(--radius-control) - 0.15rem);
   color: var(--text);
-  cursor: pointer;
   display: flex;
   flex: 1;
   font: inherit;
@@ -67,7 +64,7 @@ const emit = defineEmits<{ change: [value: string] }>();
 
 .option[aria-pressed="true"] {
   background: var(--surface);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
   color: var(--accent);
   font-weight: 600;
 }

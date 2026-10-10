@@ -12,8 +12,8 @@ import {
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
-import Button from "../Button.vue";
-import Chip from "../Chip.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
+import Chip from "../../../../../packages/shared/ui/components/Chip.vue";
 
 const manuscriptState = useSignalValue(manuscript);
 const activeIndex = useSignalValue(activeChapterIndex);
@@ -51,7 +51,7 @@ function choose(index: number): void {
     <div class="heading">
       <h2>Chapters</h2>
       <Button
-        variant="editor"
+        variant="quiet"
         size="small"
         @click="addChapter(); titleFocusRequest.value++"
       >

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import Button from "../Button.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import { blankManuscript, parseManuscript, SAMPLE_NOVEL } from "../../lib/editor/data.ts";
 import { saveLocal, setSkipWelcome, storeHandle } from "../../lib/editor/storage.ts";
 import { parseEpub } from "../../lib/epub.ts";

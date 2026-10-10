@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import Button from "../Button.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import {
   applyFontPreference,
   type FontOption,

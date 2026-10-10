@@ -1,0 +1,71 @@
+:where(button, .button) {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  display: inline-flex;
+  font-weight: 600;
+  gap: var(--space-2);
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.875rem;
+  text-decoration: none;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+:where(button, .button):hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--surface-sunken);
+  border-color: var(--accent);
+}
+
+:where(button, .button):active:not(:disabled, [aria-disabled="true"]) {
+  transform: translateY(1px);
+}
+
+:where(button, .button):disabled,
+:where(button, .button)[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+:where(.button--primary, button[data-variant="primary"]) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+:where(.button--primary, button[data-variant="primary"]):hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+  color: var(--accent-text);
+}
+
+:where(.button--quiet, button[data-variant="quiet"]) {
+  background: transparent;
+  border-color: transparent;
+}
+
+:where(.button--small) {
+  font-size: 0.75rem;
+  gap: var(--space-2);
+  min-height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+:where(.button--block) {
+  display: flex;
+  font-size: 0.95rem;
+  padding: 0.75rem 1rem;
+  text-align: center;
+  width: 100%;
+}
+
+:where(.button--danger, button[data-variant="danger"]) {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--surface);
+}

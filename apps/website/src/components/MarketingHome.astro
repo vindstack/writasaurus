@@ -1,14 +1,9 @@
----
-import ThemeSwitcher from "./islands/ThemeSwitcher.vue";
----
-
 <main class="page">
     <header class="header">
         <a class="brand" href="/" aria-label="Writasaurus home">
             Writasaurus
         </a>
         <div class="headerActions">
-            <ThemeSwitcher client:load />
             <a class="headerLink" href="/account">Sign in</a>
         </div>
     </header>
@@ -26,7 +21,9 @@ import ThemeSwitcher from "./islands/ThemeSwitcher.vue";
                 publish.
             </p>
             <div class="purchaseActions">
-                <a class="purchaseButton" href="/checkout">Buy Writasaurus — $59.99 USD</a>
+                <a class="button button--primary purchaseButton" href="/checkout">
+                    Buy Writasaurus — $59.99 USD
+                </a>
                 <a class="headerLink" href="/account">Already purchased? Sign in</a>
             </div>
             <p class="licenseNote">
@@ -115,27 +112,8 @@ import ThemeSwitcher from "./islands/ThemeSwitcher.vue";
     }
 
     .purchaseButton {
-        align-items: center;
-        background: var(--accent-strong);
-        border: 1px solid var(--accent-strong);
-        border-radius: var(--radius-control);
-        color: var(--accent-strong-text);
-        display: inline-flex;
-        font-weight: 700;
-        justify-content: center;
         min-height: 3rem;
         padding: 0.7rem 1.2rem;
-        text-decoration: none;
-    }
-
-    .purchaseButton:hover {
-        background: color-mix(in srgb, var(--accent-strong) 86%, var(--text));
-    }
-
-    .purchaseButton:focus-visible,
-    .headerLink:focus-visible {
-        outline: 3px solid var(--focus-ring);
-        outline-offset: 3px;
     }
 
     .brand {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { runCommand } from "../../lib/editor/surface.ts";
-import Button from "../Button.vue";
-import Tooltip from "../Tooltip.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
+import Tooltip from "../../../../../packages/shared/ui/components/Tooltip.vue";
 
 const commands = [
   { command: "bold", tip: "Bold (Ctrl+B)", label: "B" },
@@ -19,7 +19,7 @@ const commands = [
       position="bottom"
     >
       <Button
-        variant="editor"
+        variant="quiet"
         size="small"
         :data-command="command"
         @mousedown.prevent

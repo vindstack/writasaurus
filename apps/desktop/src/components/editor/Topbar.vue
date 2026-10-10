@@ -2,12 +2,6 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { syncTruncationTooltip } from "../../lib/text/text.ts";
 import {
-    applyThemePreference,
-    getThemePreference,
-    saveThemePreference,
-    type ThemePreference,
-} from "../../../../../packages/shared/settings.ts";
-import {
     quit,
     save,
     saveAsEpub,
@@ -23,21 +17,14 @@ import {
     saveMessage,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
-import Button from "../Button.vue";
-import DropdownMenu from "../DropdownMenu.vue";
-import Divider from "../Divider.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
+import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownMenu.vue";
+import Divider from "../../../../../packages/shared/ui/components/Divider.vue";
 import SaveStatus from "../SaveStatus.vue";
-import SegmentedControl from "../SegmentedControl.vue";
 import Toolbar from "./Toolbar.vue";
 
 defineProps<{ onNew: () => void; onOpen: () => void }>();
 
-const themes = [
-    { value: "light", label: "Light" },
-    { value: "dark", label: "Dark" },
-    { value: "auto", label: "System" },
-] as const;
-const theme = ref<ThemePreference>("auto");
 const titleInput = ref<HTMLInputElement | null>(null);
 const filenameElement = ref<HTMLSpanElement | null>(null);
 const manuscriptState = useSignalValue(manuscript);
@@ -56,7 +43,6 @@ const message = computed(
 );
 
 onMounted(() => {
-    theme.value = getThemePreference();
     const sync = () => {
         if (titleInput.value) syncTruncationTooltip(titleInput.value);
         if (filenameElement.value) syncTruncationTooltip(filenameElement.value);
@@ -65,13 +51,6 @@ onMounted(() => {
     addEventListener("resize", sync);
     onUnmounted(() => removeEventListener("resize", sync));
 });
-
-function changeTheme(next: string): void {
-    const preference = next as ThemePreference;
-    saveThemePreference(preference);
-    applyThemePreference(preference);
-    theme.value = preference;
-}
 </script>
 
 <template>
@@ -114,7 +93,7 @@ function changeTheme(next: string): void {
             >
                 <template #trigger>
                     <Button
-                        variant="editor"
+                        variant="quiet"
                         size="small"
                         id="menu-toggle"
                         class="menuToggle"
@@ -173,19 +152,6 @@ function changeTheme(next: string): void {
                         >Settings</a
                     >
                     <a role="menuitem" href="/about" class="item">About</a>
-                    <Divider />
-                    <div
-                        :class="['item', 'themeItem']"
-                        role="menuitem"
-                        data-keep-open
-                    >
-                        <SegmentedControl
-                            name="theme"
-                            :value="theme"
-                            :options="themes"
-                            @change="changeTheme"
-                        />
-                    </div>
                     <template v-if="desktopState">
                         <Divider />
                         <button
@@ -383,15 +349,6 @@ function changeTheme(next: string): void {
     background: var(--surface-sunken);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
     transform: translateY(1px) scale(0.99);
-}
-
-.themeItem {
-    cursor: default;
-    padding: 0.35rem 0.5rem;
-}
-
-.themeItem:hover {
-    background: transparent;
 }
 
 .kbd {

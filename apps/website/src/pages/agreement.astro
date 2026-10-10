@@ -1,6 +1,5 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
-import ThemeSwitcher from "../components/islands/ThemeSwitcher.vue";
 ---
 
 <BaseLayout title="Writasaurus License Agreement">
@@ -8,7 +7,6 @@ import ThemeSwitcher from "../components/islands/ThemeSwitcher.vue";
     <header class="header">
       <a class="brand" href="/" aria-label="Writasaurus home">Writasaurus</a>
       <div class="headerActions">
-        <ThemeSwitcher client:load />
         <a class="headerLink" href="/">Back to home</a>
       </div>
     </header>

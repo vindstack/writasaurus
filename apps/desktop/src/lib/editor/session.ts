@@ -14,12 +14,7 @@ import {
 import { restoreHandle, restoreLocal, shouldSkipWelcome, storeHandle } from "./storage.ts";
 import { hasWritePermission } from "../open-manuscript.ts";
 import { isEpubFilename } from "../epub.ts";
-import {
-  applyFontPreference,
-  applyThemePreference,
-  getFontPreference,
-  getThemePreference,
-} from "../../../../../packages/shared/settings.ts";
+import { applyFontPreference, getFontPreference } from "../../../../../packages/shared/settings.ts";
 
 export async function startNewManuscript(): Promise<void> {
   replaceManuscript(blankManuscript(), { desktopFileLoaded: false, hasUnsavedChanges: true });
@@ -95,7 +90,8 @@ function restoreSession(): boolean {
 
 /**
  * Restores the previous document (desktop file, browser file handle, or cached session) and
- * applies saved appearance. Resolves to false when the user should be sent to the welcome page.
+ * applies the saved editor font. Resolves to false when the user should be sent to the welcome
+ * page.
  */
 export async function restoreEditor(): Promise<boolean> {
   const desktopOpened = await restoreDesktopFile();
@@ -103,6 +99,5 @@ export async function restoreEditor(): Promise<boolean> {
   const opened = desktopOpened || handleOpened || restoreSession();
 
   applyFontPreference(getFontPreference());
-  applyThemePreference(getThemePreference());
   return opened || shouldSkipWelcome();
 }

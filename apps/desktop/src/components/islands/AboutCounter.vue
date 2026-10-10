@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import Button from "../Button.vue";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
 
 const props = withDefaults(defineProps<{ name?: string; lastName?: string }>(), {
   name: "John",
