@@ -111,7 +111,7 @@ onUnmounted(() => stopFocusWatch?.());
   align-content: start;
   color: var(--muted);
   font-size: 0.75rem;
-  gap: 0.75rem;
+  gap: 0.5rem;
   grid-auto-rows: max-content;
 }
 

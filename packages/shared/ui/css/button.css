@@ -49,6 +49,8 @@ button[data-variant="primary"]:hover:not(:disabled, [aria-disabled="true"]) {
 :where(.button--quiet, button[data-variant="quiet"]) {
   background: transparent;
   border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 :where(.button--small) {

@@ -108,7 +108,7 @@ function choose(index: number): void {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  padding-bottom: 0.75rem;
+  padding-bottom: 0.25rem;
 }
 
 .heading h2 {

@@ -7,20 +7,15 @@ import {
   getDailyWordGoalPreference,
   getFontPreference,
   getWordsPerPagePreference,
-  getWritingAssistancePreference,
   saveDailyWordGoalPreference,
   saveFontPreference,
   saveWordsPerPagePreference,
-  saveWritingAssistancePreference,
 } from "../../../../../packages/shared/settings.ts";
 import { usePageEffects } from "../../composables/usePageEffects.ts";
-
-defineProps<{ isDesktop: boolean }>();
 
 const font = ref<string>("alegreya");
 const wordsPerPage = ref("300");
 const dailyGoal = ref("1500");
-const writingAssistance = ref(true);
 const status = ref("");
 let timeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -70,7 +65,6 @@ onMounted(() => {
   applyFontPreference(saved);
   wordsPerPage.value = String(getWordsPerPagePreference());
   dailyGoal.value = String(getDailyWordGoalPreference());
-  writingAssistance.value = getWritingAssistancePreference();
 });
 onUnmounted(() => clearTimeout(timeout));
 </script>
@@ -174,24 +168,6 @@ onUnmounted(() => clearTimeout(timeout));
           'Daily writing goal saved.',
         )"
       />
-    </div>
-
-    <div v-if="isDesktop" class="group">
-      <label for="writing-assistance-input" class="label">
-        <strong>Writing Assistance</strong>
-        <span class="help">
-          Use the bundled offline US-English spelling and grammar checker.
-        </span>
-      </label>
-      <label class="checkbox">
-        <input
-          id="writing-assistance-input"
-          type="checkbox"
-          v-model="writingAssistance"
-          @change="saveWritingAssistancePreference(writingAssistance)"
-        />
-        Enable writing assistance
-      </label>
     </div>
 
     <div class="status" id="settings-status" aria-live="polite">{{ status }}</div>

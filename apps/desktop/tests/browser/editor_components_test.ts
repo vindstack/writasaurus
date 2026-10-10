@@ -153,6 +153,33 @@ browserTest("browser: chapters and assistance share the same slideout shell", as
   });
 });
 
+browserTest("browser: chapters and assistance panels use compact spacing", async () => {
+  await withEditorPage(async (page) => {
+    const spacing = await page.evaluate(() => {
+      const chapters = document.querySelector('[data-testid="chapters-sidebar"]');
+      const assistance = document.querySelector('[data-testid="assistance-panel"]');
+      const chaptersHeading = chapters?.querySelector(".heading");
+      const assistanceHeading = assistance?.querySelector(".heading");
+      if (!chapters || !assistance || !chaptersHeading || !assistanceHeading) return null;
+      return {
+        chaptersPadding: getComputedStyle(chapters).padding,
+        assistancePadding: getComputedStyle(assistance).padding,
+        chaptersHeadingPadding: getComputedStyle(chaptersHeading).paddingBottom,
+        assistanceGap: getComputedStyle(assistance).gap,
+      };
+    });
+    assert(spacing, "Expected chapter and assistance panels");
+    assert(
+      spacing.chaptersPadding === "8px" && spacing.assistancePadding === "8px",
+      `Expected compact, matching panel padding, got ${spacing.chaptersPadding} and ${spacing.assistancePadding}`,
+    );
+    assert(
+      spacing.chaptersHeadingPadding === "4px" && spacing.assistanceGap === "8px",
+      `Expected compact header and section spacing, got ${spacing.chaptersHeadingPadding} and ${spacing.assistanceGap}`,
+    );
+  });
+});
+
 browserTest("browser: editor app renders its shell and adds a chapter", async () => {
   await withEditorPage(async (page) => {
     await page.waitForSelector("header #manuscript-title");
@@ -568,6 +595,209 @@ browserTest("browser: toolbar bold command formats the selected editor content",
   });
 });
 
+browserTest("browser: toolbar has its own row and can format headings", async () => {
+  await withEditorPage(async (page) => {
+    const toolbarPosition = await page.evaluate(() => {
+      const toolbar = document.querySelector('[role="toolbar"]');
+      const editor = document.querySelector("#editor");
+      if (!toolbar || !editor) return null;
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const editorRect = editor.getBoundingClientRect();
+      return {
+        toolbarBottom: toolbarRect.bottom,
+        editorTop: editorRect.top,
+      };
+    });
+    assert(toolbarPosition, "Expected toolbar and editor to render");
+    assert(
+      toolbarPosition.toolbarBottom <= toolbarPosition.editorTop,
+      "Expected the toolbar to be on a separate line above the editor",
+    );
+
+    await page.locator("#editor").evaluate((element) => {
+      element.textContent = "Chapter heading";
+      const selection = getSelection();
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
+    await page.getByRole("button", { name: "Heading" }).click();
+    await page.getByRole("menuitem", { name: "Heading 2" }).click();
+
+    const heading = await page.locator("#editor h2").textContent();
+    assert(heading === "Chapter heading", `Expected heading formatting, got ${heading ?? "none"}`);
+  });
+});
+
+browserTest("browser: editor header and footer are compact and equally sized", async () => {
+  await withEditorPage(async (page) => {
+    const measurements = await page.evaluate(() => {
+      const header = document.querySelector("header.topbar");
+      const toolbar = document.querySelector('[role="toolbar"]');
+      const footer = document.querySelector("footer.statusbar");
+      const title = document.querySelector<HTMLInputElement>("#manuscript-title");
+      const filename = document.querySelector("#filename");
+      const saveStatus = document.querySelector("#save-status");
+      const titleGroup = document.querySelector(".titleGroup");
+      const menu = document.querySelector(".right");
+      if (
+        !header || !toolbar || !footer || !title || !filename || !saveStatus || !titleGroup ||
+        !menu
+      ) {
+        return null;
+      }
+      const titleRect = title.getBoundingClientRect();
+      const filenameRect = filename.getBoundingClientRect();
+      const saveStatusRect = saveStatus.getBoundingClientRect();
+      const headerBackground = getComputedStyle(header).backgroundColor;
+      const toolbarBackground = getComputedStyle(toolbar).backgroundColor;
+      const toolbarButtons = [...toolbar.querySelectorAll("button")].filter((button) =>
+        button.getClientRects().length > 0
+      );
+      return {
+        headerHeight: header.getBoundingClientRect().height,
+        toolbarHeight: toolbar.getBoundingClientRect().height,
+        footerHeight: footer.getBoundingClientRect().height,
+        headerBackground,
+        toolbarBackground,
+        titleCenterY: titleRect.top + titleRect.height / 2,
+        filenameCenterY: filenameRect.top + filenameRect.height / 2,
+        saveStatusCenterY: saveStatusRect.top + saveStatusRect.height / 2,
+        titleLeft: titleRect.left,
+        titleRight: titleRect.right,
+        filenameLeft: filenameRect.left,
+        titleFilenameGap: filenameRect.left - titleRect.right,
+        saveStatusLeft: saveStatusRect.left,
+        saveStatusRight: saveStatusRect.right,
+        titleFieldSizing: getComputedStyle(title).fieldSizing,
+        titleTextWidth: (() => {
+          const canvas = document.createElement("canvas");
+          const context = canvas.getContext("2d");
+          if (!context) return null;
+          const style = getComputedStyle(title);
+          context.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+          return context.measureText(title.value).width;
+        })(),
+        titleInputWidth: titleRect.width,
+        titleGroupAlignment: getComputedStyle(titleGroup).justifyContent,
+        titleGroupLeft: titleGroup.getBoundingClientRect().left,
+        titleGroupRight: titleGroup.getBoundingClientRect().right,
+        menuLeft: menu.getBoundingClientRect().left,
+        quietButtonsAreSmall: [...document.querySelectorAll(".app button.button--quiet")].every(
+          (button) => button.classList.contains("button--small"),
+        ),
+        toolbarButtonsAreSmall: toolbarButtons.length > 0 &&
+          toolbarButtons.every((button) => button.classList.contains("button--small")),
+      };
+    });
+    assert(measurements, "Expected editor header and footer");
+    assert(
+      Math.abs(measurements.headerHeight - measurements.footerHeight) < 1,
+      `Expected matching header/footer heights, got ${measurements.headerHeight}px and ${measurements.footerHeight}px`,
+    );
+    assert(
+      Math.abs(measurements.toolbarHeight - measurements.headerHeight) < 1,
+      `Expected toolbar/header heights to match, got ${measurements.toolbarHeight}px and ${measurements.headerHeight}px`,
+    );
+    assert(
+      measurements.headerHeight < 44,
+      `Expected compact editor bars, got ${measurements.headerHeight}px`,
+    );
+    assert(measurements.quietButtonsAreSmall, "Expected editor quiet buttons to use small sizing");
+    assert(measurements.toolbarButtonsAreSmall, "Expected toolbar buttons to use small sizing");
+    assert(
+      measurements.toolbarBackground !== measurements.headerBackground,
+      "Expected the toolbar background to be subtly distinct from the header",
+    );
+    assert(
+      measurements.titleRight <= measurements.filenameLeft &&
+        measurements.titleLeft < measurements.filenameLeft &&
+        measurements.filenameLeft < measurements.saveStatusLeft,
+      "Expected the title, filename, and save status to appear left-to-right",
+    );
+    assert(
+      measurements.titleFilenameGap <= 4,
+      `Expected standard title/filename spacing, got ${measurements.titleFilenameGap}px`,
+    );
+    assert(
+      measurements.titleGroupAlignment === "flex-start" &&
+        measurements.titleLeft >= measurements.titleGroupLeft,
+      "Expected the manuscript details group to align from the left",
+    );
+    assert(
+      Math.abs(measurements.titleGroupRight - measurements.saveStatusRight) < 2 &&
+        measurements.titleGroupRight < measurements.menuLeft,
+      "Expected the manuscript details group to size to its content",
+    );
+    assert(
+      measurements.titleFieldSizing === "content" &&
+        measurements.titleTextWidth !== null &&
+        Math.abs(measurements.titleInputWidth - measurements.titleTextWidth) < 4,
+      `Expected title input width to closely fit its text, got ${measurements.titleInputWidth}px for ${measurements.titleTextWidth}px of text`,
+    );
+    assert(
+      Math.abs(measurements.titleCenterY - measurements.filenameCenterY) < 2 &&
+        Math.abs(measurements.filenameCenterY - measurements.saveStatusCenterY) < 2,
+      "Expected the title, filename, and save status to be inline and vertically aligned",
+    );
+  });
+});
+
+browserTest("browser: manuscript title uses a text cursor without a focus outline", async () => {
+  await withEditorPage(async (page) => {
+    const title = page.locator("#manuscript-title");
+    await title.click();
+    const style = await title.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        cursor: computed.cursor,
+        outlineStyle: computed.outlineStyle,
+        boxShadow: computed.boxShadow,
+      };
+    });
+    assert(style.cursor === "text", `Expected text cursor, got ${style.cursor}`);
+    assert(
+      style.outlineStyle === "none" || style.outlineStyle === "0px",
+      `Expected no focus outline, got ${style.outlineStyle}`,
+    );
+    assert(style.boxShadow === "none", `Expected no focus shadow, got ${style.boxShadow}`);
+  });
+});
+
+browserTest("browser: quiet buttons underline their text", async () => {
+  await withEditorPage(async (page) => {
+    const styles = await page.locator(".statusbar button.button--quiet").first().evaluate(
+      (button) => {
+        const keyboardShortcut = button.querySelector("kbd");
+        return {
+          buttonDecoration: getComputedStyle(button).textDecorationLine,
+          keyboardShortcutDisplay: keyboardShortcut && getComputedStyle(keyboardShortcut).display,
+          keyboardShortcutDecoration: keyboardShortcut &&
+            getComputedStyle(keyboardShortcut).textDecorationLine,
+          statsButtonIsQuietSmall: (() => {
+            const statsButton = document.querySelector(".statusbar .stat");
+            return statsButton?.classList.contains("button--quiet") &&
+              statsButton.classList.contains("button--small");
+          })(),
+        };
+      },
+    );
+    assert(
+      styles.buttonDecoration.includes("underline"),
+      `Expected quiet-button underline, got ${styles.buttonDecoration}`,
+    );
+    assert(
+      styles.keyboardShortcutDisplay === "block" && styles.keyboardShortcutDecoration === "none",
+      `Expected keyboard shortcut indicators to stay separate from the button underline, got ${styles.keyboardShortcutDisplay}`,
+    );
+    assert(
+      styles.statsButtonIsQuietSmall,
+      "Expected the statistics control to use the quiet small-button style",
+    );
+  });
+});
+
 browserTest("browser: menu contains direct manuscript and save actions", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#menu-toggle").click();
@@ -594,6 +824,32 @@ browserTest("browser: menu contains direct manuscript and save actions", async (
       ) === "0px",
       "Expected a standard borderless menu item",
     );
+  });
+});
+
+browserTest("browser: hamburger menu toggles toolbar and reports its state", async () => {
+  await withEditorPage(async (page) => {
+    const toolbar = page.locator('[role="toolbar"]');
+    const toggle = page.locator("#menu-toggle");
+    await toggle.click();
+    const menuItem = page.locator("#menu-toggle-toolbar");
+    assert((await menuItem.textContent())?.includes("Hide toolbar"), "Expected hide action");
+    assert(
+      (await menuItem.locator("kbd").count()) === 0,
+      "Expected toolbar visibility to be conveyed by the menu text alone",
+    );
+    assert(
+      await menuItem.evaluate((item) => item.previousElementSibling?.textContent?.trim()) ===
+        "Settings",
+      "Expected toolbar toggle directly below Settings",
+    );
+    await menuItem.click();
+    assert(await toolbar.count() === 0, "Expected toolbar to hide");
+
+    await toggle.click();
+    assert((await menuItem.textContent())?.includes("Show toolbar"), "Expected show action");
+    await menuItem.click();
+    assert(await toolbar.count() === 1, "Expected toolbar to show");
   });
 });
 

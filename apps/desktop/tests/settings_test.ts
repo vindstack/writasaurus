@@ -11,15 +11,12 @@ import {
   getDailyWrittenWords,
   getFontPreference,
   getWordsPerPagePreference,
-  getWritingAssistancePreference,
   saveDailyWordGoalPreference,
   saveFontPreference,
   saveWordsPerPagePreference,
-  saveWritingAssistancePreference,
   SETTINGS_DAILY_WORD_GOAL_KEY,
   SETTINGS_KEY,
   SETTINGS_WORDS_PER_PAGE_KEY,
-  SETTINGS_WRITING_ASSISTANCE_KEY,
 } from "../../../packages/shared/settings.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
@@ -140,17 +137,5 @@ Deno.test("settings: daily written words are the manuscript's net increase for t
     assertEquals(getDailyWrittenWords("manuscript", 15), 5);
   } finally {
     localStorage.removeItem(DAILY_WRITING_PROGRESS_KEY);
-  }
-});
-
-Deno.test("settings: writing assistance is enabled by default and persists", () => {
-  try {
-    localStorage.removeItem(SETTINGS_WRITING_ASSISTANCE_KEY);
-    assertEquals(getWritingAssistancePreference(), true);
-
-    saveWritingAssistancePreference(false);
-    assertEquals(getWritingAssistancePreference(), false);
-  } finally {
-    localStorage.removeItem(SETTINGS_WRITING_ASSISTANCE_KEY);
   }
 });

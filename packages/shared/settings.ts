@@ -102,7 +102,6 @@ export const SETTINGS_WORDS_PER_PAGE_KEY = "writasaurus-settings-words-per-page"
 export const DEFAULT_DAILY_WORD_GOAL = 1500;
 export const SETTINGS_DAILY_WORD_GOAL_KEY = "writasaurus-settings-daily-word-goal";
 export const DAILY_WRITING_PROGRESS_KEY = "writasaurus-daily-writing-progress";
-export const SETTINGS_WRITING_ASSISTANCE_KEY = "writasaurus-settings-writing-assistance";
 export const WRITING_ASSISTANCE_WORDS_KEY = "writasaurus-writing-assistance-words";
 export const WRITING_ASSISTANCE_IGNORES_KEY = "writasaurus-writing-assistance-ignores";
 
@@ -240,22 +239,6 @@ export function getDailyWrittenWords(manuscriptId: string, totalWords: number): 
   } catch (err) {
     console.warn("Could not read daily writing progress", err);
     return 0;
-  }
-}
-
-export function getWritingAssistancePreference(): boolean {
-  try {
-    return localStorage.getItem(SETTINGS_WRITING_ASSISTANCE_KEY) !== "false";
-  } catch {
-    return true;
-  }
-}
-
-export function saveWritingAssistancePreference(enabled: boolean): void {
-  try {
-    localStorage.setItem(SETTINGS_WRITING_ASSISTANCE_KEY, String(enabled));
-  } catch (err) {
-    console.warn("Could not save writing assistance preference", err);
   }
 }
 

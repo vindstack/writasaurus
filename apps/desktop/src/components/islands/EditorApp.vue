@@ -20,6 +20,7 @@ import {
 } from "../../lib/editor/state.ts";
 import { effect } from "@preact/signals";
 import Topbar from "../editor/Topbar.vue";
+import Toolbar from "../editor/Toolbar.vue";
 import Sidebar from "../editor/Sidebar.vue";
 import WritingArea from "../editor/WritingArea.vue";
 import AssistancePanel from "../editor/AssistancePanel.vue";
@@ -37,6 +38,7 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const ready = ref(false);
 const licensed = ref(false);
 const licenseCheckError = ref("");
+const toolbarVisible = ref(true);
 isDesktop.value = props.isDesktop;
 
 let disposed = false;
@@ -197,11 +199,18 @@ function onLicenseActivated(): void {
         :api-url="licenseApiUrl"
         @activated="onLicenseActivated"
     />
-    <div v-else-if="licensed" class="app" :data-ready="String(ready)">
+    <div
+        v-else-if="licensed"
+        :class="['app', !toolbarVisible && 'toolbarHidden']"
+        :data-ready="String(ready)"
+    >
         <Topbar
             :on-new="() => void startNewManuscript()"
             :on-open="() => void openManuscript(fileInput.value)"
+            :toolbar-visible="toolbarVisible"
+            :on-toggle-toolbar="() => toolbarVisible = !toolbarVisible"
         />
+        <Toolbar v-if="toolbarVisible" />
         <main class="main">
             <div class="workspace">
                 <Sidebar />
@@ -231,11 +240,15 @@ function onLicenseActivated(): void {
 <style scoped>
 .app {
     display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
     height: 100vh;
     max-width: 100vw;
     overflow: hidden;
     width: 100vw;
+}
+
+.app.toolbarHidden {
+    grid-template-rows: auto minmax(0, 1fr) auto;
 }
 
 .main {

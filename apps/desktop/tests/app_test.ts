@@ -72,7 +72,7 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(page.includes("Return to Editor"));
   assert(page.includes("<title>Settings — Writasaurus</title>"));
   assert(page.includes('component-url="/_astro/SettingsForm.'));
-  assert(page.includes("writing-assistance-input"));
+  assert(!page.includes("writing-assistance-input"));
 });
 
 Deno.test("pages are protected by a nonce-based content security policy", async () => {

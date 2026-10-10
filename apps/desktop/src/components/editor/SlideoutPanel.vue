@@ -24,7 +24,7 @@ defineProps<{
   flex: 0 0 19rem;
   min-width: 19rem;
   overflow-y: auto;
-  padding: 0.75rem;
+  padding: 0.5rem;
   transition:
     margin 0.2s,
     transform 0.2s;

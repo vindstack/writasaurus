@@ -21,9 +21,13 @@ import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownMenu.vue";
 import Divider from "../../../../../packages/shared/ui/components/Divider.vue";
 import SaveStatus from "../SaveStatus.vue";
-import Toolbar from "./Toolbar.vue";
 
-defineProps<{ onNew: () => void; onOpen: () => void }>();
+defineProps<{
+    onNew: () => void;
+    onOpen: () => void;
+    toolbarVisible: boolean;
+    onToggleToolbar: () => void;
+}>();
 
 const titleInput = ref<HTMLInputElement | null>(null);
 const filenameElement = ref<HTMLSpanElement | null>(null);
@@ -55,7 +59,7 @@ onMounted(() => {
 
 <template>
     <header class="topbar">
-        <div class="center">
+        <div class="titleGroup">
             <input
                 ref="titleInput"
                 id="manuscript-title"
@@ -84,7 +88,6 @@ onMounted(() => {
             </span>
         </div>
         <div class="right">
-            <Toolbar />
             <DropdownMenu
                 id="app-menu"
                 placement="bottom-end"
@@ -151,6 +154,15 @@ onMounted(() => {
                     <a role="menuitem" href="/settings" class="item"
                         >Settings</a
                     >
+                    <button
+                        type="button"
+                        role="menuitem"
+                        class="item"
+                        id="menu-toggle-toolbar"
+                        @click="onToggleToolbar"
+                    >
+                        {{ toolbarVisible ? "Hide toolbar" : "Show toolbar" }}
+                    </button>
                     <a role="menuitem" href="/about" class="item">About</a>
                     <template v-if="desktopState">
                         <Divider />
@@ -188,10 +200,11 @@ onMounted(() => {
     box-sizing: border-box;
     display: flex;
     gap: 0.75rem;
+    height: 2.4rem;
     justify-content: space-between;
     max-width: 100%;
     min-width: 0;
-    padding: 0.5rem 1rem;
+    padding: 0.25rem 1rem;
     position: relative;
     z-index: 50;
 }
@@ -203,13 +216,13 @@ onMounted(() => {
     gap: 0.35rem;
 }
 
-.center {
-    align-items: flex-start;
+.titleGroup {
+    align-items: center;
     display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 0.15rem;
-    justify-content: center;
+    flex: 0 1 auto;
+    flex-direction: row;
+    gap: 0.75rem;
+    justify-content: flex-start;
     min-width: 0;
     text-align: left;
 }
@@ -218,12 +231,14 @@ onMounted(() => {
     background: transparent;
     border: 0;
     color: var(--text);
+    cursor: text;
+    field-sizing: content;
     flex: 0 1 auto;
     font-family: "Alegreya", sans-serif;
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.25rem;
-    max-width: 30rem;
+    max-width: min(30rem, 40vw);
     min-width: 0;
     outline: 0;
     overflow: hidden;
@@ -231,7 +246,13 @@ onMounted(() => {
     text-align: left;
     text-overflow: ellipsis;
     white-space: nowrap;
-    width: 100%;
+    width: fit-content;
+}
+
+.title:focus {
+    border-color: transparent;
+    box-shadow: none;
+    outline: none;
 }
 
 .filename {
@@ -278,14 +299,14 @@ onMounted(() => {
 .hamburger {
     display: flex;
     flex-direction: column;
-    gap: 2.5px;
+    gap: 2px;
     justify-content: center;
-    width: 0.85rem;
+    width: 14px;
 }
 
 .hamburger span {
     background-color: var(--text);
-    border-radius: 1px;
+    border-radius: 999px;
     display: block;
     height: 2px;
     transition:
@@ -295,7 +316,7 @@ onMounted(() => {
 }
 
 .menuToggle[aria-expanded="true"] .hamburger span:nth-child(1) {
-    transform: translateY(4.5px) rotate(45deg);
+    transform: translateY(4px) rotate(45deg);
 }
 
 .menuToggle[aria-expanded="true"] .hamburger span:nth-child(2) {
@@ -303,7 +324,7 @@ onMounted(() => {
 }
 
 .menuToggle[aria-expanded="true"] .hamburger span:nth-child(3) {
-    transform: translateY(-4.5px) rotate(-45deg);
+    transform: translateY(-4px) rotate(-45deg);
 }
 
 .menu {
@@ -370,18 +391,26 @@ onMounted(() => {
 @media (max-width: 55rem) {
     .topbar {
         gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
+        padding: 0.25rem 0.75rem;
     }
 }
 
 @media (max-width: 36rem) {
     .topbar {
-        padding-inline: 0.5rem;
+        padding: 0.25rem 0.5rem;
     }
 
     .title {
         font-size: 0.85rem;
-        max-width: none;
+        max-width: min(45vw, 12rem);
+    }
+
+    .titleGroup {
+        gap: 0.2rem;
+    }
+
+    .meta {
+        font-size: 0.65rem;
     }
 }
 </style>

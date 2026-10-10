@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { getWritingAssistancePreference } from "../../../../../packages/shared/settings.ts";
 import {
   executeEditorCommand,
   mountContent,
@@ -62,7 +61,6 @@ onBeforeUnmount(() => {
   registerSurface(null);
 });
 
-const assistanceEnabled = () => desktopState.value && getWritingAssistancePreference();
 </script>
 
 <template>
@@ -83,7 +81,7 @@ const assistanceEnabled = () => desktopState.value && getWritingAssistancePrefer
         role="textbox"
         aria-multiline="true"
         aria-label="Chapter text"
-        :spellcheck="!assistanceEnabled()"
+        :spellcheck="!desktopState"
         @input="scheduleHistoryCapture(); markChanged($event.currentTarget as HTMLElement)"
         @paste="(event) => {
           event.preventDefault();
