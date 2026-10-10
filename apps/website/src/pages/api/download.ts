@@ -1,4 +1,4 @@
-import { getSession } from "../../lib/auth.ts";
+import { getPurchaseSession, getSession } from "../../lib/auth.ts";
 import { getLicenseStore } from "../../lib/store.ts";
 import { isReleaseManifest } from "../../../../../packages/shared/releases.ts";
 import { presignR2GetUrl, type R2Credentials } from "../../../../../packages/shared/r2.ts";
@@ -29,16 +29,28 @@ async function currentRelease(): Promise<unknown> {
 
 export async function POST(context: { request: Request }): Promise<Response> {
   const session = await getSession(context.request);
-  if (session?.role !== "customer") return new Response("Unauthorized.", { status: 401 });
   const form = await context.request.formData();
   const platform = form.get("platform");
   if (platform !== "linux" && platform !== "macos" && platform !== "windows") {
     return new Response("Invalid platform.", { status: 400 });
   }
-  const purchases = await getLicenseStore().getPurchasesByEmail(session.email);
-  if (
-    !purchases.some((purchase) => purchase.status === "paid" && purchase.licenseStatus === "active")
-  ) {
+  const store = getLicenseStore();
+  const purchaseSession = session?.role === "customer" ? null : await getPurchaseSession(
+    context.request,
+  );
+  if (session?.role !== "customer" && !purchaseSession) {
+    return new Response("Unauthorized.", { status: 401 });
+  }
+  let activePurchase = false;
+  if (session?.role === "customer") {
+    activePurchase = (await store.getPurchasesByEmail(session.email)).some(
+      (purchase) => purchase.status === "paid" && purchase.licenseStatus === "active",
+    );
+  } else if (purchaseSession) {
+    const purchase = await store.getPurchaseBySession(purchaseSession);
+    activePurchase = purchase?.status === "paid" && purchase.licenseStatus === "active";
+  }
+  if (!activePurchase) {
     return new Response("An active purchase is required to download Writasaurus.", { status: 403 });
   }
   try {

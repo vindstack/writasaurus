@@ -1,0 +1,117 @@
+<form class="downloadForm" action="/api/download" method="post">
+  <div class="downloadSplit">
+    <button class="downloadButton" type="submit" data-download-button>
+      Download Writasaurus
+    </button>
+    <span class="platformPicker">
+      <select name="platform" aria-label="Select download platform" data-download-platform required>
+        <option value="" selected>Choose a platform</option>
+        <option value="linux">Linux</option>
+        <option value="macos">macOS</option>
+        <option value="windows">Windows</option>
+      </select>
+    </span>
+  </div>
+</form>
+
+<script>
+  const platformLabels: Record<string, string> = {
+    linux: "Linux",
+    macos: "macOS",
+    windows: "Windows",
+  };
+
+  const platform = navigator.platform.toLowerCase();
+  const detectedPlatform = platform.includes("mac")
+    ? "macos"
+    : platform.includes("win")
+    ? "windows"
+    : platform.includes("linux") || platform.includes("x11")
+    ? "linux"
+    : "";
+
+  for (const form of document.querySelectorAll<HTMLFormElement>(".downloadForm")) {
+    const selector = form.querySelector<HTMLSelectElement>("[data-download-platform]");
+    const button = form.querySelector<HTMLButtonElement>("[data-download-button]");
+    if (!selector || !button) continue;
+
+    function updateButton(): void {
+      const label = platformLabels[selector.value];
+      button.textContent = label ? `Download for ${label}` : "Download Writasaurus";
+    }
+
+    selector.value = detectedPlatform;
+    updateButton();
+    selector.addEventListener("change", updateButton);
+  }
+</script>
+
+<style>
+  .downloadSplit {
+    display: inline-flex;
+  }
+
+  .downloadButton,
+  .platformPicker {
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    color: var(--accent-text);
+    min-height: 2.5rem;
+  }
+
+  .downloadButton {
+    border-radius: var(--radius-control) 0 0 var(--radius-control);
+    cursor: pointer;
+    font-weight: 650;
+    padding: 0.5rem 0.875rem;
+  }
+
+  .downloadButton:hover {
+    background: var(--accent-warm);
+    border-color: var(--accent-warm);
+  }
+
+  .platformPicker {
+    align-items: center;
+    border-left-color: color-mix(in srgb, var(--accent-text) 35%, var(--accent));
+    border-radius: 0 var(--radius-control) var(--radius-control) 0;
+    display: inline-flex;
+    justify-content: center;
+    position: relative;
+    width: 2.75rem;
+  }
+
+  .platformPicker::after {
+    border-bottom: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    content: "";
+    height: 0.4rem;
+    pointer-events: none;
+    position: absolute;
+    transform: translateY(-0.12rem) rotate(45deg);
+    width: 0.4rem;
+  }
+
+  .platformPicker select {
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-radius: inherit;
+    color: transparent;
+    cursor: pointer;
+    height: 100%;
+    inset: 0;
+    padding: 0;
+    position: absolute;
+    text-shadow: 0 0 0 transparent;
+    width: 100%;
+  }
+
+  .platformPicker select:focus-visible {
+    outline-offset: 3px;
+  }
+
+  .platformPicker option {
+    color: var(--text);
+  }
+</style>

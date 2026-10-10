@@ -218,6 +218,34 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
     const firstPage = await success.text();
     const key = firstPage.match(/<code>(WRIT-[A-F0-9]{48})<\/code>/)?.[1];
     assert(key, "Expected the mock purchase key on the first success page.");
+    assert(firstPage.includes("Download Writasaurus"));
+    for (const platform of ["linux", "macos", "windows"]) {
+      assert(
+        firstPage.includes(`value="${platform}"`),
+        `Expected the post-purchase page to offer ${platform}.`,
+      );
+    }
+    const purchaseCookie = (success.headers.get("set-cookie") ?? "").split(";", 1)[0];
+    assert(purchaseCookie.startsWith("wr_purchase="));
+    for (
+      const [platform, fileName] of Object.entries({
+        linux: "Writasaurus.AppImage",
+        macos: "Writasaurus-macos.tar.gz",
+        windows: "Writasaurus.msi",
+      })
+    ) {
+      const downloadForm = new FormData();
+      downloadForm.set("platform", platform);
+      const download = await request("/api/download", {
+        method: "POST",
+        headers: { cookie: purchaseCookie, origin: "http://localhost" },
+        body: downloadForm,
+      });
+      assert(download.status === 303, `Expected immediate ${platform} download to redirect.`);
+      const downloadUrl = new URL(download.headers.get("location") ?? "");
+      assert(downloadUrl.pathname.endsWith(encodeURIComponent(fileName)));
+      assert(downloadUrl.searchParams.has("X-Amz-Signature"));
+    }
 
     const authRequestForm = new FormData();
     authRequestForm.set("email", "writer@example.com");
@@ -243,9 +271,9 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
     const account = await request("/account", { headers: { cookie: sessionCookie } });
     assert(account.status === 200);
     const accountPage = await account.text();
-    for (const platform of ["Linux", "macOS", "Windows"]) {
+    for (const platform of ["linux", "macos", "windows"]) {
       assert(
-        accountPage.includes(`Download for ${platform}`),
+        accountPage.includes(`value="${platform}"`),
         `Expected the post-purchase account to offer a ${platform} download.`,
       );
     }

@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SitePage from "../components/SitePage.astro";
+import DownloadForm from "../components/DownloadForm.astro";
 import { getSession } from "../lib/auth.ts";
 import { getLicenseStore } from "../lib/store.ts";
 
@@ -51,18 +52,7 @@ const status = Astro.url.searchParams.get("status");
                 <input type="hidden" name="purchaseId" value={purchase.id} />
                 <button type="submit">Email me my license key</button>
               </form>
-              <form action="/api/download" method="post">
-                <input type="hidden" name="platform" value="linux" />
-                <button type="submit">Download for Linux</button>
-              </form>
-              <form action="/api/download" method="post">
-                <input type="hidden" name="platform" value="macos" />
-                <button type="submit">Download for macOS</button>
-              </form>
-              <form action="/api/download" method="post">
-                <input type="hidden" name="platform" value="windows" />
-                <button type="submit">Download for Windows</button>
-              </form>
+              <DownloadForm />
             </>}
             {withinRefundWindow && purchase.status === "paid" && <form action="/api/account/refund" method="post">
               <input type="hidden" name="purchaseId" value={purchase.id} />

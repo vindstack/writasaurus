@@ -56,7 +56,7 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
     <span class="wordCount">
       <button
         type="button"
-        class="stat button--quiet button--small"
+        class="stat"
         title="Cycle statistics (Ctrl+G)"
         :aria-label="`Show ${statNames[nextIndex]} statistics`"
         @click="statsIndex.value = nextIndex"
@@ -119,6 +119,8 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
   min-width: 0;
   overflow: hidden;
   padding: 0;
+
+  text-decoration: none;
   text-align: inherit;
   text-overflow: ellipsis;
   white-space: nowrap;

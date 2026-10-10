@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import SitePage from "../../components/SitePage.astro";
+import DownloadForm from "../../components/DownloadForm.astro";
+import { createPurchaseCookie } from "../../lib/auth.ts";
 import { decryptLicenseKey, hashText } from "../../lib/license-crypto.ts";
 import { isLocalMockEnabled, fulfillConfirmedStripePurchase } from "../../lib/payment-service.ts";
 import { getLicenseStore } from "../../lib/store.ts";
@@ -8,6 +10,7 @@ import { getLicenseStore } from "../../lib/store.ts";
 const sessionId = Astro.url.searchParams.get("session_id") ?? "";
 let revealedKey = "";
 let purchaseEmail = "";
+let canDownload = false;
 let message = "We couldn’t verify this purchase yet. If you were charged, check your inbox shortly.";
 
 if (sessionId && (
@@ -19,6 +22,10 @@ if (sessionId && (
     const session = await confirmStripePurchase(sessionId);
     const purchase = await fulfillConfirmedStripePurchase(session);
     purchaseEmail = purchase.email;
+    canDownload = purchase.status === "paid" && purchase.licenseStatus === "active";
+    if (canDownload) {
+      Astro.response.headers.append("set-cookie", await createPurchaseCookie(sessionId));
+    }
     const claim = await getLicenseStore().claimKeyReveal(sessionId, await hashText(sessionId));
     if (claim) {
       revealedKey = await decryptLicenseKey(claim.encryptedKey);
@@ -45,6 +52,11 @@ Astro.response.headers.set("referrer-policy", "no-referrer");
       <h2>Your license key</h2>
       <p><code>{revealedKey}</code></p>
       <p>Keep it somewhere safe. You’ll need it to activate Writasaurus on your devices.</p>
+    </section>}
+    {canDownload && <section aria-label="Download Writasaurus">
+      <h2>Download Writasaurus</h2>
+      <p>Select your platform to download the latest version.</p>
+      <DownloadForm />
     </section>}
     {purchaseEmail && <p>Purchase details were sent to <strong>{purchaseEmail}</strong>.</p>}
     <p><a href="/account">Go to your account</a></p>
