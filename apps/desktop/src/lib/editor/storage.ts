@@ -1,53 +1,16 @@
 import { createStorage } from "../clientstorage/clientstorage.ts";
-import type { Manuscript, WritableFileHandle } from "./types.ts";
-
-export const HANDLE_KEY = "active-file-handle";
+import type { Manuscript } from "./types.ts";
 
 /**
  * Manuscript state is cached in sessionStorage only. It exists purely to survive
  * same-tab reloads (e.g. dev watch mode); it is never used to remember a manuscript
- * across app restarts. Reopening the app always re-reads the active file from disk
- * (desktop) or asks the user to open a file (browser).
+ * across app restarts. Reopening the app re-reads the active file from disk.
  */
 const manuscriptStore = createStorage("writasaurus-manuscript-v1:", "sessionStorage");
 const MANUSCRIPT_KEY = "state";
 
 const sessionFlagsStore = createStorage("writasaurus-session:", "sessionStorage");
 const SKIP_WELCOME_KEY = "skip-welcome";
-
-export function database(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open("WritasaurusDB", 1);
-    request.onupgradeneeded = () => request.result.createObjectStore("handles");
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-export async function storeHandle(value: WritableFileHandle | null): Promise<void> {
-  try {
-    const db = await database();
-    const transaction = db.transaction("handles", "readwrite");
-    if (value) transaction.objectStore("handles").put(value, HANDLE_KEY);
-    else transaction.objectStore("handles").delete(HANDLE_KEY);
-  } catch (error) {
-    console.warn("Could not persist the file handle.", error);
-  }
-}
-
-export async function restoreHandle(): Promise<WritableFileHandle | null> {
-  try {
-    const db = await database();
-    return await new Promise((resolve, reject) => {
-      const request = db.transaction("handles").objectStore("handles").get(HANDLE_KEY);
-      request.onsuccess = () => resolve(request.result ?? null);
-      request.onerror = () => reject(request.error);
-    });
-  } catch (error) {
-    console.warn("Could not restore the file handle.", error);
-    return null;
-  }
-}
 
 export interface ManuscriptSessionState {
   manuscript: Manuscript;

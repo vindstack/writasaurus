@@ -46,7 +46,7 @@ export async function editorStatus() {
     try {
       const bytes = await Deno.readFile(activePath);
       const manuscript = await parseEpub(bytes, basename(activePath));
-      return { isDesktop: true, activeFile: basename(activePath), activePath, manuscript };
+      return { activeFile: basename(activePath), activePath, manuscript };
     } catch (error) {
       console.warn("Could not read the active file.", error);
       state.activePath = null;
@@ -55,7 +55,6 @@ export async function editorStatus() {
   }
 
   return {
-    isDesktop: true,
     activeFile: state.activePath ? basename(state.activePath) : null,
     activePath: state.activePath,
   };

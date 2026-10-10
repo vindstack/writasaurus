@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import { ref } from "vue";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import { blankManuscript, parseManuscript, SAMPLE_NOVEL } from "../../lib/editor/data.ts";
-import { saveLocal, setSkipWelcome, storeHandle } from "../../lib/editor/storage.ts";
-import { parseEpub } from "../../lib/epub.ts";
+import { saveLocal, setSkipWelcome } from "../../lib/editor/storage.ts";
 import { requestOpen } from "../../lib/open-manuscript.ts";
 import { usePageEffects } from "../../composables/usePageEffects.ts";
-
-const props = defineProps<{ isDesktop: boolean }>();
-const fileInput = ref<HTMLInputElement | null>(null);
 
 function navigateToEditor(): void {
   globalThis.location.href = "/";
@@ -19,14 +14,9 @@ function returnToEditor(): void {
   navigateToEditor();
 }
 
-async function readManuscriptFile(file: File) {
-  return await parseEpub(new Uint8Array(await file.arrayBuffer()), file.name);
-}
-
 usePageEffects(returnToEditor);
 
-async function closeActiveDesktopFile(): Promise<void> {
-  if (!props.isDesktop) return;
+async function closeActiveFile(): Promise<void> {
   try {
     await fetch("/api/editor/close", { method: "POST" });
   } catch (error) {
@@ -36,34 +26,14 @@ async function closeActiveDesktopFile(): Promise<void> {
 
 async function startFrom(manuscript: ReturnType<typeof blankManuscript>): Promise<void> {
   saveLocal(manuscript, 0);
-  await storeHandle(null);
-  await closeActiveDesktopFile();
+  await closeActiveFile();
   navigateToEditor();
 }
 
 async function open(): Promise<void> {
-  const result = await requestOpen(props.isDesktop);
+  const result = await requestOpen();
   if (result.kind === "cancelled") return;
-  if (result.kind === "input") {
-    fileInput.value?.click();
-    return;
-  }
-  if (result.kind === "file" && result.file.size > 0) {
-    saveLocal(await readManuscriptFile(result.file), 0);
-    await storeHandle(result.handle);
-  }
   navigateToEditor();
-}
-
-async function onFileChosen(event: Event): Promise<void> {
-  const input = event.currentTarget as HTMLInputElement;
-  const file = input.files?.[0];
-  if (file) {
-    saveLocal(await readManuscriptFile(file), 0);
-    await storeHandle(null);
-    navigateToEditor();
-  }
-  input.value = "";
 }
 </script>
 
@@ -80,14 +50,6 @@ async function onFileChosen(event: Event): Promise<void> {
     >
       Load Sample Novel
     </Button>
-    <input
-      ref="fileInput"
-      id="welcome-file-input"
-      type="file"
-      accept=".epub,application/epub+zip"
-      hidden
-      @change="onFileChosen"
-    />
   </div>
   <div class="footer">
     <a

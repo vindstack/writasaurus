@@ -1,5 +1,5 @@
 import { batch, computed, signal } from "@preact/signals";
-import type { Chapter, Manuscript, WritableFileHandle } from "./types.ts";
+import type { Chapter, Manuscript } from "./types.ts";
 import { blankManuscript, chapter as createChapter, count } from "./data.ts";
 
 /**
@@ -8,9 +8,6 @@ import { blankManuscript, chapter as createChapter, count } from "./data.ts";
  */
 export const manuscript = signal<Manuscript>(blankManuscript());
 export const activeChapterIndex = signal(0);
-export const fileHandle = signal<WritableFileHandle | null>(null);
-export const canWrite = signal(false);
-export const isDesktop = signal(false);
 export const desktopFileLoaded = signal(false);
 export const hasUnsavedChanges = signal(false);
 /** Overrides the derived save message; used to surface save failures. */
@@ -37,8 +34,6 @@ export function replaceManuscript(
   next: Manuscript,
   options: Partial<{
     activeChapter: number;
-    fileHandle: WritableFileHandle | null;
-    canWrite: boolean;
     desktopFileLoaded: boolean;
     hasUnsavedChanges: boolean;
     saveMessage: string;
@@ -47,8 +42,6 @@ export function replaceManuscript(
   batch(() => {
     manuscript.value = next;
     activeChapterIndex.value = options.activeChapter ?? 0;
-    fileHandle.value = options.fileHandle ?? null;
-    canWrite.value = options.canWrite ?? false;
     if (options.desktopFileLoaded !== undefined) {
       desktopFileLoaded.value = options.desktopFileLoaded;
     }

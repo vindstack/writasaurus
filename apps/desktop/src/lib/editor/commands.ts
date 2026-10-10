@@ -1,7 +1,7 @@
 import { editorHistory } from "./history.ts";
 import { saveEpubToDisk, saveToDisk } from "./file-io.ts";
 import { getEditor } from "./surface.ts";
-import { hasUnsavedChanges, isDesktop, syncChapter } from "./state.ts";
+import { hasUnsavedChanges, syncChapter } from "./state.ts";
 
 /** Saves to the current file, only when there is something to save. */
 export async function save(): Promise<void> {
@@ -28,14 +28,10 @@ export async function quit(): Promise<void> {
     await save();
   }
   if (hasUnsavedChanges.peek()) return;
-  if (isDesktop.peek()) {
-    try {
-      await fetch("/api/editor/exit", { method: "POST" });
-    } catch {
-      // The native app may already be closing.
-    }
-  } else {
-    globalThis.close();
+  try {
+    await fetch("/api/editor/exit", { method: "POST" });
+  } catch {
+    // The native app may already be closing.
   }
 }
 

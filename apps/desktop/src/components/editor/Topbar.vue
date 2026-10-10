@@ -10,7 +10,6 @@ import {
 import {
     commitManuscriptTitle,
     hasUnsavedChanges,
-    isDesktop,
     manuscript,
     menuOpen,
     renameManuscript,
@@ -34,7 +33,6 @@ const filenameElement = ref<HTMLSpanElement | null>(null);
 const manuscriptState = useSignalValue(manuscript);
 const unsavedState = useSignalValue(hasUnsavedChanges);
 const messageState = useSignalValue(saveMessage);
-const desktopState = useSignalValue(isDesktop);
 const menuState = useSignalValue(menuOpen);
 const title = computed(() =>
     String(manuscriptState.value.frontmatter.title ?? "Untitled Manuscript"),
@@ -164,28 +162,26 @@ onMounted(() => {
                         {{ toolbarVisible ? "Hide toolbar" : "Show toolbar" }}
                     </button>
                     <a role="menuitem" href="/about" class="item">About</a>
-                    <template v-if="desktopState">
-                        <Divider />
-                        <button
-                            type="button"
-                            role="menuitem"
-                            class="item"
-                            id="menu-fullscreen"
-                            @click="toggleFullscreen()"
-                        >
-                            <span>Fullscreen</span>
-                            <kbd class="kbd">F11</kbd>
-                        </button>
-                        <button
-                            type="button"
-                            role="menuitem"
-                            :class="['item', 'quit']"
-                            id="menu-quit"
-                            @click="quit()"
-                        >
-                            Quit
-                        </button>
-                    </template>
+                    <Divider />
+                    <button
+                        type="button"
+                        role="menuitem"
+                        class="item"
+                        id="menu-fullscreen"
+                        @click="toggleFullscreen()"
+                    >
+                        <span>Fullscreen</span>
+                        <kbd class="kbd">F11</kbd>
+                    </button>
+                    <button
+                        type="button"
+                        role="menuitem"
+                        :class="['item', 'quit']"
+                        id="menu-quit"
+                        @click="quit()"
+                    >
+                        Quit
+                    </button>
                 </nav>
             </DropdownMenu>
         </div>

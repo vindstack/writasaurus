@@ -12,7 +12,6 @@ import {
     activeChapterIndex,
     desktopFileLoaded,
     hasUnsavedChanges,
-    isDesktop,
     manuscript,
     menuOpen,
     sidebarOpen,
@@ -28,19 +27,15 @@ import StatusBar from "../editor/StatusBar.vue";
 import LicenseGate from "./LicenseGate.vue";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
-const props = defineProps<{ isDesktop: boolean }>();
 const {
     publicKey: licensePublicKey,
     apiUrl: licenseApiUrl,
     testBypass: licenseTestBypass,
 } = licenseConfiguration();
-const fileInput = ref<HTMLInputElement | null>(null);
 const ready = ref(false);
 const licensed = ref(false);
 const licenseCheckError = ref("");
 const toolbarVisible = ref(true);
-isDesktop.value = props.isDesktop;
-
 let disposed = false;
 let stopPersistence: (() => void) | undefined;
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,7 +43,7 @@ let licenseRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupListeners: (() => void) | undefined;
 
 onMounted(() => {
-    if (props.isDesktop && !licenseTestBypass) {
+    if (!licenseTestBypass) {
         void checkSavedLicense(licensePublicKey, licenseApiUrl).then((valid) => {
             licensed.value = valid;
             ready.value = true;
@@ -92,7 +87,7 @@ onMounted(() => {
         } else if (modifier && key === "g") {
             event.preventDefault();
             statsIndex.value = (statsIndex.value + 1) % 3;
-        } else if (modifier && key === "n" && isDesktop.value) {
+        } else if (modifier && key === "n") {
             event.preventDefault();
             void toggleAssistance();
         } else if (modifier && key === "s") {
@@ -104,7 +99,7 @@ onMounted(() => {
         } else if (modifier && event.shiftKey && key === "e") {
             event.preventDefault();
             focusEditor();
-        } else if (event.key === "F11" && isDesktop.value) {
+        } else if (event.key === "F11") {
             event.preventDefault();
             menuOpen.value = false;
             void toggleFullscreen();
@@ -146,7 +141,6 @@ onMounted(() => {
 async function restoreDesktopEditor(): Promise<void> {
     const opened = await restoreEditor();
     if (disposed) return;
-    if (!props.isDesktop) ready.value = true;
     if (!opened) {
         location.replace("/welcome");
         return;
@@ -154,7 +148,7 @@ async function restoreDesktopEditor(): Promise<void> {
     stopPersistence = effect(() => {
         const unsaved = hasUnsavedChanges.value;
         saveLocal(manuscript.value, activeChapterIndex.value, unsaved);
-        if (isDesktop.value && desktopFileLoaded.value && unsaved) {
+        if (desktopFileLoaded.value && unsaved) {
             clearTimeout(autosaveTimer);
             autosaveTimer = setTimeout(
                 () => void save(),
@@ -190,11 +184,11 @@ function onLicenseActivated(): void {
 </script>
 
 <template>
-    <p v-if="props.isDesktop && licenseCheckError && !licensed" role="alert">
+    <p v-if="licenseCheckError && !licensed" role="alert">
         {{ licenseCheckError }} You may retry by restarting Writasaurus.
     </p>
     <LicenseGate
-        v-else-if="props.isDesktop && ready && !licensed"
+        v-else-if="ready && !licensed"
         :public-key="licensePublicKey"
         :api-url="licenseApiUrl"
         @activated="onLicenseActivated"
@@ -206,7 +200,7 @@ function onLicenseActivated(): void {
     >
         <Topbar
             :on-new="() => void startNewManuscript()"
-            :on-open="() => void openManuscript(fileInput.value)"
+            :on-open="() => void openManuscript()"
             :toolbar-visible="toolbarVisible"
             :on-toggle-toolbar="() => toolbarVisible = !toolbarVisible"
         />
@@ -219,21 +213,6 @@ function onLicenseActivated(): void {
             </div>
         </main>
         <StatusBar />
-        <input
-            ref="fileInput"
-            id="editor-file-input"
-            type="file"
-            accept=".epub,application/epub+zip"
-            hidden
-            @change="
-                (event) => {
-                    const input = event.currentTarget as HTMLInputElement;
-                    const file = input.files?.[0];
-                    if (file) void loadFile(file);
-                    input.value = '';
-                }
-            "
-        />
     </div>
 </template>
 

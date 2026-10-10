@@ -45,9 +45,8 @@ Editor behavior notes:
 
 - The writing area is an uncontrolled contenteditable. Mount content imperatively only when the
   active chapter changes so the caret never moves; do not make it a controlled component.
-- Manuscript session state persists in `sessionStorage` to survive same-tab reloads; browser file
-  handles persist in IndexedDB. EPUBs are the manuscript file format. Browsers use the File System
-  Access API with download fallbacks; Desktop uses `/api/editor/*` routes.
+- Manuscript session state persists in `sessionStorage` to survive same-tab reloads. EPUBs are the
+  manuscript file format; the Desktop app uses `/api/editor/*` routes for native file operations.
 - Deno Desktop's webview is WebKitGTK; `::highlight()` does not paint on text in anonymous block
   boxes, so the editor normalizes content into block elements.
 

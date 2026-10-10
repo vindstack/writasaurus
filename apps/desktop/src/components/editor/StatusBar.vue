@@ -8,7 +8,6 @@ import {
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import {
   activeChapter,
-  isDesktop,
   manuscript,
   sidebarOpen,
   statsIndex,
@@ -21,7 +20,6 @@ const statNames = ["chapter", "manuscript", "daily writing goal"];
 const chapterState = useSignalValue(activeChapter);
 const manuscriptState = useSignalValue(manuscript);
 const totalState = useSignalValue(totalWords);
-const desktopState = useSignalValue(isDesktop);
 const indexState = useSignalValue(statsIndex);
 const wordsPerPage = getWordsPerPagePreference();
 const wordStats = computed(() => {
@@ -66,7 +64,6 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
       <kbd class="kbd" title="Cycle statistics (Ctrl+G)">Ctrl+G</kbd>
     </span>
     <Button
-      v-if="desktopState"
       variant="quiet"
       size="small"
       class="toggle"

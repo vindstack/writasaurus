@@ -87,21 +87,20 @@ function browserTest(name: string, fn: () => Promise<void>): void {
   });
 }
 
-function editorTestHandler(desktop: boolean): (request: Request) => Response | Promise<Response> {
+function editorTestHandler(): (request: Request) => Response | Promise<Response> {
   const app = createTestApp().fetch;
   return (request) =>
     new URL(request.url).pathname === "/api/editor/status"
-      ? Response.json({ isDesktop: desktop, activeFile: null, activePath: null })
+      ? Response.json({ activeFile: null, activePath: null })
       : app(request);
 }
 
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
-  desktop = true,
 ): Promise<void> {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
-    editorTestHandler(desktop),
+    editorTestHandler(),
   );
   const address = server.addr as Deno.NetAddr;
   const browser = await launchBrowser();
@@ -109,15 +108,6 @@ async function withEditorPage(
 
   try {
     await page.addInitScript(() => {
-      // Prevent a locally persisted file handle from affecting fixture state.
-      Object.defineProperty(globalThis, "indexedDB", {
-        configurable: true,
-        value: {
-          open: () => {
-            throw new Error("IndexedDB is disabled in this test fixture.");
-          },
-        },
-      });
       sessionStorage.removeItem("writasaurus-manuscript-v1:state");
       sessionStorage.setItem("writasaurus-session:skip-welcome", "true");
     });
@@ -511,7 +501,7 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
       await page.evaluate(() => CSS.highlights.has("writing-assistance-grammar")),
       "Expected the grammar warning to be highlighted in the editor",
     );
-  }, true);
+  });
 });
 
 browserTest(
@@ -571,7 +561,7 @@ browserTest(
       await page.waitForFunction(() =>
         (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0
       );
-    }, true);
+    });
   },
 );
 
@@ -775,10 +765,11 @@ browserTest("browser: quiet buttons underline their text", async () => {
           keyboardShortcutDisplay: keyboardShortcut && getComputedStyle(keyboardShortcut).display,
           keyboardShortcutDecoration: keyboardShortcut &&
             getComputedStyle(keyboardShortcut).textDecorationLine,
-          statsButtonIsQuietSmall: (() => {
+          statsButtonUsesStatStyles: (() => {
             const statsButton = document.querySelector(".statusbar .stat");
-            return statsButton?.classList.contains("button--quiet") &&
-              statsButton.classList.contains("button--small");
+            return statsButton?.classList.contains("stat") &&
+              getComputedStyle(statsButton).borderTopWidth === "0px" &&
+              getComputedStyle(statsButton).cursor === "pointer";
           })(),
         };
       },
@@ -792,8 +783,8 @@ browserTest("browser: quiet buttons underline their text", async () => {
       `Expected keyboard shortcut indicators to stay separate from the button underline, got ${styles.keyboardShortcutDisplay}`,
     );
     assert(
-      styles.statsButtonIsQuietSmall,
-      "Expected the statistics control to use the quiet small-button style",
+      styles.statsButtonUsesStatStyles,
+      "Expected the statistics control to use its borderless pointer style",
     );
   });
 });
@@ -817,7 +808,10 @@ browserTest("browser: menu contains direct manuscript and save actions", async (
       (await menu.locator("#menu-open-manuscript").textContent())?.includes("Open Manuscript"),
       "Expected Open Manuscript action",
     );
-    assert(await page.locator("#editor-file-input").count() === 1, "Expected direct file input");
+    assert(
+      await page.locator('input[type="file"]').count() === 0,
+      "Expected no browser file picker",
+    );
     assert(
       await menu.locator("#menu-new-manuscript").evaluate((element) =>
         getComputedStyle(element).borderTopWidth
@@ -895,7 +889,7 @@ browserTest("browser: Desktop menu and F11 toggle fullscreen", async () => {
       await page.locator("#app-menu").getAttribute("data-open") === "false",
       "Expected F11 to work while the menu is open and close the menu",
     );
-  }, true);
+  });
 });
 
 browserTest("browser: editor content never mixes text with block siblings", async () => {
@@ -983,7 +977,7 @@ browserTest("browser: editor content never mixes text with block siblings", asyn
       ranges.filter((text) => text === "teh").length >= 3,
       `Expected every misspelling to be highlighted, got: ${JSON.stringify(ranges)}`,
     );
-  }, true);
+  });
 });
 
 browserTest("browser: Tab key inserts an actual tab character in the editor", async () => {
@@ -1023,7 +1017,7 @@ browserTest(
   async () => {
     const server = Deno.serve(
       { hostname: "127.0.0.1", port: 0, onListen() {} },
-      editorTestHandler(true),
+      editorTestHandler(),
     );
     const address = server.addr as Deno.NetAddr;
     const browser = await launchBrowser();

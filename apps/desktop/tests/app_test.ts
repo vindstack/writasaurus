@@ -26,7 +26,7 @@ Deno.test("renders welcome page with open manuscript options and return to edito
   assert(page.includes("Browse Local File"));
   assert(page.includes("Start New Manuscript"));
   assert(page.includes("Load Sample Novel"));
-  assert(page.includes('accept=".epub,application/epub+zip"'));
+  assert(!page.includes('type="file"'));
   assert(!page.includes(".markdown"));
   assert(!page.includes(".txt"));
   assert(page.includes('href="/"'));

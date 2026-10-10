@@ -8,7 +8,6 @@ import {
 } from "../../lib/editor/surface.ts";
 import {
   activeChapter,
-  isDesktop,
   markChanged,
   renameChapter,
   titleFocusRequest,
@@ -16,7 +15,6 @@ import {
 import { useSignalValue } from "../vue-signals.ts";
 
 const chapterState = useSignalValue(activeChapter);
-const desktopState = useSignalValue(isDesktop);
 const focusRequest = useSignalValue(titleFocusRequest);
 const editor = ref<HTMLDivElement | null>(null);
 const title = ref<HTMLInputElement | null>(null);
@@ -81,7 +79,7 @@ onBeforeUnmount(() => {
         role="textbox"
         aria-multiline="true"
         aria-label="Chapter text"
-        :spellcheck="!desktopState"
+        spellcheck="false"
         @input="scheduleHistoryCapture(); markChanged($event.currentTarget as HTMLElement)"
         @paste="(event) => {
           event.preventDefault();

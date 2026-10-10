@@ -14,12 +14,12 @@ function createDesktopApp() {
   return createTestApp();
 }
 
-Deno.test("editor-api: status reports desktop and active file properties", async () => {
+Deno.test("editor-api: status reports active file properties", async () => {
   const app = createDesktopApp();
   const res = await app.request("/api/editor/status");
   assertEquals(res.status, 200);
   const data = await res.json();
-  assert(typeof data.isDesktop === "boolean");
+  assert(!("isDesktop" in data));
   assert(data.activeFile === null || typeof data.activeFile === "string");
   assert(data.activePath === null || typeof data.activePath === "string");
 });
