@@ -1,0 +1,83 @@
+import { defineMiddleware } from "astro:middleware";
+
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function makeNonce(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(18));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+function isSameOriginRequest(request: Request): boolean {
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  const origin = request.headers.get("origin");
+  if (!origin) return true;
+  try {
+    return new URL(origin).origin === new URL(request.url).origin;
+  } catch {
+    return false;
+  }
+}
+
+function isDesktopLicenseRequest(request: Request): boolean {
+  const pathname = new URL(request.url).pathname;
+  return /^\/api\/license\/(?:activate|refresh)$/.test(pathname) &&
+    /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
+      request.headers.get("origin") ?? "",
+    );
+}
+
+function contentSecurityPolicy(nonce: string): string {
+  const dev = import.meta.env.DEV;
+  return [
+    "default-src 'none'",
+    `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
+    `style-src 'self' ${dev ? "'unsafe-inline' " : ""}https://fonts.googleapis.com`,
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data:",
+    `connect-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com${
+      dev ? " ws: wss:" : ""
+    }`,
+    "media-src 'self' data: blob:",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
+async function addNonce(response: Response, nonce: string): Promise<Response> {
+  if (!response.headers.get("content-type")?.includes("text/html") || !response.body) {
+    return response;
+  }
+  const html = await response.text();
+  const securedHtml = html.replace(
+    /<(script|style)\b([^>]*)>/gi,
+    (tag, element: string, attributes: string) =>
+      /\bnonce\s*=/.test(attributes) ? tag : `<${element} nonce="${nonce}"${attributes}>`,
+  );
+  return new Response(securedHtml, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+export const onRequest = defineMiddleware(async (context, next) => {
+  const nonce = makeNonce();
+  context.locals.cspNonce = nonce;
+  const response = !SAFE_METHODS.has(context.request.method) &&
+      !isDesktopLicenseRequest(context.request) &&
+      !isSameOriginRequest(context.request)
+    ? new Response("Forbidden", { status: 403 })
+    : await next();
+  const secured = new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+  secured.headers.set("content-security-policy", contentSecurityPolicy(nonce));
+  return await addNonce(secured, nonce);
+});

@@ -1,0 +1,227 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import ThemeSwitcher from "../components/islands/ThemeSwitcher.vue";
+---
+
+<BaseLayout title="Writasaurus License Agreement">
+  <main class="page">
+    <header class="header">
+      <a class="brand" href="/" aria-label="Writasaurus home">Writasaurus</a>
+      <div class="headerActions">
+        <ThemeSwitcher client:load />
+        <a class="headerLink" href="/">Back to home</a>
+      </div>
+    </header>
+
+    <article class="terms">
+      <p class="eyebrow">Writasaurus</p>
+      <h2>Writasaurus License Agreement</h2>
+      <p class="updated">Paid license, account, and application use</p>
+
+      <h3>1. Purchase and personal-use license</h3>
+      <p>
+        A one-time purchase grants you a personal, non-transferable license to use Writasaurus on
+        up to two devices that you control. The application is licensed, not sold, and this agreement
+        does not transfer ownership of Writasaurus or its included materials to you.
+      </p>
+
+      <h3>2. License key, activation, and downloads</h3>
+      <p>
+        A license key is associated with the email address used for purchase. Keep your key private.
+        Activation requires an internet connection and is limited to two devices. The application
+        stores a signed, device-bound license token and periodically contacts our license service to
+        renew it. A token may allow up to 30 days of offline use; after that, an internet connection
+        is needed to continue using the application. Download links require signing in to the
+        purchaser account and expire.
+      </p>
+
+      <h3>3. Restrictions and revocation</h3>
+      <p>
+        You may not copy, modify, distribute, sublicense, sell, rent, or otherwise share or make
+        Writasaurus or copies of the application available to others. These restrictions apply only
+        to the application and its included materials, not to manuscripts or EPUBs you create.
+        We may revoke a license for a refund, payment dispute, or material violation of this
+        agreement. The application checks revocation when its signed token is renewed; a previously
+        issued token can remain usable offline until it expires, for up to 30 days.
+      </p>
+
+      <h3>4. Refunds</h3>
+      <p>
+        You may request a full refund during the first seven days after purchase through your
+        account. Approved refunds are submitted to the payment processor and revoke the associated
+        license. Any mandatory rights or remedies under applicable law remain available.
+      </p>
+
+      <h3>5. Your manuscripts and EPUBs</h3>
+      <p>
+        You retain ownership of the writing and EPUBs you create with Writasaurus. Writasaurus
+        claims no ownership of your work. You may keep, use, and distribute your manuscripts and
+        EPUBs, subject to any rights belonging to other people in material you include.
+      </p>
+
+      <h3>6. Account and data</h3>
+      <p>
+        We use your purchase email to issue and recover your license key, provide passwordless
+        account access, display purchase details, manage refunds, and make eligible downloads
+        available. Payment details are handled by Stripe; we do not store full card numbers. License
+        activation records include a one-way device identifier and activation timestamps. Your
+        manuscripts are stored locally and are not uploaded to our account or license services.
+      </p>
+
+      <h3>7. The application</h3>
+      <p>
+        Writasaurus is provided as available, without promises that it will always be uninterrupted
+        or error-free. Nothing in this agreement limits rights or remedies that applicable law does
+        not allow to be limited.
+      </p>
+
+      <p class="draft">
+        This is a plain-language product-license draft and has not been reviewed by a lawyer.
+      </p>
+      <a class="back" href="/">Back to Writasaurus</a>
+    </article>
+
+    <footer class="footer">
+      <span>© Writasaurus</span>
+      <a href="/">Home</a>
+    </footer>
+  </main>
+</BaseLayout>
+
+<style>
+.page {
+  background:
+    radial-gradient(
+    ellipse at 78% 24%,
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    transparent 33rem
+  ),
+    var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 1.5rem clamp(1.25rem, 6vw, 6rem) 1.75rem;
+}
+
+.header,
+.footer {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 74rem;
+}
+
+.headerActions {
+  align-items: center;
+  display: flex;
+  gap: 1.25rem;
+}
+
+.brand {
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  text-decoration: none;
+}
+
+.headerLink,
+.footer a {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-underline-offset: 0.2em;
+}
+
+.footer {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-top: 1.5rem;
+}
+
+@media (max-width: 30rem) {
+  .page {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .headerActions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+}
+
+.terms {
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0.6rem 1.5rem 0.6rem 0.6rem;
+  box-shadow: 0 1.4rem 3.5rem color-mix(in srgb, var(--text) 12%, transparent);
+  margin: 3.75rem auto 4.5rem;
+  max-width: 54rem;
+  padding: clamp(1.5rem, 5vw, 3.5rem);
+}
+
+.eyebrow {
+  color: var(--accent);
+  font-size: 0.8rem;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.terms h2 {
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: clamp(2.3rem, 5vw, 3.8rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.updated {
+  color: var(--muted);
+  font-size: 1rem;
+  margin: 0.8rem 0 2.5rem;
+}
+
+.terms h3 {
+  color: var(--accent-strong);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  margin: 1.8rem 0 0.5rem;
+}
+
+.terms > p:not(.eyebrow, .updated, .draft) {
+  color: var(--muted);
+  line-height: 1.75;
+  max-width: 43rem;
+}
+
+.draft {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+}
+
+.back {
+  color: var(--accent-strong);
+  font-weight: 700;
+  text-underline-offset: 0.18em;
+}
+
+.back:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+
+@media (max-width: 48rem) {
+  .terms {
+    margin: 2.5rem auto 3rem;
+  }
+}
+</style>

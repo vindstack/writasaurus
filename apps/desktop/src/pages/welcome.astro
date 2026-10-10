@@ -1,0 +1,15 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CardPage from "../components/CardPage.astro";
+import WelcomeActions from "../components/islands/WelcomeActions.vue";
+import PageEffects from "../components/islands/PageEffects.vue";
+---
+
+<BaseLayout title="Open Manuscript — Writasaurus">
+  <CardPage size="narrow" brandHref="/about" roomy>
+    <h2>Open Manuscript</h2>
+    <p>Open an EPUB manuscript or begin with a blank document.</p>
+    <WelcomeActions isDesktop={true} client:load />
+  </CardPage>
+  <PageEffects client:load />
+</BaseLayout>

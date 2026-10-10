@@ -1,0 +1,16 @@
+{
+  "name": "@writasaurus/website",
+  "exports": "./app.ts",
+  "extends": "../../deno.json",
+  "deploy": {
+    "org": "vindstack",
+    "app": "writasaurus"
+  },
+  "tasks": {
+    "build": "astro build",
+    "dev": "astro dev --host 127.0.0.1 --port 8000",
+    "start": "deno run --allow-env --allow-net --allow-read server.ts",
+    "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts",
+    "check": "deno check app.ts server.ts tests/*_test.ts src/pages/api/**/*.ts && astro check"
+  }
+}

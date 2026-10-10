@@ -1,0 +1,25 @@
+{
+  "name": "@writasaurus/desktop",
+  "exports": "./app.ts",
+  "extends": "../../deno.json",
+  "desktop": {
+    "app": {
+      "name": "Writasaurus",
+      "identifier": "io.github.8bitreed.dino-writer"
+    },
+    "output": {
+      "linux": "./desktop/Writasaurus.AppImage",
+      "windows": "./desktop/Writasaurus.msi",
+      "macos": "./desktop/Writasaurus"
+    }
+  },
+  "tasks": {
+    "build": "astro build",
+    "dev": "astro dev --host 127.0.0.1 --port 8000",
+    "start": "deno run --allow-env --allow-net --allow-read --allow-write server.ts",
+    "test": "deno run --allow-env=PUBLIC_LICENSE_TEST_BYPASS --allow-run=deno scripts/test.ts",
+    "check": "deno check app.ts desktop.ts desktop.dev.ts server.ts scripts/test.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts && astro check",
+    "desktop": "deno task build && deno desktop --no-check --include=dist/ --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell,ioreg,xdg-open,open desktop.ts",
+    "desktop:dev": "deno desktop --no-check --hmr --icon=public/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts"
+  }
+}

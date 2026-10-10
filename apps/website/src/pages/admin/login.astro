@@ -1,0 +1,24 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+const sent = Astro.url.searchParams.get("sent") === "1";
+---
+
+<BaseLayout title="Writasaurus administration sign-in">
+  <main>
+    <a href="/">Writasaurus</a>
+    <h1>Administration sign-in</h1>
+    {sent && <p role="status">If this is the configured administrator address, a code has been sent.</p>}
+    <form action="/api/admin/request" method="post">
+      <label for="email">Administrator email address</label>
+      <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
+      <button type="submit">Email me a sign-in code</button>
+    </form>
+    {sent && <form action="/api/admin/verify" method="post">
+      <label for="verify-email">Email address</label>
+      <input id="verify-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+      <label for="code">8-digit sign-in code</label>
+      <input id="code" name="code" inputmode="numeric" pattern="[0-9]{8}" required maxlength="8" />
+      <button type="submit">Sign in</button>
+    </form>}
+  </main>
+</BaseLayout>

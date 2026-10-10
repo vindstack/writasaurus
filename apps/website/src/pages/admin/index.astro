@@ -1,0 +1,61 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getSession } from "../../lib/auth.ts";
+import { getLicenseStore } from "../../lib/store.ts";
+
+const session = await getSession(Astro.request);
+if (session?.role !== "admin") return Astro.redirect("/admin/login");
+const search = (Astro.url.searchParams.get("q") ?? "").slice(0, 254);
+const licenses = await getLicenseStore().listLicenses(search);
+const activations = await Promise.all(
+  licenses.map(async (license) => [license.id, await getLicenseStore().listActivations(license.id)] as const),
+);
+const deviceMap = new Map(activations);
+const status = Astro.url.searchParams.get("status");
+---
+
+<BaseLayout title="Writasaurus license administration">
+  <main>
+    <a href="/">Writasaurus</a>
+    <h1>License administration</h1>
+    <p>Signed in as {session.email}.</p>
+    {status === "updated" && <p role="status">License changes saved.</p>}
+    <form method="get">
+      <label for="q">Search by customer email</label>
+      <input id="q" name="q" type="search" value={search} maxlength="254" />
+      <button type="submit">Search</button>
+    </form>
+    {licenses.map((license) => <section>
+      <h2>{license.email}</h2>
+      <p>Status: {license.status}; devices: {license.activationCount}/{license.maxDevices}</p>
+      <p>Created: {license.createdAt.toLocaleString()}</p>
+      {license.revocationReason && <p>Revocation reason: {license.revocationReason}</p>}
+      {license.status === "active"
+        ? <form action="/api/admin/revoke" method="post">
+          <input type="hidden" name="licenseId" value={license.id} />
+          <label for={`reason-${license.id}`}>Reason for revocation</label>
+          <input id={`reason-${license.id}`} name="reason" required maxlength="500" />
+          <button type="submit">Revoke license</button>
+        </form>
+        : license.revocationReason !== "refund" && license.revocationReason !== "disputed" &&
+            <form action="/api/admin/restore" method="post">
+          <input type="hidden" name="licenseId" value={license.id} />
+          <label for={`restore-${license.id}`}>Reason for restoration</label>
+          <input id={`restore-${license.id}`} name="reason" required maxlength="500" />
+          <button type="submit">Restore license</button>
+            </form>}
+      <h3>Activated devices</h3>
+      <ul>
+        {(deviceMap.get(license.id) ?? []).map((activation) => <li>
+          {activation.deviceHash.slice(0, 12)} — last used {activation.lastSeenAt.toLocaleString()}
+          <form action="/api/admin/reset-device" method="post">
+            <input type="hidden" name="licenseId" value={license.id} />
+            <input type="hidden" name="activationId" value={activation.id} />
+            <button type="submit">Reset this activation</button>
+          </form>
+        </li>)}
+      </ul>
+    </section>)}
+    <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
+  </main>
+</BaseLayout>

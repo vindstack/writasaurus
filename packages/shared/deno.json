@@ -1,0 +1,5 @@
+{
+  "name": "@writasaurus/shared",
+  "exports": "./mod.ts",
+  "extends": "../../deno.json"
+}

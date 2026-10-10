@@ -1,133 +1,121 @@
 # Writasaurus
 
-A local-first manuscript editor built with [Astro](https://astro.build), Vue single-file components,
-and Deno. Styling uses CSS Modules. Deno Desktop packages the server-rendered app in a native
-webview.
+A local-first manuscript editor built with Astro, Vue, and Deno. Desktop and website code are
+separate applications in one Deno workspace.
 
-## Run
+## Applications
 
-```sh
-deno task dev
-```
+- `apps/desktop/` contains the editor, native launchers, and desktop tests.
+- `apps/website/` contains the marketing site, customer account, checkout, administration pages, and
+  server APIs.
+- `packages/shared/` contains release, licensing-token, and private R2 utilities.
 
-Open <http://localhost:8000>.
+## Development
 
-Production:
-
-```sh
-deno task build
-deno task start
-```
-
-Desktop:
+Use Deno 2:
 
 ```sh
-deno task desktop:dev   # run Astro's dev server in a native window
-deno task desktop       # package for the current platform into desktop/
+deno task dev                 # website at http://localhost:8000
+deno task desktop:dev         # desktop app in a native window
+deno task build               # build both applications
+deno task desktop             # package desktop app for this platform
+deno task test                # build and run unit and Playwright tests
+deno task check               # format, lint, types, and tests
 ```
 
-Desktop packages embed `dist/`, including the dynamically loaded Astro server and client assets, so
-they run without the source checkout. On Linux, launch `./desktop/Writasaurus.AppImage` from a
-terminal to see startup errors.
+To exercise checkout without Stripe, run the website with `PAYMENT_PROVIDER=mock deno task dev`.
+Mock purchases are available only outside Deno Deploy; email delivery still requires Resend
+credentials. Mock purchases persist in memory for the life of the server process.
 
-Check formatting, linting, types, and unit and Playwright browser tests:
+## Website deployment
+
+The website runs on Deno Deploy and requires PostgreSQL. Apply migrations before deployment:
 
 ```sh
-deno task check
+deno task db:migrate
 ```
 
-## Structure
+Configure the website's environment/secret store with:
 
-- `src/pages/` contains Astro pages and API routes; `src/layouts/` provides the shared document
-  shell and `src/middleware.ts` enforces same-origin requests and the nonce-based CSP.
-- `src/components/` contains Astro components, Vue SFCs, and colocated CSS Modules. Interactive Vue
-  SFCs are hydrated by Astro only where needed.
-- `src/lib/` contains editor, EPUB, Markdown, settings, storage, history, and platform logic. The
-  editor uses signals for shared state and keeps its contenteditable surface uncontrolled.
-- `src/styles/global.css` contains global styles. Files in `public/` are served unchanged.
-- `astro.config.ts` configures Astro SSR with the Deno adapter; `app.ts`, `server.ts`, and
-  `desktop.ts` connect the generated server to the web and native Desktop runtimes.
+- `DATABASE_URL`
+- `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, and `STRIPE_WEBHOOK_SECRET`
+- `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
+- `PUBLIC_SITE_URL` and `ADMIN_EMAIL`
+- `SESSION_SECRET`, `LICENSE_ENCRYPTION_KEY`, `LICENSE_SIGNING_PRIVATE_KEY`
+- `WRITASAURUS_R2_ACCOUNT_ID`, `WRITASAURUS_R2_ACCESS_KEY_ID`, `WRITASAURUS_R2_SECRET_ACCESS_KEY`,
+  and `WRITASAURUS_R2_BUCKET`
 
-## Website and Desktop
+Generate signing and encryption secrets locally with `deno task license:secrets`. Keep the private
+signing key, encryption key, session secret, Stripe credentials, and R2 credentials only in a secret
+manager; never commit them. Configure Stripe Checkout for one-time payment and create a webhook for
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, and
+`charge.dispute.created`. Set the matching webhook signing secret in `STRIPE_WEBHOOK_SECRET`.
+Configure Resend with a verified sending domain.
 
-The website serves the Writasaurus marketing page at `/` and the public license agreement at
-`/agreement`. Visitors must accept the agreement before the page reveals the current Linux, macOS,
-and Windows downloads. The page reads release metadata from the website's deployed `/latest.json`
-file. The agreement is a plain-language draft and has not been reviewed by a lawyer.
+### Local PostgreSQL
 
-In Deno Desktop, `/` opens the editor. Editor-only pages and `/api/editor/*` return 404 outside
-Desktop mode. The editor stores the active manuscript in localStorage, remembers granted file
-handles in IndexedDB, and integrates with native desktop file dialogs or the File System Access API
-when available. It supports a Save button, Ctrl/Cmd+S saving, multiple chapters, Markdown
-import/export, EPUB export, drag-and-drop opening, and live word, page, and character counts. On
-Desktop, local writing assistance (Harper) highlights spelling and grammar issues.
+Install Docker Compose, copy `.env.example` to `.env`, then start the local database and apply its
+schema:
 
-## Publishing Desktop releases
-
-Create a dedicated Cloudflare R2 bucket for public release files using the **Standard** storage
-class, and connect a public HTTPS custom domain to that bucket. Do not configure a lifecycle rule
-that transitions objects to Infrequent Access. For local publishing, copy `.env.example` to `.env`
-and fill in these values. `.env` is git-ignored, and the release task loads it automatically. Never
-commit the R2 credentials:
-
-```dotenv
-WRITASAURUS_R2_ACCOUNT_ID=your Cloudflare account ID
-WRITASAURUS_R2_ACCESS_KEY_ID=your R2 access key ID
-WRITASAURUS_R2_SECRET_ACCESS_KEY=your R2 secret access key
-WRITASAURUS_R2_BUCKET=your release bucket
-WRITASAURUS_RELEASES_PUBLIC_URL=https://downloads.example.com
+```sh
+deno task db:dev:up
+deno task db:migrate
+deno --env-file=.env task --cwd apps/website dev
 ```
 
-`WRITASAURUS_RELEASES_PUBLIC_URL` must be the HTTPS origin that serves the bucket keys directly.
-Publish a semantic version locally:
+The local database credentials in `.env.example` are only for development. The Compose service
+stores data in a persistent Docker volume; stop it with `deno task db:dev:down`. Use separate
+credentials and a separate database for staging or production.
+
+The website uses passwordless email codes for customer accounts and for the single configured
+administrator. The administrator can search purchases, revoke or restore eligible licenses, reset
+device activations, and inspect device activity. Refunds requested during the first seven days are
+submitted to Stripe; successful refunds revoke the license. A restored license cannot be one that
+has been refunded or disputed.
+
+## Desktop licensing
+
+The desktop app requires a license key on first launch. A purchase supports two device activations.
+It stores a signed, device-bound token locally, refreshes it on launch while online, and can operate
+offline until the token expires after 30 days. Revocation therefore takes effect on the next online
+refresh or when the current offline token expires; no client-side licensing scheme can prevent a
+determined owner of a desktop computer from modifying their local copy.
+
+For desktop builds, provide the public build-time variables `PUBLIC_LICENSE_API_URL` and
+`PUBLIC_LICENSE_SIGNING_PUBLIC_KEY`. The public key must match the private Ed25519 key held by the
+website. These public values are embedded in the desktop build and are not secrets. Generate the
+signing pair and other application secrets with `deno task license:secrets`; copy
+`LICENSE_SIGNING_PRIVATE_KEY` to the website's secret configuration and
+`PUBLIC_LICENSE_SIGNING_PUBLIC_KEY` to the desktop build environment.
+
+## Gated desktop releases
+
+Create a private Cloudflare R2 bucket for downloadable release artifacts. For local publishing, copy
+`.env.example` to `.env` and set the R2 account ID, access key ID, secret access key, and bucket
+name. Publish an immutable semantic version:
 
 ```sh
 deno task release:desktop 1.2.3
 ```
 
-The command builds the web bundle, then explicitly cross-compiles an x86-64 Linux AppImage, an Apple
-Silicon macOS application bundle, and an x86-64 Windows MSI. It archives the macOS bundle as a
-`.tar.gz`, verifies the non-empty outputs, calculates SHA-256 checksums, and uploads to immutable
-`releases/v<version>/` paths. It verifies uploaded sizes/checksum metadata before writing
-`release.json`. Existing versions cannot be overwritten. The separate `release:latest` task updates
-the website's `public/latest.json` pointer after a version is published. The macOS download must be
-extracted before moving the app into Applications. A macOS build made on a non-macOS host is
-unsigned; one made on macOS is ad-hoc signed by default. Neither is notarized, so Gatekeeper may
-require users to approve it manually.
-
-This workflow uses only R2's Standard storage class, S3-compatible API operations, public bucket
-delivery, and Cloudflare edge caching—no Workers, Infrequent Access, or multipart-upload feature. It
-requires a dedicated releases bucket and refuses new uploads if the currently listed objects plus
-this release would exceed 10,000,000,000 bytes. This is a guard, not a billing guarantee: the free
-10 GB-month storage and monthly Class A/B request quotas are shared across your Cloudflare account,
-and this bucket check cannot see usage in other buckets, earlier daily storage peaks, or future
-visitor traffic. High release/download traffic or other R2 usage can exceed the free quotas, so
-monitor Cloudflare usage and set billing alerts. Public R2 downloads have no egress charge.
-
-Preview the build and metadata without reading credentials or making R2 requests:
-
-```sh
-deno task release:desktop 1.2.3 --dry-run
-```
-
-Dry runs still build and checksum all three packages and write a metadata preview under
-`desktop/release-dry-run/`. Deno Desktop may download the required cross-compilation runtime and
-backend components.
-
-After publishing, generate or update the website's latest-release pointer from the versioned,
-validated metadata:
+The release task builds Linux, Apple Silicon macOS, and Windows desktop packages and uploads the
+artifacts and release metadata to private R2 storage. It also writes public-safe metadata containing
+object keys, not artifact URLs, to `apps/website/public/releases/v<version>/release.json`. Update
+the site's latest-release pointer and deploy the website:
 
 ```sh
 deno task release:latest 1.2.3
 ```
 
-This writes `public/latest.json`; deploy the website with that updated file so the download page
-serves the selected version. The task reads the published `release.json` from the public R2 URL and
-refuses to replace a newer local pointer. It does not require R2 credentials or upload anything to
-R2.
+The account's authenticated download endpoint checks for an active paid license and returns a
+short-lived signed R2 URL. Do not make the artifact bucket public or expose its object URLs through
+the website.
 
-## Secure defaults
+## Data and security
 
-Unsafe HTTP methods are same-origin only. The middleware applies a per-response nonce to scripts and
-styles and sets a CSP without `unsafe-inline`. Desktop and server tasks grant only the permissions
-the app needs.
+Manuscripts remain on the user's device. The website stores the purchase email, a hash of each
+license key, an encrypted copy for email recovery, activations, sign-in and refund state, and
+administrative audit events. Device identifiers are stored as one-way hashes. PostgreSQL backups,
+access, retention, tax handling, consumer disclosures, and final license terms must be reviewed
+before a paid launch. The plain-language agreement in the website is a product draft, not legal
+advice.

@@ -1,9 +1,8 @@
 import {
-  isPublicHttpsUrl,
   isSemanticVersion,
   type ReleaseArtifact,
   type ReleaseManifest,
-} from "../src/lib/releases.ts";
+} from "../packages/shared/releases.ts";
 import { bucketStorageBytes, objectExists, putObject, type R2Credentials } from "./r2.ts";
 
 interface DesktopConfig {
@@ -11,12 +10,15 @@ interface DesktopConfig {
 }
 
 interface ProjectConfig {
-  desktop?: { output?: DesktopConfig["output"] };
+  desktop?: {
+    output?: DesktopConfig["output"];
+    app?: { name?: string; identifier?: string };
+  };
 }
 
-interface BuiltArtifact extends ReleaseArtifact {
+interface BuiltArtifact extends Omit<ReleaseArtifact, "objectKey"> {
   platform: "linux" | "macos" | "windows";
-  key: string;
+  objectKey: string;
   path: string;
 }
 
@@ -127,16 +129,6 @@ function readCredentials(): R2Credentials {
     throw new Error("WRITASAURUS_R2_BUCKET must be a valid 3–63 character bucket name.");
   }
   return credentials;
-}
-
-function releaseBaseUrl(): string {
-  const value = requiredEnv("WRITASAURUS_RELEASES_PUBLIC_URL").replace(/\/+$/, "");
-  if (!isPublicHttpsUrl(value) || new URL(value).pathname !== "/") {
-    throw new Error(
-      "WRITASAURUS_RELEASES_PUBLIC_URL must be an HTTPS origin for the public R2 bucket.",
-    );
-  }
-  return value;
 }
 
 async function runCommand(command: string, args: string[], description: string): Promise<void> {
@@ -305,7 +297,11 @@ function projectPath(path: string): string {
 }
 
 async function buildDesktopTargets(): Promise<Record<"linux" | "macos" | "windows", string>> {
-  await runCommand("deno", ["task", "build"], "Building the web application");
+  await runCommand(
+    "deno",
+    ["task", "--cwd", "apps/desktop", "build"],
+    "Building the desktop web application",
+  );
 
   const config = JSON.parse(await Deno.readTextFile("deno.json")) as ProjectConfig;
   const output = config.desktop?.output;
@@ -322,16 +318,16 @@ async function buildDesktopTargets(): Promise<Record<"linux" | "macos" | "window
     const args = [
       "desktop",
       "--no-check",
-      "--include=dist/",
+      "--include=apps/desktop/dist/",
       `--target=${options.target}`,
       `--output=./${paths[platform]}`,
-      ...(options.icon ? ["--icon=public/desktop-icon.png"] : []),
+      ...(options.icon ? ["--icon=apps/desktop/public/desktop-icon.png"] : []),
       "--allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV",
       "--allow-net",
       "--allow-read",
       "--allow-write",
-      "--allow-run=zenity,kdialog,which,osascript,powershell",
-      "desktop.ts",
+      "--allow-run=zenity,kdialog,which,osascript,powershell,ioreg",
+      "apps/desktop/desktop.ts",
     ];
     await runCommand(
       "deno",
@@ -356,7 +352,6 @@ function toHex(bytes: ArrayBuffer): string {
 async function describeArtifacts(
   version: string,
   paths: Record<"linux" | "macos" | "windows", string>,
-  publicBase: string,
 ): Promise<BuiltArtifact[]> {
   const artifacts: BuiltArtifact[] = [];
   for (const platform of ["linux", "macos", "windows"] as const) {
@@ -387,10 +382,9 @@ async function describeArtifacts(
       platform,
       label: artifactLabels[platform],
       fileName,
-      url: `${publicBase}/${key}`,
+      objectKey: key,
       sizeBytes: info.size,
       sha256,
-      key,
       path,
     });
   }
@@ -399,20 +393,17 @@ async function describeArtifacts(
 
 function makeManifest(
   version: string,
-  publicBase: string,
   artifacts: BuiltArtifact[],
 ): ReleaseManifest {
-  const releaseKey = `${releasePrefix}/v${version}/release.json`;
   const artifactMap = Object.fromEntries(
-    artifacts.map(({ platform, label, fileName, url, sizeBytes, sha256 }) => [
+    artifacts.map(({ platform, label, fileName, objectKey, sizeBytes, sha256 }) => [
       platform,
-      { label, fileName, url, sizeBytes, sha256 },
+      { label, fileName, objectKey, sizeBytes, sha256 },
     ]),
   ) as ReleaseManifest["artifacts"];
   return {
     version,
     releasedAt: new Date().toISOString(),
-    releaseUrl: `${publicBase}/${releaseKey}`,
     artifacts: artifactMap,
   };
 }
@@ -449,6 +440,24 @@ async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<
   console.log("No Cloudflare credentials were read and no R2 API requests or uploads were made.");
 }
 
+async function writeWebsiteReleaseMetadata(
+  version: string,
+  manifest: ReleaseManifest,
+): Promise<void> {
+  const outputDir = `apps/website/public/releases/v${version}`;
+  try {
+    await Deno.stat(`${outputDir}/release.json`);
+    throw new Error(`Website release metadata for ${version} already exists.`);
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+  await Deno.mkdir(outputDir, { recursive: true });
+  await Deno.writeTextFile(
+    `${outputDir}/release.json`,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+}
+
 async function publish(
   manifest: ReleaseManifest,
   artifacts: BuiltArtifact[],
@@ -472,13 +481,13 @@ async function publish(
   for (const artifact of artifacts) {
     const bytes = await Deno.readFile(artifact.path);
     console.log(`Uploading ${artifact.label} (${artifact.sizeBytes.toLocaleString()} bytes)…`);
-    await putObject(credentials, artifact.key, bytes, {
+    await putObject(credentials, artifact.objectKey, bytes, {
       contentType: contentTypes[artifact.fileName.slice(artifact.fileName.lastIndexOf("."))],
       sha256: artifact.sha256,
       immutable: true,
       cacheControl: "public, max-age=31536000, immutable",
     });
-    console.log(`Verified ${artifact.key}`);
+    console.log(`Verified ${artifact.objectKey}`);
   }
 
   const releaseKey = `${releasePrefix}/v${manifest.version}/release.json`;
@@ -490,13 +499,12 @@ async function publish(
   console.log(`Verified ${releaseKey}`);
 
   console.log(
-    `\nPublished Writasaurus ${manifest.version}. Public metadata: ${manifest.releaseUrl}`,
+    `\nPublished Writasaurus ${manifest.version} to private artifact storage.`,
   );
 }
 
 async function main(): Promise<void> {
   const { version, dryRun } = parseArguments(Deno.args);
-  const publicBase = releaseBaseUrl();
   let credentials: R2Credentials | undefined;
   if (!dryRun) {
     credentials = readCredentials();
@@ -507,8 +515,8 @@ async function main(): Promise<void> {
   }
 
   const paths = await buildDesktopTargets();
-  const artifacts = await describeArtifacts(version, paths, publicBase);
-  const manifest = makeManifest(version, publicBase, artifacts);
+  const artifacts = await describeArtifacts(version, paths);
+  const manifest = makeManifest(version, artifacts);
   console.log(`\nRelease ${version}`);
   for (const artifact of artifacts) {
     console.log(
@@ -520,6 +528,8 @@ async function main(): Promise<void> {
     await writeDryRun(version, manifest);
   } else {
     await publish(manifest, artifacts, credentials!);
+    await writeWebsiteReleaseMetadata(version, manifest);
+    console.log("Deploy the website with its new versioned release metadata.");
   }
 }
 

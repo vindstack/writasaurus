@@ -1,0 +1,77 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getSession } from "../lib/auth.ts";
+import { getLicenseStore } from "../lib/store.ts";
+
+const session = await getSession(Astro.request);
+if (session?.role === "admin") return Astro.redirect("/admin");
+const purchases = session?.role === "customer"
+  ? await getLicenseStore().getPurchasesByEmail(session.email)
+  : [];
+const sent = Astro.url.searchParams.get("sent") === "1";
+const status = Astro.url.searchParams.get("status");
+---
+
+<BaseLayout title="Writasaurus account">
+  <main>
+    <a href="/">Writasaurus</a>
+    <h1>Your account</h1>
+    {session?.role !== "customer"
+      ? <>
+        {sent && <p role="status">If that email has a purchase, a sign-in code is on its way.</p>}
+        <form action="/api/auth/request" method="post">
+          <label for="email">Purchase email address</label>
+          <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
+          <button type="submit">Email me a sign-in code</button>
+        </form>
+        {sent && <form action="/api/auth/verify" method="post">
+          <label for="verify-email">Email address</label>
+          <input id="verify-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+          <label for="code">8-digit sign-in code</label>
+          <input id="code" name="code" inputmode="numeric" pattern="[0-9]{8}" required maxlength="8" />
+          <button type="submit">Sign in</button>
+        </form>}
+      </>
+      : <>
+        <p>Signed in as <strong>{session.email}</strong>.</p>
+        {status === "key-sent" && <p role="status">Your license key has been emailed.</p>}
+        {status === "refund-pending" && <p role="status">Your refund request is processing.</p>}
+        {status === "refunded" && <p role="status">The refund has been issued and the license revoked.</p>}
+        {purchases.map((purchase) => {
+          const withinRefundWindow = Date.now() < purchase.purchasedAt.getTime() + 7 * 86_400_000;
+          return <section>
+            <h2>Purchase from {purchase.purchasedAt.toLocaleDateString()}</h2>
+            <p>{(purchase.amountTotal / 100).toFixed(2)} {purchase.currency.toUpperCase()} — {
+              purchase.status
+            }</p>
+            <p>License: {purchase.licenseStatus}; {purchase.maxDevices} devices allowed.</p>
+            {purchase.receiptUrl && <p><a href={purchase.receiptUrl} rel="noreferrer">View receipt</a></p>}
+            {purchase.licenseStatus === "active" && <>
+              <form action="/api/account/key" method="post">
+                <input type="hidden" name="purchaseId" value={purchase.id} />
+                <button type="submit">Email me my license key</button>
+              </form>
+              <form action="/api/download" method="post">
+                <input type="hidden" name="platform" value="linux" />
+                <button type="submit">Download for Linux</button>
+              </form>
+              <form action="/api/download" method="post">
+                <input type="hidden" name="platform" value="macos" />
+                <button type="submit">Download for macOS</button>
+              </form>
+              <form action="/api/download" method="post">
+                <input type="hidden" name="platform" value="windows" />
+                <button type="submit">Download for Windows</button>
+              </form>
+            </>}
+            {withinRefundWindow && purchase.status === "paid" && <form action="/api/account/refund" method="post">
+              <input type="hidden" name="purchaseId" value={purchase.id} />
+              <label><input type="checkbox" name="confirm" value="yes" required /> I understand this will refund the purchase and revoke this license.</label>
+              <button type="submit">Request a refund</button>
+            </form>}
+          </section>;
+        })}
+        <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
+      </>}
+  </main>
+</BaseLayout>

@@ -1,7 +1,19 @@
 {
-  "name": "Writasaurus",
-  "version": "0.1.0",
-  "exports": "./app.ts",
+  "workspace": ["./apps/desktop", "./apps/website", "./packages/shared"],
+  "imports": {
+    "@db/postgres": "jsr:@db/postgres@0.19.5",
+    "@astrojs/check": "npm:@astrojs/check@^0.9.10",
+    "@astrojs/vue": "npm:@astrojs/vue@^7.0.3",
+    "@deno/astro-adapter": "npm:@deno/astro-adapter@^0.6.0",
+    "@types/node": "npm:@types/node@^26.6.4",
+    "astro": "npm:astro@^7.3.5",
+    "harper.js": "npm:harper.js@2.10.0",
+    "playwright": "npm:playwright@^1.63.0",
+    "@preact/signals": "npm:@preact/signals@^2.9.0",
+    "typescript": "npm:typescript@^6.0.3",
+    "vue": "npm:vue@^3.5.43"
+  },
+  "nodeModulesDir": "manual",
   "desktop": {
     "app": {
       "name": "Writasaurus",
@@ -16,13 +28,7 @@
   "compilerOptions": {
     "checkJs": true,
     "strict": true,
-    "lib": [
-      "deno.window",
-      "deno.unstable",
-      "deno.desktop",
-      "dom",
-      "dom.iterable"
-    ]
+    "lib": ["deno.window", "deno.unstable", "deno.desktop", "dom", "dom.iterable"]
   },
   "fmt": {
     "lineWidth": 100,
@@ -35,35 +41,21 @@
     }
   },
   "tasks": {
-    "build": "astro build",
-    "test:browser": "deno task build && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
-    "test": "deno task build && deno test --allow-read --allow-env tests/*_test.ts && deno test --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys=homedir,osRelease tests/browser",
-    "check": "deno fmt --check && deno lint && deno check app.ts desktop.ts desktop.dev.ts server.ts scripts/*.ts tests/*_test.ts tests/browser/*.ts src/pages/api/editor/*.ts src/pages/api/releases/*.ts && astro check && deno task test",
-    "desktop": "deno task build && deno desktop --no-check --include=dist/ --icon=public/desktop-icon.png --allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV --allow-net --allow-read --allow-write --allow-run=zenity,kdialog,which,osascript,powershell desktop.ts",
-    "desktop:dev": "deno desktop --no-check --hmr --icon=public/desktop-icon.png --allow-env --allow-net --allow-read --allow-run=deno desktop.dev.ts",
-    "dev": "deno task --env-file=.env dev:server",
-    "dev:server": "astro dev --host 127.0.0.1 --port 8000",
-    "start": "deno run --allow-env --allow-net --allow-read --allow-write server.ts",
-    "release:desktop": "deno run --env-file=.env --allow-read=deno.json,public/desktop-icon.png,desktop --allow-write=desktop --allow-run=deno --allow-env=WRITASAURUS_R2_ACCOUNT_ID,WRITASAURUS_R2_ACCESS_KEY_ID,WRITASAURUS_R2_SECRET_ACCESS_KEY,WRITASAURUS_R2_BUCKET,WRITASAURUS_RELEASES_PUBLIC_URL scripts/release-desktop.ts",
-    "release:latest": "deno run --env-file=.env --allow-read=public --allow-write=public --allow-env=WRITASAURUS_RELEASES_PUBLIC_URL scripts/prepare-latest.ts"
-  },
-  "imports": {
-    "@astrojs/check": "npm:@astrojs/check@^0.9.10",
-    "@astrojs/vue": "npm:@astrojs/vue@^7.0.3",
-    "@deno/astro-adapter": "npm:@deno/astro-adapter@^0.6.0",
-    "@types/node": "npm:@types/node@^26.6.4",
-    "astro": "npm:astro@^7.3.5",
-    "harper.js": "npm:harper.js@2.10.0",
-    "playwright": "npm:playwright@^1.63.0",
-    "@preact/signals": "npm:@preact/signals@^2.9.0",
-    "typescript": "npm:typescript@^6.0.3",
-    "vue": "npm:vue@^3.5.43"
-  },
-  "nodeModulesDir": "manual",
-  "exclude": ["dist/", ".astro/", "desktop/", "node_modules/"],
-  "deploy": {
-    "org": "vindstack",
-    "app": "writasaurus"
+    "dev": "deno --env-file=.env task --cwd apps/website dev",
+    "dev:server": "deno --env-file=.env task --cwd apps/website dev",
+    "build": "deno task --cwd apps/desktop build && deno task --cwd apps/website build",
+    "desktop:build": "deno task --cwd apps/desktop build",
+    "website:build": "deno task --cwd apps/website build",
+    "start": "deno task --cwd apps/website start",
+    "desktop": "deno task --cwd apps/desktop desktop",
+    "desktop:dev": "deno task --cwd apps/desktop desktop:dev",
+    "test": "deno task --cwd apps/desktop test && deno task --cwd apps/website test",
+    "check": "deno fmt --check apps scripts packages deno.json .env.example README.md && deno lint && deno check scripts/release-desktop.ts scripts/prepare-latest.ts scripts/db-migrate.ts scripts/generate-license-secrets.ts && deno task --cwd apps/desktop check && deno task --cwd apps/website check && deno task test",
+    "license:secrets": "deno run scripts/generate-license-secrets.ts",
+    "db:dev:up": "docker compose up -d --wait postgres",
+    "db:dev:down": "docker compose stop postgres",
+    "db:migrate": "deno run --env-file=.env --allow-env=DATABASE_URL --allow-net --allow-read=apps/website/migrations scripts/db-migrate.ts",
+    "release:desktop": "deno run --env-file=.env --allow-read=deno.json,apps/desktop,desktop --allow-write=apps/desktop/dist,desktop,apps/website/public/releases --allow-run=deno --allow-env=WRITASAURUS_R2_ACCOUNT_ID,WRITASAURUS_R2_ACCESS_KEY_ID,WRITASAURUS_R2_SECRET_ACCESS_KEY,WRITASAURUS_R2_BUCKET scripts/release-desktop.ts",
+    "release:latest": "deno run --allow-read=apps/website/public --allow-write=apps/website/public scripts/prepare-latest.ts"
   }
 }
-

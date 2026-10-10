@@ -1,15 +1,8 @@
+import { isReleaseManifest, isSemanticVersion } from "../packages/shared/releases.ts";
 import { compareVersions } from "./release-desktop.ts";
-import { isPublicHttpsUrl, isReleaseManifest, isSemanticVersion } from "../src/lib/releases.ts";
 
-function releaseBaseUrl(): string {
-  const value = Deno.env.get("WRITASAURUS_RELEASES_PUBLIC_URL")?.trim().replace(/\/+$/, "");
-  if (!value || !isPublicHttpsUrl(value) || new URL(value).pathname !== "/") {
-    throw new Error(
-      "WRITASAURUS_RELEASES_PUBLIC_URL must be an HTTPS origin for the public R2 bucket.",
-    );
-  }
-  return value;
-}
+const websitePublic = "apps/website/public";
+const latestPath = `${websitePublic}/latest.json`;
 
 function releaseVersion(args: string[]): string {
   if (args.length !== 1 || !isSemanticVersion(args[0])) {
@@ -18,78 +11,39 @@ function releaseVersion(args: string[]): string {
   return args[0];
 }
 
-async function fetchReleaseManifest(base: string, version: string): Promise<unknown> {
-  const url = `${base}/releases/v${version}/release.json`;
-  const response = await fetch(url, {
-    redirect: "error",
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (response.status === 404) {
-    throw new Error(`Published release metadata was not found: ${url}`);
-  }
-  if (!response.ok) {
-    throw new Error(`Could not retrieve published release metadata (${response.status}).`);
-  }
-  let manifest: unknown;
+async function readJson(path: string): Promise<unknown | null> {
   try {
-    manifest = await response.json();
-  } catch {
-    throw new Error("Published release metadata is not valid JSON.");
-  }
-  if (!isReleaseManifest(manifest, base) || manifest.version !== version) {
-    throw new Error("Published release metadata does not match the expected release version.");
-  }
-  return manifest;
-}
-
-async function readCurrentLatest(base: string): Promise<unknown | null> {
-  try {
-    const contents = await Deno.readTextFile("public/latest.json");
-    let latest: unknown;
-    try {
-      latest = JSON.parse(contents);
-    } catch {
-      throw new Error("public/latest.json is not valid JSON; refusing to replace it.");
-    }
-    if (!isReleaseManifest(latest, base)) {
-      throw new Error("public/latest.json is invalid; refusing to replace it.");
-    }
-    return latest;
+    return JSON.parse(await Deno.readTextFile(path));
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) return null;
+    if (error instanceof SyntaxError) throw new Error(`${path} is not valid JSON.`);
     throw error;
   }
 }
 
-function ensureNotOlderThanLatest(base: string, version: string, latest: unknown | null): void {
-  if (latest !== null && !isReleaseManifest(latest, base)) {
-    throw new Error("public/latest.json is invalid; refusing to replace it.");
+function ensureNotOlderThanLatest(version: string, latest: unknown | null): void {
+  if (latest !== null && !isReleaseManifest(latest)) {
+    throw new Error(`${latestPath} is invalid; refusing to replace it.`);
   }
   if (latest && compareVersions(version, latest.version) < 0) {
     throw new Error(
-      `Version ${version} is older than public/latest.json version ${latest.version}; ` +
-        "refusing to replace it.",
+      `Version ${version} is older than ${latestPath} version ${latest.version}; refusing to replace it.`,
     );
   }
 }
 
 async function main(): Promise<void> {
   const version = releaseVersion(Deno.args);
-  const base = releaseBaseUrl();
-  const permission = await Deno.permissions.request({
-    name: "net",
-    host: new URL(base).host,
-  });
-  if (permission.state !== "granted") {
-    throw new Error(`Network permission for ${new URL(base).host} was not granted.`);
+  const releasePath = `${websitePublic}/releases/v${version}/release.json`;
+  const manifest = await readJson(releasePath);
+  if (!isReleaseManifest(manifest, version)) {
+    throw new Error(`No valid private-artifact metadata found for Writasaurus ${version}.`);
   }
-
-  const manifest = await fetchReleaseManifest(base, version);
-  ensureNotOlderThanLatest(base, version, await readCurrentLatest(base));
-  const latestPath = "public/latest.json";
+  const latest = await readJson(latestPath);
+  ensureNotOlderThanLatest(version, latest);
   await Deno.writeTextFile(latestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Created ${latestPath} for Writasaurus ${version}.`);
-  console.log("Deploy the updated public/latest.json with the website.");
+  console.log("Deploy the website with the updated version pointer.");
 }
 
 if (import.meta.main) {
@@ -103,4 +57,4 @@ if (import.meta.main) {
   }
 }
 
-export { ensureNotOlderThanLatest, fetchReleaseManifest, readCurrentLatest, releaseVersion };
+export { ensureNotOlderThanLatest, releaseVersion };
