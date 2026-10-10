@@ -1,0 +1,39 @@
+---
+interface Props {
+  href?: string;
+}
+
+const { href } = Astro.props;
+---
+
+{
+  href
+    ? (
+      <a class="brandMark" href={href}>
+        <span>Writasaurus</span>
+      </a>
+    )
+    : (
+      <span class="brandMark">
+        <span>Writasaurus</span>
+      </span>
+    )
+}
+
+<style>
+  .brandMark {
+    align-items: center;
+    color: var(--text);
+    display: inline-flex;
+    font-family: var(--font-display, var(--font-serif));
+    font-size: 1.5rem;
+    font-weight: 750;
+    letter-spacing: -0.025em;
+    line-height: 1;
+    text-decoration: none;
+  }
+
+  a.brandMark:hover {
+    color: var(--accent-strong);
+  }
+</style>

@@ -1,0 +1,91 @@
+---
+import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
+
+interface Props {
+  width?: "narrow" | "wide";
+}
+
+const { width = "narrow" } = Astro.props;
+---
+
+<main class="sitePage">
+  <header class="siteHeader">
+    <BrandMark href="/" />
+  </header>
+  <section class:list={["siteCard", `siteCard--${width}`]}>
+    <slot />
+  </section>
+  <footer class="siteFooter">
+    <span>© Writasaurus</span>
+    <a href="/agreement">Terms and conditions</a>
+  </footer>
+</main>
+
+<style>
+  .sitePage {
+    display: flex;
+    flex-direction: column;
+    margin-inline: auto;
+    max-width: 78rem;
+    min-height: 100vh;
+    padding: 1.25rem clamp(1rem, 5vw, 4rem);
+  }
+
+  .siteHeader,
+  .siteFooter {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .siteFooter {
+    color: var(--muted);
+    font-size: 0.85rem;
+    margin-top: auto;
+    padding-top: 1.25rem;
+  }
+
+  .siteFooter a {
+    color: inherit;
+  }
+
+  .siteCard {
+    align-content: start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-sm);
+    display: grid;
+    gap: 1.25rem;
+    margin: 2.5rem auto;
+    padding: clamp(1.25rem, 4vw, 2.5rem);
+    width: 100%;
+  }
+
+  .siteCard--narrow {
+    max-width: 40rem;
+  }
+
+  .siteCard--wide {
+    max-width: 70rem;
+  }
+
+  .siteCard :global(form) {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .siteCard :global(section) {
+    border-top: 1px solid var(--border);
+    display: grid;
+    gap: 0.75rem;
+    padding-top: 1.25rem;
+  }
+
+  @media (max-width: 40rem) {
+    .siteCard {
+      gap: 1rem;
+      margin-block: 1.5rem;
+    }
+  }
+</style>

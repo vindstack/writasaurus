@@ -6,7 +6,7 @@
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
-  line-height: 1.55;
+  line-height: 1.6;
   scroll-behavior: smooth;
 }
 
@@ -21,14 +21,18 @@
   text-wrap: balance;
 }
 
+:where(h1, h2, h3) {
+  font-family: var(--font-display, var(--font-serif));
+}
+
 :where(h1) {
   font-size: clamp(2rem, 5vw, 3.25rem);
-  letter-spacing: -0.035em;
+  letter-spacing: -0.025em;
 }
 
 :where(h2) {
   font-size: clamp(1.5rem, 3vw, 2.25rem);
-  letter-spacing: -0.025em;
+  letter-spacing: -0.015em;
 }
 
 :where(h3) {
@@ -54,7 +58,7 @@
 }
 
 :where(a:hover) {
-  color: var(--accent);
+  color: var(--accent-warm);
 }
 
 :where(:focus-visible) {
@@ -69,7 +73,13 @@
   color: var(--text);
   min-height: 2.5rem;
   padding: 0.5rem 0.75rem;
+  transition: border-color 140ms ease, box-shadow 140ms ease;
   width: 100%;
+}
+
+:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 :where(input, select, textarea)::placeholder {

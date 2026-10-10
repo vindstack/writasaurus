@@ -32,15 +32,17 @@
   opacity: 0.55;
 }
 
-:where(.button--primary, button[data-variant="primary"]) {
+.button--primary,
+button[data-variant="primary"] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-text);
 }
 
-:where(.button--primary, button[data-variant="primary"]):hover:not(:disabled, [aria-disabled="true"]) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+.button--primary:hover:not(:disabled, [aria-disabled="true"]),
+button[data-variant="primary"]:hover:not(:disabled, [aria-disabled="true"]) {
+  background: var(--accent-warm);
+  border-color: var(--accent-warm);
   color: var(--accent-text);
 }
 
@@ -64,7 +66,8 @@
   width: 100%;
 }
 
-:where(.button--danger, button[data-variant="danger"]) {
+.button--danger,
+button[data-variant="danger"] {
   background: var(--danger);
   border-color: var(--danger);
   color: var(--surface);

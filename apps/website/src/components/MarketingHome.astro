@@ -1,70 +1,65 @@
+---
+import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
+---
+
 <main class="page">
     <header class="header">
-        <a class="brand" href="/" aria-label="Writasaurus home">
-            Writasaurus
-        </a>
-        <div class="headerActions">
-            <a class="headerLink" href="/account">Sign in</a>
-        </div>
+        <BrandMark href="/" />
+        <a class="headerLink" href="/account">Already purchased? Sign in</a>
     </header>
 
     <section class="hero" aria-labelledby="hero-title">
         <div class="copy">
-            <p class="eyebrow">Private writing software</p>
-            <h1 id="hero-title">
-                A quiet, private space for your next chapter.
-            </h1>
+            <p class="eyebrow">Quiet focus. Big writing ambitions.</p>
+            <h1 id="hero-title">Make room for the novel inside you.</h1>
             <p class="intro">
-                Writasaurus gives fiction and nonfiction writers a focused place
-                for long-form work. Organize chapters, track word counts and
-                daily goals, then export an EPUB when you're ready to share or
-                publish.
+                A calm, private place to build a book one chapter at a time.
+                Keep your drafts organized, your momentum steady, and your
+                manuscript right where it belongs: with you.
             </p>
             <div class="purchaseActions">
                 <a class="button button--primary purchaseButton" href="/checkout">
-                    Buy Writasaurus — $59.99 USD
+                    Get Writasaurus — $59.99 USD
                 </a>
-                <a class="headerLink" href="/account">Already purchased? Sign in</a>
+                <p class="licenseNote">
+                    One-time purchase. Personal license for up to two devices.{" "}
+                    <a href="/agreement">Terms apply.</a>
+                </p>
             </div>
-            <p class="licenseNote">
-                One-time purchase. Includes a personal license for up to two devices. Your
-                manuscripts and EPUBs remain yours. Refunds may be requested within seven days of
-                purchase; <a href="/agreement">terms apply</a>.
-            </p>
         </div>
         <div class="art" aria-hidden="true">
             <div class="paper">
-                <span class="paperLabel">A NEW CHAPTER</span>
-                <span class="line" />
-                <span class="line" />
-                <span class="lineShort" />
-                <span class="chapter">01</span>
+                <div class="paperTop">
+                    <span class="paperLabel">WRITASAURUS · FIELD NOTES</span>
+                    <span class="paperNumber">01</span>
+                </div>
+                <div class="rule" />
+                <p class="chapter">Chapter One</p>
+                <p class="chapterTitle">A beginning<br />of your own.</p>
+                <div class="textLines">
+                    <span />
+                    <span />
+                    <span class="shortLine" />
+                </div>
             </div>
-            <span class="spark">✦</span>
         </div>
     </section>
 
     <section class="features" aria-label="Writasaurus features">
         <article>
-            <h2>Made for long drafts</h2>
-            <p>
-                Organize chapters, track word counts, and set daily writing
-                goals to keep your momentum.
-            </p>
+            <span class="featureIndex">01</span>
+            <h2>A novel's worth of order</h2>
+            <p>Chapters, word counts, and gentle daily goals—all in one focused place.</p>
         </article>
         <article>
-            <h2>Private by design</h2>
-            <p>
-                Your manuscripts stay on your device and are never used to train AI.
-                An account is used only for purchases, licensing, and downloads.
-            </p>
+            <span class="featureIndex">02</span>
+            <h2>Your pages stay yours</h2>
+            <p>Your manuscript stays on your device and is never used to train AI.</p>
         </article>
         <article>
-            <h2>Your work, your files</h2>
-            <p>
-                Save your manuscript as Markdown and export an EPUB you can
-                share or publish.
-            </p>
+            <span class="featureIndex">03</span>
+            <h2>Ready when you are</h2>
+            <p>Keep a Markdown copy, then export an EPUB when it is time to share.</p>
         </article>
     </section>
 
@@ -78,14 +73,14 @@
     .page {
         background:
             radial-gradient(
-                ellipse at 78% 24%,
-                color-mix(in srgb, var(--accent) 22%, transparent),
-                transparent 33rem
+                ellipse at 80% 20%,
+                color-mix(in srgb, var(--accent-warm) 9%, transparent),
+                transparent 34rem
             ),
             var(--bg);
         color: var(--text);
         min-height: 100vh;
-        padding: 1.25rem clamp(1.25rem, 6vw, 6rem) 1rem;
+        padding: 1.5rem clamp(1.5rem, 6vw, 6rem) 1.25rem;
     }
 
     .header,
@@ -95,35 +90,6 @@
         justify-content: space-between;
         margin: 0 auto;
         max-width: 74rem;
-    }
-
-    .headerActions {
-        align-items: center;
-        display: flex;
-        gap: 1.25rem;
-    }
-
-    .purchaseActions {
-        align-items: flex-start;
-        display: flex;
-        flex-direction: column;
-        gap: 0.65rem;
-        margin-top: 1rem;
-    }
-
-    .purchaseButton {
-        color: #fff;
-        min-height: 3rem;
-        padding: 0.7rem 1.2rem;
-    }
-
-    .brand {
-        color: var(--accent-strong);
-        font-family: var(--font-display);
-        font-size: 1.5rem;
-        font-weight: 800;
-        letter-spacing: -0.04em;
-        text-decoration: none;
     }
 
     .headerLink,
@@ -138,7 +104,7 @@
         display: grid;
         gap: clamp(2rem, 5vw, 5rem);
         grid-template-columns: minmax(0, 1.1fr) minmax(16rem, 0.9fr);
-        margin: 1.75rem auto 1.5rem;
+        margin: 2.25rem auto 1.75rem;
         max-width: 66rem;
     }
 
@@ -147,10 +113,10 @@
     }
 
     .eyebrow {
-        color: var(--accent);
-        font-size: 0.8rem;
-        font-weight: 750;
-        letter-spacing: 0.12em;
+        color: var(--accent-warm);
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.09em;
         margin-bottom: 1rem;
         text-transform: uppercase;
     }
@@ -158,26 +124,39 @@
     .copy h1 {
         color: var(--accent-strong);
         font-family: var(--font-display);
-        font-size: clamp(2.8rem, 4.8vw, 3.9rem);
+        font-size: clamp(2.9rem, 5.4vw, 4.4rem);
         font-weight: 650;
-        letter-spacing: -0.045em;
-        line-height: 0.98;
-        max-width: 12ch;
+        letter-spacing: -0.035em;
+        line-height: 0.99;
+        max-width: 11ch;
     }
 
     .intro {
         color: var(--muted);
-        font-size: clamp(1rem, 1.4vw, 1.15rem);
-        line-height: 1.55;
-        margin: 1rem 0;
-        max-width: 37rem;
+        font-size: clamp(1rem, 1.3vw, 1.12rem);
+        line-height: 1.65;
+        margin: 1.25rem 0;
+        max-width: 35rem;
+    }
+
+    .purchaseActions {
+        align-items: flex-start;
+        display: flex;
+        flex-direction: column;
+        gap: 0.8rem;
+        margin-top: 1.25rem;
+    }
+
+    .purchaseButton {
+        color: var(--accent-text);
+        min-height: 3rem;
+        padding: 0.7rem 1.2rem;
     }
 
     .licenseNote {
         color: var(--muted);
         font-size: 0.82rem;
         line-height: 1.4;
-        margin: 0 0 0.5rem;
         max-width: 35rem;
     }
 
@@ -196,96 +175,118 @@
 
     .paper {
         background: var(--surface);
-        border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-        border-radius: 0.35rem 1.3rem 0.35rem 0.35rem;
-        box-shadow: 1.4rem 1.8rem 3.2rem
-            color-mix(in srgb, var(--text) 17%, transparent);
-        display: flex;
-        flex-direction: column;
-        height: 16rem;
-        justify-content: center;
-        padding: 2rem;
+        border: 1px solid var(--border);
+        border-radius: 0.2rem 1.1rem 0.2rem 0.2rem;
+        box-shadow: 0 1.2rem 2.5rem color-mix(in srgb, var(--text) 12%, transparent);
+        min-height: 17rem;
+        padding: 1.8rem 2rem;
         position: relative;
-        transform: rotate(3deg);
-        width: min(100%, 17rem);
+        transform: rotate(2deg);
+        width: min(100%, 22rem);
     }
 
-    .paperLabel {
-        color: color-mix(in srgb, var(--muted) 72%, var(--surface));
-        font-size: 0.65rem;
-        font-weight: 750;
-        letter-spacing: 0.15em;
-        margin-bottom: 1.8rem;
+    .paperTop {
+        align-items: center;
+        color: var(--muted);
+        display: flex;
+        font-size: 0.58rem;
+        font-weight: 700;
+        justify-content: space-between;
+        letter-spacing: 0.12em;
     }
 
-    .line,
-    .lineShort {
-        background: color-mix(in srgb, var(--muted) 34%, var(--surface));
-        border-radius: 1rem;
-        height: 0.45rem;
-        margin-bottom: 0.85rem;
-        width: 100%;
+    .paperNumber {
+        color: var(--accent-warm);
+        font-family: var(--font-display);
+        font-size: 1.1rem;
+        letter-spacing: 0;
     }
 
-    .lineShort {
-        width: 67%;
+    .rule {
+        background: var(--border);
+        height: 1px;
+        margin: 0.75rem 0 1.3rem;
     }
 
     .chapter {
-        color: color-mix(in srgb, var(--accent) 32%, transparent);
+        color: var(--accent-warm);
         font-family: var(--font-display);
-        font-size: 6rem;
-        font-weight: 800;
-        line-height: 1;
-        position: absolute;
-        right: 1.5rem;
-        top: 6rem;
+        font-size: 0.95rem;
+        font-style: italic;
+        margin-bottom: 0.3rem;
     }
 
-    .spark {
-        color: var(--focus-ring);
-        font-size: 3rem;
-        position: absolute;
-        right: 8%;
-        top: 12%;
+    .chapterTitle {
+        color: var(--accent-strong);
+        font-family: var(--font-display);
+        font-size: 1.8rem;
+        font-weight: 650;
+        line-height: 1.02;
+        max-width: 11ch;
+    }
+
+    .textLines {
+        display: grid;
+        gap: 0.45rem;
+        margin-top: 1.2rem;
+        width: 100%;
+    }
+
+    .textLines span {
+        background: color-mix(in srgb, var(--muted) 35%, var(--surface));
+        border-radius: 999px;
+        height: 0.28rem;
+    }
+
+    .textLines .shortLine {
+        width: 62%;
     }
 
     .features {
         border-bottom: 1px solid var(--border);
         border-top: 1px solid var(--border);
         display: grid;
-        gap: 1.75rem;
+        gap: 2rem;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        margin: 0 auto;
+        margin: 1.5rem auto 0;
         max-width: 74rem;
-        padding: 1.25rem 0;
+        padding: 1.5rem 0;
+    }
+
+    .featureIndex {
+        color: var(--accent-warm);
+        display: block;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        margin-bottom: 0.25rem;
     }
 
     .features h2 {
         color: var(--accent-strong);
         font-family: var(--font-display);
-        font-size: 1.2rem;
-        margin-bottom: 0.45rem;
+        font-size: 1.25rem;
+        margin-bottom: 0.35rem;
     }
 
     .features p {
         color: var(--muted);
-        font-size: 0.95rem;
-        line-height: 1.45;
+        font-size: 0.9rem;
+        line-height: 1.6;
         max-width: 22rem;
     }
 
     .footer {
         color: var(--muted);
         font-size: 0.85rem;
-        margin-top: 0.75rem;
+        margin-top: 1rem;
     }
 
     @media (max-width: 48rem) {
         .hero {
-            gap: 1.5rem;
+            gap: 1rem;
             grid-template-columns: 1fr;
-            margin: 1rem auto 0.75rem;
+            margin: 1.75rem auto 1.25rem;
         }
 
         .art {
@@ -293,9 +294,14 @@
         }
 
         .features {
-            gap: 1rem;
+            gap: 1.25rem;
             grid-template-columns: 1fr;
-            padding: 0.75rem 0;
+            margin-top: 1rem;
+            padding: 1.25rem 0;
+        }
+
+        .features p {
+            font-size: 0.86rem;
         }
     }
 
@@ -303,43 +309,30 @@
         .page {
             padding-left: 1rem;
             padding-right: 1rem;
+            padding-top: 1rem;
         }
 
-        .hero {
-            margin-top: 1.5rem;
-        }
-
-        .headerActions {
-            align-items: flex-end;
-            flex-direction: column;
-            gap: 0.65rem;
+        .headerLink {
+            max-width: 7.5rem;
+            text-align: right;
         }
 
         .copy h1 {
-            font-size: clamp(2.7rem, 12vw, 3.5rem);
+            font-size: clamp(2.6rem, 11.5vw, 3.3rem);
         }
 
         .intro {
-            line-height: 1.4;
-            margin: 0.75rem 0;
+            line-height: 1.5;
+            margin: 0.85rem 0;
         }
 
         .purchaseActions {
-            gap: 0.5rem;
-            margin-top: 0.75rem;
+            gap: 0.65rem;
+            margin-top: 1rem;
         }
 
         .licenseNote {
-            font-size: 0.75rem;
-            line-height: 1.3;
-        }
-
-        .features h2 {
-            font-size: 1.1rem;
-        }
-
-        .features p {
-            font-size: 0.85rem;
+            font-size: 0.78rem;
             line-height: 1.35;
         }
     }
