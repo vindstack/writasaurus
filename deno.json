@@ -55,7 +55,7 @@
     "db:dev:up": "docker compose up -d --wait postgres",
     "db:dev:down": "docker compose stop postgres",
     "db:migrate": "deno run --env-file=.env --allow-env=DATABASE_URL --allow-net --allow-read=apps/website/migrations scripts/db-migrate.ts",
-    "release:desktop": "deno run --env-file=.env --allow-read=deno.json,apps/desktop,desktop --allow-write=apps/desktop/dist,desktop,apps/website/public/releases --allow-run=deno --allow-env=WRITASAURUS_R2_ACCOUNT_ID,WRITASAURUS_R2_ACCESS_KEY_ID,WRITASAURUS_R2_SECRET_ACCESS_KEY,WRITASAURUS_R2_BUCKET scripts/release-desktop.ts",
+    "release:desktop": "deno run --env-file=.env --allow-read=deno.json,apps/desktop,desktop,apps/website/public --allow-write=apps/desktop/dist,desktop,apps/website/public --allow-run=deno --allow-env=WRITASAURUS_R2_ACCOUNT_ID,WRITASAURUS_R2_ACCESS_KEY_ID,WRITASAURUS_R2_SECRET_ACCESS_KEY,WRITASAURUS_R2_BUCKET,WRITASAURUS_R2_PUBLIC_BASE_URL scripts/release-desktop.ts",
     "release:latest": "deno run --allow-read=apps/website/public --allow-write=apps/website/public scripts/prepare-latest.ts"
   }
 }

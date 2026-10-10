@@ -88,28 +88,29 @@ signing pair and other application secrets with `deno task license:secrets`; cop
 `LICENSE_SIGNING_PRIVATE_KEY` to the website's secret configuration and
 `PUBLIC_LICENSE_SIGNING_PUBLIC_KEY` to the desktop build environment.
 
-## Gated desktop releases
+## Public desktop downloads
 
-Create a private Cloudflare R2 bucket for downloadable release artifacts. For local publishing, copy
-`.env.example` to `.env` and set the R2 account ID, access key ID, secret access key, and bucket
-name. Publish an immutable semantic version:
+Create a Cloudflare R2 bucket for downloadable release artifacts and expose it through a public
+HTTPS custom domain. For local publishing, copy `.env.example` to `.env` and set the R2 account ID,
+access key ID, secret access key, bucket name, and the public base URL for that domain. Keep R2
+credentials local; they are only used by the release command. Build and publish an immutable
+semantic version:
 
 ```sh
 deno task release:desktop 1.2.3
 ```
 
-The release task builds Linux, Apple Silicon macOS, and Windows desktop packages and uploads the
-artifacts and release metadata to private R2 storage. It also writes public-safe metadata containing
-object keys, not artifact URLs, to `apps/website/public/releases/v<version>/release.json`. Update
-the site's latest-release pointer and deploy the website:
+The release task builds the Linux AppImage, Apple Silicon macOS archive, and Windows MSI; validates
+the package signatures; generates a `SHA256SUMS.txt`; and uploads the artifacts and versioned
+metadata to R2. Uploads are verified and version paths cannot be overwritten. The task writes
+`apps/website/public/releases/v<version>/release.json` and updates `apps/website/public/latest.json`
+with public artifact URLs. Review and deploy the website to publish the latest release links. Use
+`--dry-run` to build, validate, and preview the release metadata without reading R2 credentials or
+uploading. Existing immutable version paths cannot be republished.
 
-```sh
-deno task release:latest 1.2.3
-```
-
-The account's authenticated download endpoint checks for an active paid license and returns a
-short-lived signed R2 URL. Do not make the artifact bucket public or expose its object URLs through
-the website.
+The marketing page reads `latest.json` and presents direct downloads for Linux, macOS, and Windows.
+The account's authenticated download endpoint remains available and checks for an active paid
+license before returning a short-lived signed R2 URL.
 
 ## Data and security
 

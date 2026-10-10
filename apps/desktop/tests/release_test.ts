@@ -3,6 +3,7 @@ import {
   desktopTargets,
   parseArguments,
   projectPath,
+  validateArtifact,
 } from "../../../scripts/release-desktop.ts";
 import { ensureNotOlderThanLatest, releaseVersion } from "../../../scripts/prepare-latest.ts";
 import { parseBucketListing, type R2Credentials, signR2Request } from "../../../scripts/r2.ts";
@@ -26,6 +27,7 @@ function testManifest(): ReleaseManifest {
         label: "Linux",
         fileName: "Writasaurus.AppImage",
         objectKey: `${prefix}Writasaurus.AppImage`,
+        downloadUrl: `https://downloads.example.com/${prefix}Writasaurus.AppImage`,
         sizeBytes: 42,
         sha256: "a".repeat(64),
       },
@@ -33,6 +35,7 @@ function testManifest(): ReleaseManifest {
         label: "macOS",
         fileName: "Writasaurus-macos.tar.gz",
         objectKey: `${prefix}Writasaurus-macos.tar.gz`,
+        downloadUrl: `https://downloads.example.com/${prefix}Writasaurus-macos.tar.gz`,
         sizeBytes: 42,
         sha256: "a".repeat(64),
       },
@@ -40,9 +43,16 @@ function testManifest(): ReleaseManifest {
         label: "Windows",
         fileName: "Writasaurus.msi",
         objectKey: `${prefix}Writasaurus.msi`,
+        downloadUrl: `https://downloads.example.com/${prefix}Writasaurus.msi`,
         sizeBytes: 42,
         sha256: "a".repeat(64),
       },
+    },
+    checksums: {
+      fileName: "SHA256SUMS.txt",
+      objectKey: `${prefix}SHA256SUMS.txt`,
+      downloadUrl: `https://downloads.example.com/${prefix}SHA256SUMS.txt`,
+      sha256: "b".repeat(64),
     },
   };
 }
@@ -79,7 +89,7 @@ Deno.test("release: constrains artifact paths and maps cross-compilation targets
   assert(desktopTargets.windows.target === "x86_64-pc-windows-msvc");
 });
 
-Deno.test("release: validates private artifact metadata without public download URLs", () => {
+Deno.test("release: validates public artifact URLs and immutable metadata", () => {
   const manifest = testManifest();
   assert(isReleaseManifest(manifest, "1.0.0"));
   const wrongVersion: unknown = { ...manifest, version: "2.0.0" };
@@ -94,7 +104,37 @@ Deno.test("release: validates private artifact metadata without public download 
   assert(
     !isReleaseManifest(invalidArtifact),
   );
+  const invalidUrl: unknown = {
+    ...manifest,
+    artifacts: {
+      ...manifest.artifacts,
+      linux: {
+        ...manifest.artifacts.linux,
+        downloadUrl: "https://downloads.example.com/releases/v2.0.0/Writasaurus.AppImage",
+      },
+    },
+  };
+  assert(!isReleaseManifest(invalidUrl));
   assert(!Object.hasOwn(manifest.artifacts.linux, "url"));
+});
+
+Deno.test("release: validates desktop package file signatures", () => {
+  const appImage = new Uint8Array(11);
+  appImage.set([0x41, 0x49], 8);
+  validateArtifact("linux", appImage, "Writasaurus.AppImage");
+  validateArtifact("macos", new Uint8Array([0x1f, 0x8b, 0x08]), "Writasaurus-macos.tar.gz");
+  validateArtifact(
+    "windows",
+    new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0]),
+    "Writasaurus.msi",
+  );
+  let rejected = false;
+  try {
+    validateArtifact("windows", new Uint8Array([1, 2, 3]), "Writasaurus.msi");
+  } catch {
+    rejected = true;
+  }
+  assert(rejected, "Expected the Windows package signature to be validated");
 });
 
 Deno.test("release: prevents downgrading latest metadata", () => {

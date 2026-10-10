@@ -1,4 +1,5 @@
 import {
+  isReleaseManifest,
   isSemanticVersion,
   type ReleaseArtifact,
   type ReleaseManifest,
@@ -40,7 +41,9 @@ const contentTypes: Record<string, string> = {
   ".AppImage": "application/vnd.appimage",
   ".gz": "application/gzip",
   ".msi": "application/x-msi",
+  ".txt": "text/plain; charset=utf-8",
 };
+const latestPath = "apps/website/public/latest.json";
 
 function usage(): string {
   return "Usage: deno task release:desktop <version> [--dry-run]\n" +
@@ -129,6 +132,28 @@ function readCredentials(): R2Credentials {
     throw new Error("WRITASAURUS_R2_BUCKET must be a valid 3–63 character bucket name.");
   }
   return credentials;
+}
+
+function publicBaseUrl(): URL {
+  const value = requiredEnv("WRITASAURUS_R2_PUBLIC_BASE_URL");
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a valid HTTPS URL.");
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
+    throw new Error(
+      "WRITASAURUS_R2_PUBLIC_BASE_URL must be an HTTPS URL without credentials, query, or fragment.",
+    );
+  }
+  url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
+  return url;
+}
+
+function publicDownloadUrl(base: URL, objectKey: string): string {
+  const suffix = objectKey.split("/").map(encodeURIComponent).join("/");
+  return new URL(suffix, base).toString();
 }
 
 async function runCommand(command: string, args: string[], description: string): Promise<void> {
@@ -352,6 +377,7 @@ function toHex(bytes: ArrayBuffer): string {
 async function describeArtifacts(
   version: string,
   paths: Record<"linux" | "macos" | "windows", string>,
+  publicUrlBase: URL,
 ): Promise<BuiltArtifact[]> {
   const artifacts: BuiltArtifact[] = [];
   for (const platform of ["linux", "macos", "windows"] as const) {
@@ -376,6 +402,7 @@ async function describeArtifacts(
     const contentType = contentTypes[extension];
     if (!contentType) throw new Error(`Unsupported Desktop package extension: ${extension}`);
     const bytes = await Deno.readFile(path);
+    validateArtifact(platform, bytes, path);
     const sha256 = toHex(await crypto.subtle.digest("SHA-256", bytes));
     const key = `${releasePrefix}/v${version}/${fileName}`;
     artifacts.push({
@@ -383,6 +410,7 @@ async function describeArtifacts(
       label: artifactLabels[platform],
       fileName,
       objectKey: key,
+      downloadUrl: publicDownloadUrl(publicUrlBase, key),
       sizeBytes: info.size,
       sha256,
       path,
@@ -391,20 +419,51 @@ async function describeArtifacts(
   return artifacts;
 }
 
-function makeManifest(
+function validateArtifact(platform: ReleasePlatform, bytes: Uint8Array, path: string): void {
+  const valid = platform === "linux"
+    ? bytes.length > 10 && bytes[8] === 0x41 && bytes[9] === 0x49
+    : platform === "macos"
+    ? bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b
+    : bytes.length > 8 &&
+      [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((value, index) =>
+        bytes[index] === value
+      );
+  if (!valid) {
+    throw new Error(
+      `The ${artifactLabels[platform]} package has an invalid file signature: ${path}`,
+    );
+  }
+}
+
+function makeChecksums(artifacts: BuiltArtifact[]): string {
+  return `${artifacts.map((artifact) => `${artifact.sha256}  ${artifact.fileName}`).join("\n")}\n`;
+}
+
+async function makeManifest(
   version: string,
   artifacts: BuiltArtifact[],
-): ReleaseManifest {
+  checksums: string,
+  publicUrlBase: URL,
+): Promise<ReleaseManifest> {
   const artifactMap = Object.fromEntries(
-    artifacts.map(({ platform, label, fileName, objectKey, sizeBytes, sha256 }) => [
+    artifacts.map(({ platform, label, fileName, objectKey, downloadUrl, sizeBytes, sha256 }) => [
       platform,
-      { label, fileName, objectKey, sizeBytes, sha256 },
+      { label, fileName, objectKey, downloadUrl, sizeBytes, sha256 },
     ]),
   ) as ReleaseManifest["artifacts"];
+  const checksumsKey = `${releasePrefix}/v${version}/SHA256SUMS.txt`;
   return {
     version,
     releasedAt: new Date().toISOString(),
     artifacts: artifactMap,
+    checksums: {
+      fileName: "SHA256SUMS.txt",
+      objectKey: checksumsKey,
+      downloadUrl: publicDownloadUrl(publicUrlBase, checksumsKey),
+      sha256: toHex(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(checksums)),
+      ),
+    },
   };
 }
 
@@ -412,11 +471,22 @@ async function verifyNotPublished(
   version: string,
   credentials: R2Credentials,
 ): Promise<void> {
-  const releaseKey = `${releasePrefix}/v${version}/release.json`;
-  if (await objectExists(credentials, releaseKey)) {
+  const versionPrefix = `${releasePrefix}/v${version}/`;
+  const keys = [
+    `${versionPrefix}Writasaurus.AppImage`,
+    `${versionPrefix}Writasaurus-macos.tar.gz`,
+    `${versionPrefix}Writasaurus.msi`,
+    `${versionPrefix}SHA256SUMS.txt`,
+    `${versionPrefix}release.json`,
+  ];
+  const existingKeys: string[] = [];
+  for (const key of keys) {
+    if (await objectExists(credentials, key)) existingKeys.push(key);
+  }
+  if (existingKeys.length > 0) {
     throw new Error(
-      `Version ${version} is already published; release paths are immutable. ` +
-        `If needed, run: deno task release:latest ${version}`,
+      `Release paths for version ${version} already exist in R2 (${existingKeys.join(", ")}). ` +
+        "They are immutable; remove incomplete orphan objects or publish a new version.",
     );
   }
 }
@@ -436,13 +506,59 @@ async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<
   await Deno.mkdir(outputDir, { recursive: true });
   const json = `${JSON.stringify(manifest, null, 2)}\n`;
   await Deno.writeTextFile(`${outputDir}/release.json`, json);
+  await Deno.writeTextFile(`${outputDir}/SHA256SUMS.txt`, makeChecksumsFromManifest(manifest));
   console.log(`Dry run complete. Metadata preview: ${outputDir}/release.json`);
   console.log("No Cloudflare credentials were read and no R2 API requests or uploads were made.");
+}
+
+function makeChecksumsFromManifest(manifest: ReleaseManifest): string {
+  return `${
+    (["linux", "macos", "windows"] as const).map((platform) => {
+      const artifact = manifest.artifacts[platform];
+      return `${artifact.sha256}  ${artifact.fileName}`;
+    }).join("\n")
+  }\n`;
+}
+
+async function readLocalLatest(): Promise<ReleaseManifest | null> {
+  let contents: string;
+  try {
+    contents = await Deno.readTextFile(latestPath);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return null;
+    throw error;
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(contents);
+  } catch {
+    throw new Error(`${latestPath} is not valid JSON; refusing to publish.`);
+  }
+  if (!isReleaseManifest(value)) {
+    throw new Error(`${latestPath} is invalid; refusing to publish.`);
+  }
+  return value;
+}
+
+async function assertNewReleaseVersion(version: string): Promise<void> {
+  const latest = await readLocalLatest();
+  if (latest && compareVersions(version, latest.version) <= 0) {
+    throw new Error(
+      `Version ${version} must be newer than current latest version ${latest.version}.`,
+    );
+  }
+  try {
+    await Deno.stat(`apps/website/public/releases/v${version}/release.json`);
+    throw new Error(`Version ${version} already has local release metadata.`);
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
 }
 
 async function writeWebsiteReleaseMetadata(
   version: string,
   manifest: ReleaseManifest,
+  checksums: string,
 ): Promise<void> {
   const outputDir = `apps/website/public/releases/v${version}`;
   try {
@@ -456,6 +572,10 @@ async function writeWebsiteReleaseMetadata(
     `${outputDir}/release.json`,
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
+  await Deno.writeTextFile(`${outputDir}/SHA256SUMS.txt`, checksums);
+  const tempPath = `${latestPath}.tmp`;
+  await Deno.writeTextFile(tempPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await Deno.rename(tempPath, latestPath);
 }
 
 async function publish(
@@ -464,9 +584,10 @@ async function publish(
   credentials: R2Credentials,
 ): Promise<void> {
   const releaseBytes = new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
+  const checksumBytes = new TextEncoder().encode(makeChecksumsFromManifest(manifest));
   const currentStorage = await bucketStorageBytes(credentials);
   const addedBytes = artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
-    releaseBytes.byteLength;
+    releaseBytes.byteLength + checksumBytes.byteLength;
   if (currentStorage + addedBytes > R2_FREE_STORAGE_BYTES) {
     throw new Error(
       `Publishing would exceed the 10 GB R2 free storage allowance ` +
@@ -491,6 +612,19 @@ async function publish(
   }
 
   const releaseKey = `${releasePrefix}/v${manifest.version}/release.json`;
+  await putObject(
+    credentials,
+    manifest.checksums.objectKey,
+    checksumBytes,
+    {
+      contentType: contentTypes[".txt"],
+      sha256: manifest.checksums.sha256,
+      immutable: true,
+      cacheControl: "public, max-age=31536000, immutable",
+    },
+  );
+  console.log(`Verified ${manifest.checksums.objectKey}`);
+
   await putObject(credentials, releaseKey, releaseBytes, {
     contentType: "application/json",
     immutable: true,
@@ -498,13 +632,13 @@ async function publish(
   });
   console.log(`Verified ${releaseKey}`);
 
-  console.log(
-    `\nPublished Writasaurus ${manifest.version} to private artifact storage.`,
-  );
+  console.log(`\nPublished Writasaurus ${manifest.version} to public artifact storage.`);
 }
 
 async function main(): Promise<void> {
   const { version, dryRun } = parseArguments(Deno.args);
+  const publicUrlBase = publicBaseUrl();
+  await assertNewReleaseVersion(version);
   let credentials: R2Credentials | undefined;
   if (!dryRun) {
     credentials = readCredentials();
@@ -515,8 +649,12 @@ async function main(): Promise<void> {
   }
 
   const paths = await buildDesktopTargets();
-  const artifacts = await describeArtifacts(version, paths);
-  const manifest = makeManifest(version, artifacts);
+  const artifacts = await describeArtifacts(version, paths, publicUrlBase);
+  const checksums = makeChecksums(artifacts);
+  const manifest = await makeManifest(version, artifacts, checksums, publicUrlBase);
+  if (!isReleaseManifest(manifest, version)) {
+    throw new Error("Generated release metadata does not match the required artifact manifest.");
+  }
   console.log(`\nRelease ${version}`);
   for (const artifact of artifacts) {
     console.log(
@@ -528,8 +666,8 @@ async function main(): Promise<void> {
     await writeDryRun(version, manifest);
   } else {
     await publish(manifest, artifacts, credentials!);
-    await writeWebsiteReleaseMetadata(version, manifest);
-    console.log("Deploy the website with its new versioned release metadata.");
+    await writeWebsiteReleaseMetadata(version, manifest, checksums);
+    console.log(`Updated ${latestPath}; deploy the website to publish the release links.`);
   }
 }
 
@@ -542,4 +680,13 @@ if (import.meta.main) {
   }
 }
 
-export { desktopTargets, makeManifest, parseArguments, parseVersion, projectPath };
+export {
+  desktopTargets,
+  makeChecksums,
+  makeManifest,
+  parseArguments,
+  parseVersion,
+  projectPath,
+  publicDownloadUrl,
+  validateArtifact,
+};

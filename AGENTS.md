@@ -36,7 +36,7 @@ Writasaurus is a local-first manuscript editor with an Astro app and two launch 
   nonce-based CSP.
 - `src/components/` contains Astro components and Vue SFCs with colocated CSS Modules. Interactive
   Vue components are hydrated by Astro only where needed.
-- `src/lib/` contains editor, EPUB, Markdown, settings, storage, and platform logic.
+- `src/lib/` contains editor, EPUB, settings, storage, and platform logic.
 - `src/styles/global.css` is the global stylesheet; files in `public/` are served as-is.
 - `lib/editor/state.ts` uses `@preact/signals` for shared application state; Vue SFCs bridge signal
   values into Vue reactivity. Do not introduce Preact UI components.
@@ -45,9 +45,9 @@ Editor behavior notes:
 
 - The writing area is an uncontrolled contenteditable. Mount content imperatively only when the
   active chapter changes so the caret never moves; do not make it a controlled component.
-- Manuscripts persist in `localStorage`; browser file handles persist in IndexedDB. Browsers use the
-  File System Access API with upload/download fallbacks; Desktop uses `/api/editor/*` routes.
-- Markdown files use JSON frontmatter and `<!-- chapter: ... -->` separators.
+- Manuscript session state persists in `sessionStorage` to survive same-tab reloads; browser file
+  handles persist in IndexedDB. EPUBs are the manuscript file format. Browsers use the File System
+  Access API with download fallbacks; Desktop uses `/api/editor/*` routes.
 - Deno Desktop's webview is WebKitGTK; `::highlight()` does not paint on text in anonymous block
   boxes, so the editor normalizes content into block elements.
 

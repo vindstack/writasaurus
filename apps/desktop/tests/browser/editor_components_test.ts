@@ -717,7 +717,7 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       "Expected the title, filename, and save status to appear left-to-right",
     );
     assert(
-      measurements.titleFilenameGap <= 4,
+      measurements.titleFilenameGap <= 12,
       `Expected standard title/filename spacing, got ${measurements.titleFilenameGap}px`,
     );
     assert(

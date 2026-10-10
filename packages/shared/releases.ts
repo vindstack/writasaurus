@@ -2,7 +2,15 @@ export interface ReleaseArtifact {
   label: string;
   fileName: string;
   objectKey: string;
+  downloadUrl: string;
   sizeBytes: number;
+  sha256: string;
+}
+
+export interface ReleaseChecksums {
+  fileName: "SHA256SUMS.txt";
+  objectKey: string;
+  downloadUrl: string;
   sha256: string;
 }
 
@@ -14,6 +22,7 @@ export interface ReleaseManifest {
     macos: ReleaseArtifact;
     windows: ReleaseArtifact;
   };
+  checksums: ReleaseChecksums;
 }
 
 const SEMVER =
@@ -33,14 +42,27 @@ export function isPublicHttpsUrl(value: string): boolean {
   }
 }
 
+function downloadUrlMatchesKey(value: string, key: string): boolean {
+  try {
+    const url = new URL(value);
+    const suffix = key.split("/").map(encodeURIComponent).join("/");
+    return url.pathname.endsWith(`/${suffix}`);
+  } catch {
+    return false;
+  }
+}
+
 function isArtifact(value: unknown): value is ReleaseArtifact {
   if (typeof value !== "object" || value === null) return false;
   const artifact = value as Record<string, unknown>;
   return typeof artifact.label === "string" && typeof artifact.fileName === "string" &&
     typeof artifact.objectKey === "string" &&
-    /^releases\/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[\w.-]+)?\/[\w.-]+$/.test(
-      artifact.objectKey,
-    ) &&
+    /^releases\/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[\w.-]+)?(?:\+[a-zA-Z0-9.-]+)?\/[\w.-]+$/
+      .test(
+        artifact.objectKey,
+      ) &&
+    typeof artifact.downloadUrl === "string" && isPublicHttpsUrl(artifact.downloadUrl) &&
+    downloadUrlMatchesKey(artifact.downloadUrl, artifact.objectKey) &&
     typeof artifact.sizeBytes === "number" && Number.isSafeInteger(artifact.sizeBytes) &&
     artifact.sizeBytes > 0 && typeof artifact.sha256 === "string" &&
     /^[a-f0-9]{64}$/.test(artifact.sha256);
@@ -65,7 +87,20 @@ export function isReleaseManifest(
   ) return false;
   if (expectedVersion !== undefined && release.version !== expectedVersion) return false;
   const prefix = `releases/v${release.version}/`;
-  return artifacts.linux.objectKey === `${prefix}Writasaurus.AppImage` &&
+  const checksums = release.checksums as Record<string, unknown> | undefined;
+  return !!checksums &&
+    checksums.fileName === "SHA256SUMS.txt" &&
+    typeof checksums.objectKey === "string" &&
+    checksums.objectKey === `${prefix}SHA256SUMS.txt` &&
+    typeof checksums.downloadUrl === "string" &&
+    isPublicHttpsUrl(checksums.downloadUrl) &&
+    downloadUrlMatchesKey(checksums.downloadUrl, checksums.objectKey) &&
+    typeof checksums.sha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(checksums.sha256) &&
+    artifacts.linux.objectKey === `${prefix}Writasaurus.AppImage` &&
+    artifacts.linux.fileName === "Writasaurus.AppImage" &&
     artifacts.macos.objectKey === `${prefix}Writasaurus-macos.tar.gz` &&
-    artifacts.windows.objectKey === `${prefix}Writasaurus.msi`;
+    artifacts.macos.fileName === "Writasaurus-macos.tar.gz" &&
+    artifacts.windows.objectKey === `${prefix}Writasaurus.msi` &&
+    artifacts.windows.fileName === "Writasaurus.msi";
 }

@@ -102,7 +102,7 @@ Deno.test("payment: signs tokens accepted only by the matching desktop public ke
   assert(await verifyLicenseToken(token, encode(publicBytes), "b".repeat(64)) === null);
 });
 
-Deno.test("payment: mock checkout reveals a license key once without Stripe", async () => {
+Deno.test("payment: mock checkout reveals a key and enables post-purchase downloads", async () => {
   const original = {
     provider: Deno.env.get("PAYMENT_PROVIDER"),
     deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
@@ -111,6 +111,11 @@ Deno.test("payment: mock checkout reveals a license key once without Stripe", as
     siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
     resendApiKey: Deno.env.get("RESEND_API_KEY"),
     resendFrom: Deno.env.get("RESEND_FROM_EMAIL"),
+    sessionSecret: Deno.env.get("SESSION_SECRET"),
+    r2AccountId: Deno.env.get("WRITASAURUS_R2_ACCOUNT_ID"),
+    r2AccessKeyId: Deno.env.get("WRITASAURUS_R2_ACCESS_KEY_ID"),
+    r2SecretAccessKey: Deno.env.get("WRITASAURUS_R2_SECRET_ACCESS_KEY"),
+    r2Bucket: Deno.env.get("WRITASAURUS_R2_BUCKET"),
   };
   let binary = "";
   for (const byte of crypto.getRandomValues(new Uint8Array(32))) {
@@ -139,12 +144,62 @@ Deno.test("payment: mock checkout reveals a license key once without Stripe", as
   Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
   Deno.env.set("RESEND_API_KEY", "test-api-key");
   Deno.env.set("RESEND_FROM_EMAIL", "Writasaurus <test@example.com>");
+  Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
+  Deno.env.set("WRITASAURUS_R2_ACCOUNT_ID", "test-account");
+  Deno.env.set("WRITASAURUS_R2_ACCESS_KEY_ID", "test-access-key");
+  Deno.env.set("WRITASAURUS_R2_SECRET_ACCESS_KEY", "test-secret-key");
+  Deno.env.set("WRITASAURUS_R2_BUCKET", "test-bucket");
   setLicenseStoreForTests(new MemoryLicenseStore());
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = (input, init) =>
-    String(input) === "https://api.resend.com/emails"
-      ? Promise.resolve(Response.json({ id: "test-email" }))
-      : originalFetch(input, init);
+  const sentEmailBodies: string[] = [];
+  const release = {
+    version: "1.2.3",
+    releasedAt: "2026-10-10T00:00:00.000Z",
+    artifacts: {
+      linux: {
+        label: "Linux",
+        fileName: "Writasaurus.AppImage",
+        objectKey: "releases/v1.2.3/Writasaurus.AppImage",
+        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus.AppImage",
+        sizeBytes: 1,
+        sha256: "a".repeat(64),
+      },
+      macos: {
+        label: "macOS",
+        fileName: "Writasaurus-macos.tar.gz",
+        objectKey: "releases/v1.2.3/Writasaurus-macos.tar.gz",
+        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus-macos.tar.gz",
+        sizeBytes: 1,
+        sha256: "b".repeat(64),
+      },
+      windows: {
+        label: "Windows",
+        fileName: "Writasaurus.msi",
+        objectKey: "releases/v1.2.3/Writasaurus.msi",
+        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus.msi",
+        sizeBytes: 1,
+        sha256: "c".repeat(64),
+      },
+    },
+    checksums: {
+      fileName: "SHA256SUMS.txt",
+      objectKey: "releases/v1.2.3/SHA256SUMS.txt",
+      downloadUrl: "https://downloads.example/releases/v1.2.3/SHA256SUMS.txt",
+      sha256: "d".repeat(64),
+    },
+  };
+  globalThis.fetch = (input, init) => {
+    if (String(input) === "https://api.resend.com/emails") {
+      if (typeof init?.body === "string") {
+        sentEmailBodies.push(JSON.parse(init.body).text);
+      }
+      return Promise.resolve(Response.json({ id: "test-email" }));
+    }
+    if (String(input) === "https://writasaurus.test/latest.json") {
+      return Promise.resolve(Response.json(release));
+    }
+    return originalFetch(input, init);
+  };
 
   try {
     const form = new FormData();
@@ -163,6 +218,56 @@ Deno.test("payment: mock checkout reveals a license key once without Stripe", as
     const firstPage = await success.text();
     const key = firstPage.match(/<code>(WRIT-[A-F0-9]{48})<\/code>/)?.[1];
     assert(key, "Expected the mock purchase key on the first success page.");
+
+    const authRequestForm = new FormData();
+    authRequestForm.set("email", "writer@example.com");
+    const authRequest = await request("/api/auth/request", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: authRequestForm,
+    });
+    assert(authRequest.status === 303);
+    const passcode = sentEmailBodies.at(-1)?.match(/account is (\d{8})/)?.[1];
+    assert(passcode, "Expected a sign-in code to be emailed after purchase.");
+    const authVerifyForm = new FormData();
+    authVerifyForm.set("email", "writer@example.com");
+    authVerifyForm.set("code", passcode);
+    const authVerify = await request("/api/auth/verify", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: authVerifyForm,
+    });
+    assert(authVerify.status === 303);
+    const sessionCookie = (authVerify.headers.get("set-cookie") ?? "").split(";", 1)[0];
+    assert(sessionCookie.startsWith("wr_session="));
+    const account = await request("/account", { headers: { cookie: sessionCookie } });
+    assert(account.status === 200);
+    const accountPage = await account.text();
+    for (const platform of ["Linux", "macOS", "Windows"]) {
+      assert(
+        accountPage.includes(`Download for ${platform}`),
+        `Expected the post-purchase account to offer a ${platform} download.`,
+      );
+    }
+
+    const artifactNames = {
+      linux: "Writasaurus.AppImage",
+      macos: "Writasaurus-macos.tar.gz",
+      windows: "Writasaurus.msi",
+    } as const;
+    for (const [platform, fileName] of Object.entries(artifactNames)) {
+      const downloadForm = new FormData();
+      downloadForm.set("platform", platform);
+      const download = await request("/api/download", {
+        method: "POST",
+        headers: { cookie: sessionCookie, origin: "http://localhost" },
+        body: downloadForm,
+      });
+      assert(download.status === 303, `Expected ${platform} download to redirect.`);
+      const downloadUrl = new URL(download.headers.get("location") ?? "");
+      assert(downloadUrl.pathname.endsWith(encodeURIComponent(fileName)));
+      assert(downloadUrl.searchParams.has("X-Amz-Signature"));
+    }
 
     const deviceHash = "a".repeat(64);
     const activation = await request("/api/license/activate", {
@@ -198,6 +303,11 @@ Deno.test("payment: mock checkout reveals a license key once without Stripe", as
         PUBLIC_SITE_URL: original.siteUrl,
         RESEND_API_KEY: original.resendApiKey,
         RESEND_FROM_EMAIL: original.resendFrom,
+        SESSION_SECRET: original.sessionSecret,
+        WRITASAURUS_R2_ACCOUNT_ID: original.r2AccountId,
+        WRITASAURUS_R2_ACCESS_KEY_ID: original.r2AccessKeyId,
+        WRITASAURUS_R2_SECRET_ACCESS_KEY: original.r2SecretAccessKey,
+        WRITASAURUS_R2_BUCKET: original.r2Bucket,
       })
     ) {
       if (value === undefined) Deno.env.delete(name);
