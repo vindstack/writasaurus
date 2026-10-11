@@ -68,7 +68,8 @@ async function openSidebar(page: Page): Promise<void> {
   }
 }
 
-const STAT_BUTTON = 'button[title="Cycle statistics (Ctrl+G)"]';
+const CHAPTER_STATS = '[data-stat="chapter"]';
+const TOTAL_STATS = '[data-stat="total"]';
 const PANEL = '[data-testid="assistance-panel"]';
 const ISSUES = `${PANEL} li[data-category="spelling"]`;
 
@@ -363,8 +364,8 @@ browserTest("browser: unsaved changes do not block leaving the editor", async ()
 });
 
 async function chapterWords(page: Page): Promise<number> {
-  const text = await page.locator(STAT_BUTTON).textContent() ?? "";
-  return Number(text.match(/Chapter: ([\d,]+) words/)?.[1]?.replace(/,/g, "") ?? -1);
+  const text = await page.locator(`${CHAPTER_STATS} .statValue`).first().textContent() ?? "";
+  return Number(text.replace(/,/g, "") || -1);
 }
 
 browserTest("browser: status bar renders live stats from the editor store", async () => {
@@ -378,18 +379,14 @@ browserTest("browser: status bar renders live stats from the editor store", asyn
 
     await page.waitForFunction(
       ([selector, expected]) =>
-        document.querySelector(selector as string)?.textContent?.includes(
-          `Chapter: ${expected} words`,
-        ) === true,
-      [STAT_BUTTON, before + 4] as const,
+        document.querySelector(selector as string)?.querySelector(".statValue")?.textContent ===
+          expected.toLocaleString(),
+      [CHAPTER_STATS, before + 4] as const,
     );
-
-    const stats = page.locator(STAT_BUTTON);
-    await stats.click();
-    await stats.click();
     assert(
-      (await stats.textContent())?.trim() === "Daily Goal: 4 / 1,500 words",
-      "Expected today’s writing progress to include newly written words",
+      (await page.locator(`${TOTAL_STATS} .statValue`).first().textContent()) ===
+        (before + 4).toLocaleString(),
+      "Expected total manuscript stats to update with the chapter",
     );
 
     const saveStatus = await page.locator("#save-status").textContent() ?? "";
@@ -400,48 +397,38 @@ browserTest("browser: status bar renders live stats from the editor store", asyn
   });
 });
 
-browserTest(
-  "browser: status bar rotates chapter, manuscript, and daily writing stats",
-  async () => {
-    await withEditorPage(async (page) => {
-      const stats = page.locator(STAT_BUTTON);
+browserTest("browser: status bar shows chapter and total stats together", async () => {
+  await withEditorPage(async (page) => {
+    const chapterStats = page.locator(CHAPTER_STATS);
+    const totalStats = page.locator(TOTAL_STATS);
+    assert(
+      (await chapterStats.textContent())?.startsWith("Chapter 1:"),
+      "Expected chapter stats to use the active chapter title",
+    );
+    assert(
+      (await chapterStats.textContent())?.includes("words") &&
+        (await chapterStats.textContent())?.includes("pages"),
+      "Expected chapter word and page counts",
+    );
+    assert(
+      (await totalStats.textContent())?.startsWith("Total:"),
+      "Expected total manuscript stats to be visible",
+    );
+    assert(
+      !(await page.locator("footer.statusbar").textContent())?.includes("Ctrl+G"),
+      "Expected the obsolete statistics shortcut to be removed",
+    );
 
-      const chapterStats = (await stats.textContent())?.trim();
-      assert(chapterStats?.startsWith("Chapter:"), `Expected chapter stats, got ${chapterStats}`);
-      assert(chapterStats?.includes("pages"), `Expected chapter pages, got ${chapterStats}`);
-      assert(
-        !chapterStats?.includes("characters"),
-        `Expected no chapter characters, got ${chapterStats}`,
-      );
-
-      await stats.click();
-      const manuscriptStats = (await stats.textContent())?.trim();
-      assert(
-        manuscriptStats?.startsWith("Manuscript:"),
-        `Expected manuscript stats, got ${manuscriptStats}`,
-      );
-
-      await stats.click();
-      const dailyStats = (await stats.textContent())?.trim();
-      assert(
-        dailyStats === "Daily Goal: 0 / 1,500 words",
-        `Expected default daily goal stats, got ${dailyStats}`,
-      );
-
-      // Verify Ctrl+G shortcut cycles stats and hint is present
-      const kbdHint = page.locator("footer kbd", { hasText: "Ctrl+G" });
-      assert(await kbdHint.isVisible(), "Expected Ctrl+G kbd hint to be visible");
-      assert((await kbdHint.textContent())?.trim() === "Ctrl+G", "Expected Ctrl+G text in hint");
-
-      await page.keyboard.press("Control+g");
-      const cycledChapterStats = (await stats.textContent())?.trim();
-      assert(
-        cycledChapterStats?.startsWith("Chapter:"),
-        `Expected Ctrl+G to cycle back to Chapter stats, got ${cycledChapterStats}`,
-      );
-    });
-  },
-);
+    await page.getByLabel("Chapter title").fill("Prologue");
+    await page.waitForFunction(() =>
+      document.querySelector('[data-stat="chapter"]')?.textContent?.startsWith("Prologue:")
+    );
+    assert(
+      (await chapterStats.textContent())?.startsWith("Prologue:"),
+      "Expected the chapter stat label to follow the section title",
+    );
+  });
+});
 
 browserTest("browser: Desktop writing assistance corrects a local spelling warning", async () => {
   await withEditorPage(async (page) => {
@@ -758,7 +745,7 @@ browserTest("browser: manuscript title uses a text cursor without a focus outlin
   });
 });
 
-browserTest("browser: quiet buttons underline their text", async () => {
+browserTest("browser: quiet buttons underline and status stats emphasize counts", async () => {
   await withEditorPage(async (page) => {
     const styles = await page.locator(".statusbar button.button--quiet").first().evaluate(
       (button) => {
@@ -768,11 +755,11 @@ browserTest("browser: quiet buttons underline their text", async () => {
           keyboardShortcutDisplay: keyboardShortcut && getComputedStyle(keyboardShortcut).display,
           keyboardShortcutDecoration: keyboardShortcut &&
             getComputedStyle(keyboardShortcut).textDecorationLine,
-          statsButtonUsesStatStyles: (() => {
-            const statsButton = document.querySelector(".statusbar .stat");
-            return statsButton?.classList.contains("stat") &&
-              getComputedStyle(statsButton).borderTopWidth === "0px" &&
-              getComputedStyle(statsButton).cursor === "pointer";
+          statsUseTabularNumbers: (() => {
+            const value = document.querySelector(".statusbar .statValue");
+            return value !== null &&
+              getComputedStyle(value).fontVariantNumeric.includes("tabular-nums") &&
+              Number(getComputedStyle(value).fontWeight) >= 600;
           })(),
         };
       },
@@ -785,10 +772,7 @@ browserTest("browser: quiet buttons underline their text", async () => {
       styles.keyboardShortcutDisplay === "block" && styles.keyboardShortcutDecoration === "none",
       `Expected keyboard shortcut indicators to stay separate from the button underline, got ${styles.keyboardShortcutDisplay}`,
     );
-    assert(
-      styles.statsButtonUsesStatStyles,
-      "Expected the statistics control to use its borderless pointer style",
-    );
+    assert(styles.statsUseTabularNumbers, "Expected counts to use emphasized tabular numbers");
   });
 });
 

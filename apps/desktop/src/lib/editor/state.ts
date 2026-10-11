@@ -15,7 +15,6 @@ export const saveMessage = signal("");
 
 export const sidebarOpen = signal(false);
 export const menuOpen = signal(false);
-export const statsIndex = signal(0);
 /** Incremented to ask the writing area to select the chapter title field. */
 export const titleFocusRequest = signal(0);
 

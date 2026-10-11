@@ -18,7 +18,6 @@ import {
     menuOpen,
     replaceManuscript,
     sidebarOpen,
-    statsIndex,
 } from "../../lib/editor/state.ts";
 import { effect } from "@preact/signals";
 import Topbar from "../editor/Topbar.vue";
@@ -99,9 +98,6 @@ onMounted(() => {
         } else if (modifier && key === "b") {
             event.preventDefault();
             sidebarOpen.value = !sidebarOpen.value;
-        } else if (modifier && key === "g") {
-            event.preventDefault();
-            statsIndex.value = (statsIndex.value + 1) % 3;
         } else if (modifier && key === "s") {
             event.preventDefault();
             void save();

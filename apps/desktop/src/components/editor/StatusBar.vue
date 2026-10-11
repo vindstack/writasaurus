@@ -1,76 +1,63 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import {
-  getDailyWordGoalPreference,
-  getDailyWrittenWords,
-  getWordsPerPagePreference,
-} from "../../../../../packages/shared/settings.ts";
+import { getWordsPerPagePreference } from "../../../../../packages/shared/settings.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import {
   activeChapter,
-  manuscript,
   sidebarOpen,
-  statsIndex,
   totalWords,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 
-const statNames = ["chapter", "manuscript", "daily writing goal"];
 const chapterState = useSignalValue(activeChapter);
-const manuscriptState = useSignalValue(manuscript);
 const totalState = useSignalValue(totalWords);
-const indexState = useSignalValue(statsIndex);
 const wordsPerPage = getWordsPerPagePreference();
-const wordStats = computed(() => {
-  const chapterWords = chapterState.value?.wordCount ?? 0;
-  const total = totalState.value;
-  const { filename, frontmatter } = manuscriptState.value;
-  const daily = typeof localStorage === "undefined"
-    ? 0
-    : getDailyWrittenWords(`${filename}:${frontmatter.createdAt ?? ""}`, total);
-  const goal = getDailyWordGoalPreference();
-  return [
-    `Chapter: ${chapterWords.toLocaleString()} words · ${(chapterWords / wordsPerPage).toFixed(1)} pages`,
-    `Manuscript: ${total.toLocaleString()} words · ${(total / wordsPerPage).toFixed(1)} pages`,
-    `Daily Goal: ${daily.toLocaleString()} / ${goal.toLocaleString()} words`,
-  ];
+const chapterStats = computed(() => {
+  const chapter = chapterState.value;
+  const words = chapter?.wordCount ?? 0;
+  const pages = (words / wordsPerPage).toFixed(0);
+  return {
+    label: chapter?.title ?? "Chapter",
+    words: words.toLocaleString(),
+    pages,
+  };
 });
-const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length);
+const totalStats = computed(() => {
+  const words = totalState.value;
+  const pages = (words / wordsPerPage).toFixed(0);
+  return {
+    words: words.toLocaleString(),
+    pages,
+  };
+});
 </script>
 
 <template>
   <footer class="statusbar">
-    <Button
-      variant="quiet"
-      size="small"
-      class="toggle"
-      aria-label="Toggle chapters panel"
-      title="Toggle chapters panel (Ctrl+B)"
-      @click="sidebarOpen.value = !sidebarOpen.value"
-    >
+    <Button variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
+      title="Toggle chapters panel (Ctrl+B)" @click="sidebarOpen.value = !sidebarOpen.value">
       Chapters <kbd class="kbd">Ctrl+B</kbd>
     </Button>
-    <span class="wordCount">
-      <button
-        type="button"
-        class="stat"
-        title="Cycle statistics (Ctrl+G)"
-        :aria-label="`Show ${statNames[nextIndex]} statistics`"
-        @click="statsIndex.value = nextIndex"
-      >
-        {{ wordStats[indexState] }}
-      </button>
-      <kbd class="kbd" title="Cycle statistics (Ctrl+G)">Ctrl+G</kbd>
+    <span class="wordCount" role="group" aria-label="Word and page counts">
+      <span class="statGroup" data-stat="chapter">
+        <span class="statLabel">{{ chapterStats.label }}:</span>
+        <span class="statValue">{{ chapterStats.words }}</span>
+        <span>words,</span>
+        <span class="statValue">{{ chapterStats.pages }}</span>
+        <span>pages</span>
+      </span>
+      <span class="separator" aria-hidden="true">|</span>
+      <span class="statGroup" data-stat="total">
+        <span class="statLabel">Total:</span>
+        <span class="statValue">{{ totalStats.words }}</span>
+        <span>words,</span>
+        <span class="statValue">{{ totalStats.pages }}</span>
+        <span>pages</span>
+      </span>
     </span>
-    <Button
-      variant="quiet"
-      size="small"
-      class="toggle"
-      aria-label="Toggle writing assistance panel"
-      title="Toggle writing assistance panel (Ctrl+Shift+A)"
-      @click="toggleAssistance()"
-    >
+    <Button variant="quiet" size="small" class="toggle" aria-label="Toggle writing assistance panel"
+      title="Toggle writing assistance panel (Ctrl+Shift+A)" @click="toggleAssistance()">
       Writing Assistance <kbd class="kbd">Ctrl+Shift+A</kbd>
     </Button>
   </footer>
@@ -103,29 +90,41 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
   align-items: center;
   display: inline-flex;
   flex-shrink: 1;
-  gap: 0.4rem;
-  min-width: 0;
-}
-
-.stat {
-  background: none;
-  border: 0;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
+  gap: 0.65rem;
   min-width: 0;
   overflow: hidden;
-  padding: 0;
-
-  text-decoration: none;
-  text-align: inherit;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.stat:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
+.statGroup {
+  align-items: baseline;
+  display: inline-flex;
+  flex-shrink: 1;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statLabel {
+  color: var(--muted);
+  flex-shrink: 1;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.statValue {
+  color: var(--text);
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.separator {
+  color: var(--border);
+  flex-shrink: 0;
 }
 
 @media (max-width: 55rem) {
