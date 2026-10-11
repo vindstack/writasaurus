@@ -11,7 +11,11 @@ export interface ShortcutEvent {
   shiftKey?: boolean;
 }
 
-export type ProjectShortcutAction = "new-project" | "open-project" | "writing-assistance";
+export type ProjectShortcutAction =
+  | "new-project"
+  | "open-project"
+  | "toggle-project-view"
+  | "writing-assistance";
 
 export function getProjectShortcutAction(event: ShortcutEvent): ProjectShortcutAction | null {
   if (event.ctrlKey !== true && event.metaKey !== true) return null;
@@ -19,6 +23,7 @@ export function getProjectShortcutAction(event: ShortcutEvent): ProjectShortcutA
   const key = event.key.toLowerCase();
   if (!event.shiftKey && key === "n") return "new-project";
   if (!event.shiftKey && key === "o") return "open-project";
+  if (!event.shiftKey && key === "g") return "toggle-project-view";
   if (event.shiftKey && key === "a") return "writing-assistance";
   return null;
 }

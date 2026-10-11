@@ -143,6 +143,20 @@ Deno.test("editor-api: save-epub validates request payload", async () => {
   }
 });
 
+Deno.test("editor-api: outline save validates request payload", async () => {
+  const app = createDesktopApp();
+  const response = await app.request("/api/editor/outline/save", {
+    method: "POST",
+    headers: {
+      origin: "http://localhost",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ content: 123 }),
+  });
+  assertEquals(response.status, 400);
+  assertEquals(await response.text(), "Invalid outline content");
+});
+
 Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
   const app = createDesktopApp();
   const res = await app.request("/api/editor/save-epub", {

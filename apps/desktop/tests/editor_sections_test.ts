@@ -1,4 +1,5 @@
 import { parseManuscript, serialize } from "../src/lib/editor/data.ts";
+import { DEFAULT_OUTLINE, OUTLINE_TEMPLATES } from "../src/lib/editor/outline-templates.ts";
 import {
   addChapter,
   manuscript,
@@ -16,6 +17,33 @@ function assertEquals<T>(actual: T, expected: T): void {
     throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 }
+
+Deno.test("outline templates: default is 3-Act and all requested structures are available", () => {
+  assertEquals(OUTLINE_TEMPLATES.length, 6);
+  assertEquals(OUTLINE_TEMPLATES[0].id, "three-act");
+  assertEquals(DEFAULT_OUTLINE, OUTLINE_TEMPLATES[0].content);
+  assert(OUTLINE_TEMPLATES.some((item) => item.id === "four-act"));
+  assert(OUTLINE_TEMPLATES.some((item) => item.id === "save-the-cat"));
+  assert(OUTLINE_TEMPLATES.some((item) => item.id === "heros-journey"));
+  assert(OUTLINE_TEMPLATES.some((item) => item.id === "snowflake"));
+  assertEquals(OUTLINE_TEMPLATES.find((item) => item.id === "blank")?.content, "");
+});
+
+Deno.test("outline templates: each section includes an editable explanation", () => {
+  for (const template of OUTLINE_TEMPLATES) {
+    if (template.id === "blank") continue;
+
+    const headings = template.content.split("\n").filter((line) => /^#{1,6} /.test(line));
+    for (const heading of headings.slice(1)) {
+      const lines = template.content.split("\n");
+      const index = lines.indexOf(heading);
+      assert(
+        lines.slice(index + 1).find((line) => line.trim())?.startsWith("> "),
+        `Expected an explanation after "${heading}" in ${template.label}`,
+      );
+    }
+  }
+});
 
 Deno.test("editor sections: Markdown preserves section types", () => {
   const manuscript: Manuscript = {

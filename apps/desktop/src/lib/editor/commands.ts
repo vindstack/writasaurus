@@ -1,10 +1,18 @@
 import { editorHistory } from "./history.ts";
-import { saveEpubToDisk, saveToDisk } from "./file-io.ts";
+import { saveEpubToDisk, saveOutlineToDisk, saveToDisk } from "./file-io.ts";
 import { getEditor } from "./surface.ts";
-import { hasUnsavedChanges, syncChapter } from "./state.ts";
+import { editorMode, hasUnsavedChanges, markOutlineChanged, syncChapter } from "./state.ts";
 
 /** Saves to the current file, only when there is something to save. */
 export async function save(): Promise<void> {
+  if (editorMode.peek() === "outline") {
+    const editor = getEditor();
+    if (editor) markOutlineChanged(editor);
+    await saveOutlineToDisk();
+    if (hasUnsavedChanges.peek()) await saveToDisk();
+    editorHistory.saveCurrentState();
+    return;
+  }
   if (!hasUnsavedChanges.peek()) return;
   const editor = getEditor();
   if (!editor) return;

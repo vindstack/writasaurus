@@ -1,4 +1,4 @@
-import { markChanged, renameChapter } from "./state.ts";
+import { editorMode, markChanged, markOutlineChanged, renameChapter } from "./state.ts";
 import { editorHistory } from "./history.ts";
 import { normalizeEditorBlocks } from "./normalize.ts";
 
@@ -9,7 +9,7 @@ import { normalizeEditorBlocks } from "./normalize.ts";
  */
 interface Surface {
   editor: HTMLElement;
-  title: HTMLInputElement;
+  title?: HTMLInputElement;
 }
 
 const HISTORY_DEBOUNCE_MS = 300;
@@ -31,7 +31,7 @@ export function focusEditor(): void {
 }
 
 export function selectTitle(): void {
-  surface?.title.select();
+  surface?.title?.select();
 }
 
 /** Loads chapter content into the editor without going through the framework. */
@@ -75,7 +75,7 @@ export function scheduleHistoryCapture(): void {
   cancelHistoryCapture();
   historyTimer = setTimeout(() => {
     historyTimer = undefined;
-    if (surface) editorHistory.push(surface.editor.innerHTML, surface.title.value);
+    if (surface) editorHistory.push(surface.editor.innerHTML, surface.title?.value ?? "");
   }, HISTORY_DEBOUNCE_MS);
 }
 
@@ -83,9 +83,13 @@ function applyHistoryEntry(entry: { content: string; title: string }): void {
   if (!surface) return;
   surface.editor.innerHTML = entry.content;
   normalizeEditorBlocks(surface.editor);
-  surface.title.value = entry.title;
-  renameChapter(entry.title);
-  markChanged(surface.editor);
+  if (editorMode.peek() === "outline") {
+    markOutlineChanged(surface.editor);
+  } else {
+    if (surface.title) surface.title.value = entry.title;
+    renameChapter(entry.title);
+    markChanged(surface.editor);
+  }
 }
 
 export function undo(): void {

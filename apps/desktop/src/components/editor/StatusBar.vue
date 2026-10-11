@@ -4,6 +4,8 @@ import { getWordsPerPagePreference } from "../../../../../packages/shared/settin
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import {
   activeChapter,
+  editorMode,
+  outlineContent,
   sidebarOpen,
   totalWords,
 } from "../../lib/editor/state.ts";
@@ -12,6 +14,8 @@ import Button from "../../../../../packages/shared/ui/components/Button.vue";
 
 const chapterState = useSignalValue(activeChapter);
 const totalState = useSignalValue(totalWords);
+const modeState = useSignalValue(editorMode);
+const outlineState = useSignalValue(outlineContent);
 const wordsPerPage = getWordsPerPagePreference();
 const chapterStats = computed(() => {
   const chapter = chapterState.value;
@@ -31,15 +35,18 @@ const totalStats = computed(() => {
     pages,
   };
 });
+const outlineWords = computed(() =>
+  outlineState.value.replace(/[>#*_`~\[\]()]/g, " ").trim().split(/\s+/).filter(Boolean).length
+);
 </script>
 
 <template>
   <footer class="statusbar">
-    <Button variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
+    <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
       title="Toggle chapters panel (Ctrl+B)" @click="sidebarOpen.value = !sidebarOpen.value">
       Chapters <kbd class="kbd">Ctrl+B</kbd>
     </Button>
-    <span class="wordCount" role="group" aria-label="Word and page counts">
+    <span v-if="modeState === 'manuscript'" class="wordCount" role="group" aria-label="Word and page counts">
       <span class="statGroup" data-stat="chapter">
         <span class="statLabel">{{ chapterStats.label }}:</span>
         <span class="statValue">{{ chapterStats.words }}</span>
@@ -56,7 +63,12 @@ const totalStats = computed(() => {
         <span>pages</span>
       </span>
     </span>
-    <Button variant="quiet" size="small" class="toggle" aria-label="Toggle writing assistance panel"
+    <span v-else class="wordCount" role="group" aria-label="Outline word count">
+      <span>Outline:</span>
+      <span class="statValue">{{ outlineWords.toLocaleString() }}</span>
+      <span>words</span>
+    </span>
+    <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle writing assistance panel"
       title="Toggle writing assistance panel (Ctrl+Shift+A)" @click="toggleAssistance()">
       Writing Assistance <kbd class="kbd">Ctrl+Shift+A</kbd>
     </Button>

@@ -1,5 +1,9 @@
 import type { Page } from "playwright";
 import { createTestApp } from "../helpers.ts";
+import { closeActiveFile, getActivePath, setActivePath } from "../../src/lib/editor-session.ts";
+import { loadLastFilePath } from "../../src/lib/desktop.ts";
+import { blankManuscript } from "../../src/lib/editor/data.ts";
+import { generateEpub } from "../../src/lib/epub.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -88,20 +92,24 @@ function browserTest(name: string, fn: () => Promise<void>): void {
   });
 }
 
-function editorTestHandler(): (request: Request) => Response | Promise<Response> {
+function editorTestHandler(
+  projectLoaded = false,
+): (request: Request) => Response | Promise<Response> {
   const app = createTestApp().fetch;
-  return (request) =>
-    new URL(request.url).pathname === "/api/editor/status"
-      ? Response.json({ activeFile: null, activePath: null })
-      : app(request);
+  return (request) => {
+    if (new URL(request.url).pathname !== "/api/editor/status") return app(request);
+    if (!projectLoaded) return Response.json({ activeFile: null, activePath: null });
+    return app(request);
+  };
 }
 
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
+  projectLoaded = false,
 ): Promise<void> {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
-    editorTestHandler(),
+    editorTestHandler(projectLoaded),
   );
   const address = server.addr as Deno.NetAddr;
   const browser = await launchBrowser();
@@ -1025,3 +1033,169 @@ browserTest("browser: welcome page offers a clear styled project creation dialog
     assert(await dialog.locator("#create-project-submit").isDisabled());
   });
 });
+
+browserTest(
+  "browser: outline mode creates, autosaves, and replaces project Markdown",
+  async () => {
+    const directory = await Deno.makeTempDir();
+    const previousActivePath = getActivePath();
+    const previousSavedPath = await loadLastFilePath();
+    const epubPath = `${directory}/story.epub`;
+
+    try {
+      await Deno.writeFile(epubPath, await generateEpub(blankManuscript("Story")));
+      await setActivePath(epubPath);
+      await withEditorPage(async (page) => {
+        const modeSwitch = page.getByRole("group", { name: "Project view" });
+        const manuscriptOption = page.locator('[data-project-mode="manuscript"]');
+        const outlineOption = page.locator('[data-project-mode="outline"]');
+        assert(await manuscriptOption.isDisabled(), "Expected Manuscript to be selected");
+        assert(!(await outlineOption.isDisabled()), "Expected Outline to be available");
+        assert(
+          await manuscriptOption.getAttribute("aria-pressed") === "true" &&
+            await outlineOption.getAttribute("aria-pressed") === "false",
+          "Expected Manuscript to be visibly selected in the mode switch",
+        );
+        assert(await modeSwitch.isVisible(), "Expected the always-visible project mode switch");
+
+        await outlineOption.click();
+        await page.waitForFunction(() => !document.querySelector("#chapter-title"));
+        assert(
+          await outlineOption.getAttribute("aria-pressed") === "true",
+          "Expected Outline to become selected",
+        );
+        await page.keyboard.press("Control+g");
+        await page.waitForSelector("#chapter-title");
+        assert(
+          await manuscriptOption.getAttribute("aria-pressed") === "true",
+          "Expected Ctrl+G to switch from Outline to Manuscript",
+        );
+        await page.keyboard.press("Control+g");
+        await page.waitForFunction(() => !document.querySelector("#chapter-title"));
+        assert(
+          await outlineOption.getAttribute("aria-pressed") === "true",
+          "Expected Ctrl+G to switch from Manuscript to Outline",
+        );
+        assert(await page.getByRole("textbox", { name: "Outline text" }).isVisible());
+        assert(await page.locator('[data-testid="chapters-sidebar"]').count() === 0);
+        assert(await page.locator('[data-testid="assistance-panel"]').count() === 0);
+        assert(await page.locator("[data-outline-template-trigger]").isVisible());
+        assert(
+          await page.getByRole("button", { name: "Change Template" }).isVisible(),
+          "Expected the template selector to use its updated label",
+        );
+        const templatePosition = await page.evaluate(() => {
+          const trigger = document.querySelector("[data-outline-template-trigger]");
+          const toolbar = document.querySelector('[role="toolbar"]');
+          if (!trigger || !toolbar) return null;
+          const triggerRect = trigger.getBoundingClientRect();
+          const toolbarRect = toolbar.getBoundingClientRect();
+          return {
+            triggerRight: triggerRect.right,
+            toolbarRight: toolbarRect.right,
+            otherToolbarButtonRights: [...toolbar.querySelectorAll("button")]
+              .filter((button) => button !== trigger && button.getClientRects().length > 0)
+              .map((button) => button.getBoundingClientRect().right),
+          };
+        });
+        assert(templatePosition, "Expected template selector and toolbar");
+        assert(
+          templatePosition.otherToolbarButtonRights.every((right) =>
+            right <= templatePosition.triggerRight
+          ) && templatePosition.triggerRight <= templatePosition.toolbarRight,
+          "Expected the template selector to align after the other toolbar controls",
+        );
+        await page.evaluate(() => {
+          document.documentElement.dataset.font = "georgia";
+          document.documentElement.style.setProperty(
+            "--editor-font",
+            'Georgia, "Times New Roman", serif',
+          );
+        });
+        const outlineFonts = await page.locator("#editor").evaluate((editor) => ({
+          editor: getComputedStyle(editor).fontFamily,
+          heading: getComputedStyle(editor.querySelector("h1")!).fontFamily,
+        }));
+        assert(
+          outlineFonts.editor.toLowerCase().includes("georgia") &&
+            outlineFonts.heading.toLowerCase().includes("georgia"),
+          `Expected outline text and headings to match the editor font preference, got ${outlineFonts.editor} and ${outlineFonts.heading}`,
+        );
+        const outlineStyling = await page.locator("#editor").evaluate((editor) => {
+          const heading = editor.querySelector("h1");
+          const section = editor.querySelector("h2");
+          const note = editor.querySelector("blockquote");
+          if (!heading || !section || !note) return null;
+          return {
+            headingBorder: getComputedStyle(heading).borderBottomWidth,
+            sectionMargin: getComputedStyle(section).marginTop,
+            noteBorder: getComputedStyle(note).borderLeftWidth,
+            noteBackground: getComputedStyle(note).backgroundColor,
+          };
+        });
+        assert(outlineStyling, "Expected major headings, sections, and guidance notes");
+        assert(
+          outlineStyling.headingBorder === "1px" &&
+            outlineStyling.sectionMargin === "32px" &&
+            outlineStyling.noteBorder === "3px" &&
+            outlineStyling.noteBackground !== "rgba(0, 0, 0, 0)",
+          "Expected outline headings to be separated and guidance notes to have a distinct treatment",
+        );
+        assert(
+          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("# Act I - Setup"),
+          "Expected selecting Outline to immediately create the default template",
+        );
+
+        const editor = page.locator("#editor");
+        await editor.fill("Custom outline content");
+        await page.waitForFunction(() =>
+          document.querySelector("#editor")?.textContent?.includes("Custom outline content")
+        );
+        for (let attempt = 0; attempt < 40; attempt++) {
+          try {
+            if (
+              (await Deno.readTextFile(`${directory}/Outline.md`)).includes(
+                "Custom outline content",
+              )
+            ) break;
+          } catch (error) {
+            if (!(error instanceof Deno.errors.NotFound)) throw error;
+          }
+          if (attempt === 39) throw new Error("Outline edits were not autosaved.");
+          await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
+        await page.locator("[data-outline-template-trigger]").click();
+        await page.getByRole("menuitem", { name: "4-Act Structure" }).click();
+        const confirmation = page.getByRole("dialog", { name: "Replace outline content?" });
+        assert(await confirmation.isVisible(), "Expected template replacement confirmation");
+        await confirmation.getByRole("button", { name: "Cancel" }).click();
+        assert(
+          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("Custom outline content"),
+          "Canceling template replacement must retain the current outline",
+        );
+
+        await page.locator("[data-outline-template-trigger]").click();
+        await page.getByRole("menuitem", { name: "4-Act Structure" }).click();
+        await page.getByRole("button", { name: "Replace outline" }).click();
+        assert(
+          (await page.locator("#editor").textContent())?.includes("Act IV - Resolution"),
+          "Expected the selected template to replace the editor content",
+        );
+
+        await page.locator('[data-project-mode="manuscript"]').click();
+        await page.waitForSelector("#chapter-title");
+        assert(await page.locator('[data-testid="chapters-sidebar"]').count() === 1);
+        assert(
+          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("Act IV - Resolution"),
+          "Expected the replaced outline template to autosave before switching modes",
+        );
+      }, true);
+    } finally {
+      if (previousActivePath) await setActivePath(previousActivePath);
+      else if (previousSavedPath) await setActivePath(previousSavedPath);
+      else await closeActiveFile();
+      await Deno.remove(directory, { recursive: true });
+    }
+  },
+);

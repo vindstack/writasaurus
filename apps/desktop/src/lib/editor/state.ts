@@ -1,6 +1,7 @@
 import { batch, computed, signal } from "@preact/signals";
 import type { Chapter, Manuscript, SectionType } from "./types.ts";
 import { blankManuscript, chapter as createChapter, count, defaultSectionTitle } from "./data.ts";
+import { htmlToMarkdown } from "../utilties/markdown-utilities.ts";
 
 /**
  * Single source of truth for the editor. Components read these signals directly, so only the
@@ -12,6 +13,10 @@ export const desktopFileLoaded = signal(false);
 export const hasUnsavedChanges = signal(false);
 /** Overrides the derived save message; used to surface save failures. */
 export const saveMessage = signal("");
+export const editorMode = signal<"manuscript" | "outline">("manuscript");
+export const outlineContent = signal("");
+export const outlineHasUnsavedChanges = signal(false);
+export const outlineSaveMessage = signal("");
 
 export const sidebarOpen = signal(false);
 export const menuOpen = signal(false);
@@ -96,6 +101,10 @@ export function syncChapter(editor: HTMLElement): void {
 
 /** Syncs the editor DOM (when provided) and flags the manuscript as unsaved. */
 export function markChanged(editor?: HTMLElement | null): void {
+  if (editorMode.peek() === "outline") {
+    markOutlineChanged(editor);
+    return;
+  }
   batch(() => {
     if (editor) syncChapter(editor);
     hasUnsavedChanges.value = true;
@@ -107,6 +116,22 @@ export function markSaved(message = ""): void {
   batch(() => {
     hasUnsavedChanges.value = false;
     saveMessage.value = message;
+  });
+}
+
+export function replaceOutline(content: string, hasUnsavedChanges = false): void {
+  batch(() => {
+    outlineContent.value = content;
+    outlineHasUnsavedChanges.value = hasUnsavedChanges;
+    outlineSaveMessage.value = "";
+  });
+}
+
+export function markOutlineChanged(editor?: HTMLElement | null): void {
+  batch(() => {
+    if (editor) outlineContent.value = htmlToMarkdown(editor.innerHTML);
+    outlineHasUnsavedChanges.value = true;
+    outlineSaveMessage.value = "";
   });
 }
 

@@ -1,7 +1,12 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import { saveLocal } from "../../lib/editor/storage.ts";
-import { openProject } from "../../lib/editor/file-io.ts";
+import {
+    openProject,
+    requestOutline,
+    saveOutlineToDisk,
+    saveToDisk,
+} from "../../lib/editor/file-io.ts";
 import { restoreEditor } from "../../lib/editor/session.ts";
 import { focusEditor, redo, undo } from "../../lib/editor/surface.ts";
 import { save, toggleFullscreen } from "../../lib/editor/commands.ts";
@@ -13,10 +18,14 @@ import { editorHistory } from "../../lib/editor/history.ts";
 import {
     activeChapterIndex,
     desktopFileLoaded,
+    editorMode,
     hasUnsavedChanges,
     manuscript,
     menuOpen,
+    outlineContent,
+    outlineHasUnsavedChanges,
     replaceManuscript,
+    replaceOutline,
     sidebarOpen,
 } from "../../lib/editor/state.ts";
 import { effect } from "@preact/signals";
@@ -28,6 +37,7 @@ import AssistancePanel from "../editor/AssistancePanel.vue";
 import StatusBar from "../editor/StatusBar.vue";
 import LicenseGate from "./LicenseGate.vue";
 import ProjectCreateDialog from "./ProjectCreateDialog.vue";
+import { useSignalValue } from "../vue-signals.ts";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
 const {
@@ -40,6 +50,7 @@ const licensed = ref(false);
 const licenseCheckError = ref("");
 const toolbarVisible = ref(true);
 const createProjectOpen = ref(false);
+const modeState = useSignalValue(editorMode);
 let disposed = false;
 let stopPersistence: (() => void) | undefined;
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -81,11 +92,17 @@ onMounted(() => {
         const projectAction = getProjectShortcutAction(event);
         if (projectAction === "new-project") {
             event.preventDefault();
-            createProjectOpen.value = true;
+            void startNewProject();
         } else if (projectAction === "open-project") {
             event.preventDefault();
             void openProject();
-        } else if (projectAction === "writing-assistance") {
+        } else if (projectAction === "toggle-project-view") {
+            event.preventDefault();
+            if (editorMode.peek() === "manuscript") void openOutline();
+            else void showManuscript();
+        } else if (
+            projectAction === "writing-assistance" && editorMode.peek() === "manuscript"
+        ) {
             event.preventDefault();
             void toggleAssistance();
         } else if (modifier && key === "z") {
@@ -95,7 +112,7 @@ onMounted(() => {
         } else if (modifier && key === "y") {
             event.preventDefault();
             redo();
-        } else if (modifier && key === "b") {
+        } else if (modifier && key === "b" && editorMode.peek() === "manuscript") {
             event.preventDefault();
             sidebarOpen.value = !sidebarOpen.value;
         } else if (modifier && key === "s") {
@@ -138,14 +155,26 @@ async function restoreDesktopEditor(): Promise<void> {
     }
     stopPersistence = effect(() => {
         const unsaved = hasUnsavedChanges.value;
+        const mode = editorMode.value;
+        const outlineUnsaved = outlineHasUnsavedChanges.value;
+        const outlineDraft = outlineContent.value;
+        const saveManuscript = desktopFileLoaded.value && unsaved;
         saveLocal(manuscript.value, activeChapterIndex.value, unsaved);
-        if (desktopFileLoaded.value && unsaved) {
+        if ((mode === "outline" && outlineUnsaved) || saveManuscript) {
             clearTimeout(autosaveTimer);
             autosaveTimer = setTimeout(
-                () => void save(),
+                () => {
+                    if (mode === "outline" && outlineUnsaved) {
+                        void saveOutlineToDisk(outlineDraft);
+                    }
+                    if (saveManuscript) {
+                        if (mode === "manuscript") void save();
+                        else void saveToDisk();
+                    }
+                },
                 AUTOSAVE_DEBOUNCE_MS,
             );
-        } else if (!unsaved) {
+        } else {
             clearTimeout(autosaveTimer);
         }
         return () => clearTimeout(autosaveTimer);
@@ -173,8 +202,50 @@ function onLicenseActivated(): void {
 }
 
 function useCreatedProject(created: Manuscript): void {
+    editorMode.value = "manuscript";
+    replaceOutline("");
     replaceManuscript(created, { desktopFileLoaded: true });
     editorHistory.clear();
+}
+
+async function startNewProject(): Promise<void> {
+    if (editorMode.peek() === "outline" && outlineHasUnsavedChanges.peek()) {
+        if (!await saveOutlineToDisk()) return;
+    }
+    if (editorMode.peek() === "outline" && hasUnsavedChanges.peek()) {
+        await saveToDisk();
+        if (hasUnsavedChanges.peek()) return;
+    }
+    createProjectOpen.value = true;
+}
+
+async function openOutline(): Promise<boolean> {
+    try {
+        if (editorMode.peek() === "manuscript" && hasUnsavedChanges.peek()) {
+            await save();
+            if (hasUnsavedChanges.peek()) return false;
+        }
+        const content = await requestOutline();
+        replaceOutline(content);
+        editorHistory.clear();
+        editorMode.value = "outline";
+        return true;
+    } catch (error) {
+        console.error("Could not open the project outline:", error);
+        alert(error instanceof Error ? error.message : "Could not open the project outline.");
+        return false;
+    }
+}
+
+async function showManuscript(): Promise<boolean> {
+    if (outlineHasUnsavedChanges.peek() && !await saveOutlineToDisk()) return false;
+    if (hasUnsavedChanges.peek()) {
+        await saveToDisk();
+        if (hasUnsavedChanges.peek()) return false;
+    }
+    editorMode.value = "manuscript";
+    editorHistory.clear();
+    return true;
 }
 
 </script>
@@ -195,10 +266,12 @@ function useCreatedProject(created: Manuscript): void {
         :data-ready="String(ready)"
     >
         <Topbar
-            :on-new-project="() => createProjectOpen = true"
+            :on-new-project="startNewProject"
             :on-open-project="() => void openProject()"
             :toolbar-visible="toolbarVisible"
             :on-toggle-toolbar="() => toolbarVisible = !toolbarVisible"
+            :on-open-outline="openOutline"
+            :on-show-manuscript="showManuscript"
         />
         <ProjectCreateDialog
             :open="createProjectOpen"
@@ -208,9 +281,9 @@ function useCreatedProject(created: Manuscript): void {
         <Toolbar v-if="toolbarVisible" />
         <main class="main">
             <div class="workspace">
-                <Sidebar />
-                <WritingArea />
-                <AssistancePanel />
+                <Sidebar v-if="modeState === 'manuscript'" />
+                <WritingArea :mode="modeState" />
+                <AssistancePanel v-if="modeState === 'manuscript'" />
             </div>
         </main>
         <StatusBar />

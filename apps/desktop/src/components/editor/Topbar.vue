@@ -9,9 +9,13 @@ import {
 } from "../../lib/editor/commands.ts";
 import {
     commitManuscriptTitle,
+    desktopFileLoaded,
+    editorMode,
     hasUnsavedChanges,
     manuscript,
     menuOpen,
+    outlineHasUnsavedChanges,
+    outlineSaveMessage,
     renameManuscript,
     saveMessage,
 } from "../../lib/editor/state.ts";
@@ -21,9 +25,11 @@ import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownM
 import Divider from "../../../../../packages/shared/ui/components/Divider.vue";
 import SaveStatus from "../SaveStatus.vue";
 
-defineProps<{
+const props = defineProps<{
     onNewProject: () => void;
     onOpenProject: () => void;
+    onOpenOutline: () => Promise<boolean>;
+    onShowManuscript: () => Promise<boolean>;
     toolbarVisible: boolean;
     onToggleToolbar: () => void;
 }>();
@@ -32,14 +38,19 @@ const titleInput = ref<HTMLInputElement | null>(null);
 const manuscriptState = useSignalValue(manuscript);
 const unsavedState = useSignalValue(hasUnsavedChanges);
 const messageState = useSignalValue(saveMessage);
+const modeState = useSignalValue(editorMode);
+const outlineUnsavedState = useSignalValue(outlineHasUnsavedChanges);
+const outlineMessageState = useSignalValue(outlineSaveMessage);
+const projectLoadedState = useSignalValue(desktopFileLoaded);
 const menuState = useSignalValue(menuOpen);
 const title = computed(() =>
     String(manuscriptState.value.frontmatter.title ?? "Untitled Manuscript"),
 );
 const message = computed(
-    () =>
-        messageState.value ||
-        (unsavedState.value ? "Unsaved changes" : "Saved"),
+    () => modeState.value === "outline"
+        ? outlineMessageState.value ||
+        (outlineUnsavedState.value || unsavedState.value ? "Unsaved changes" : "Saved")
+        : messageState.value || (unsavedState.value ? "Unsaved changes" : "Saved"),
 );
 
 onMounted(() => {
@@ -55,45 +66,54 @@ onMounted(() => {
 <template>
     <header class="topbar">
         <div class="titleGroup">
-            <input
-                ref="titleInput"
-                id="manuscript-title"
-                class="title"
-                :value="title"
-                aria-label="Manuscript title"
-                placeholder="Untitled Manuscript"
-                @input="
+            <input ref="titleInput" id="manuscript-title" class="title" :value="title" aria-label="Manuscript title"
+                placeholder="Untitled Manuscript" @input="
                     renameManuscript(
                         ($event.currentTarget as HTMLInputElement).value,
                     )
-                "
-                @blur="commitManuscriptTitle"
-            />
-            <SaveStatus
-                id="save-status"
-                class="saveStatus"
-                :status="unsavedState ? 'unsaved' : 'saved'"
-                :message="message"
-            />
+                    " @blur="commitManuscriptTitle" />
+            <SaveStatus id="save-status" class="saveStatus" :status="(modeState === 'outline'
+                ? outlineUnsavedState || unsavedState
+                : unsavedState)
+                ? 'unsaved'
+                : 'saved'" :message="message" />
         </div>
         <div class="right">
-            <DropdownMenu
-                id="app-menu"
-                placement="bottom-end"
-                :open="menuState"
-                @open-change="menuOpen.value = $event"
+            <div
+                class="modeSwitch"
+                role="group"
+                aria-label="Project view"
+                aria-keyshortcuts="Control+G Meta+G"
+                title="Switch between Manuscript and Outline (Ctrl+G)"
             >
+                <button
+                    type="button"
+                    class="modeOption"
+                    :class="{ selected: modeState === 'manuscript' }"
+                    :aria-pressed="modeState === 'manuscript'"
+                    :disabled="modeState === 'manuscript'"
+                    data-project-mode="manuscript"
+                    @click="props.onShowManuscript()"
+                >
+                    Manuscript
+                </button>
+                <button
+                    type="button"
+                    class="modeOption"
+                    :class="{ selected: modeState === 'outline' }"
+                    :aria-pressed="modeState === 'outline'"
+                    :disabled="modeState === 'outline' || !projectLoadedState"
+                    :title="!projectLoadedState ? 'Open or create a project first' : undefined"
+                    data-project-mode="outline"
+                    @click="props.onOpenOutline()"
+                >
+                    Outline
+                </button>
+            </div>
+            <DropdownMenu id="app-menu" placement="bottom-end" :open="menuState" @open-change="menuOpen.value = $event">
                 <template #trigger>
-                    <Button
-                        variant="quiet"
-                        size="small"
-                        id="menu-toggle"
-                        class="menuToggle"
-                        aria-label="Menu"
-                        title="Menu (Ctrl+M)"
-                        aria-haspopup="true"
-                        :aria-expanded="menuState"
-                    >
+                    <Button variant="quiet" size="small" id="menu-toggle" class="menuToggle" aria-label="Menu"
+                        title="Menu (Ctrl+M)" aria-haspopup="true" :aria-expanded="menuState">
                         <span class="hamburger" aria-hidden="true">
                             <span />
                             <span />
@@ -102,77 +122,36 @@ onMounted(() => {
                     </Button>
                 </template>
                 <nav class="menu" aria-label="Application menu">
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        @click="save()"
-                    >
+                    <button type="button" role="menuitem" class="item" @click="save()">
                         <span>Save</span>
                         <kbd class="kbd">Ctrl+S</kbd>
                     </button>
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        id="menu-save-epub"
-                        @click="saveAsEpub()"
-                    >
+                    <button v-if="modeState === 'manuscript'" type="button" role="menuitem" class="item"
+                        id="menu-save-epub" @click="saveAsEpub()">
                         <span>Save As</span>
                     </button>
                     <Divider />
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        id="menu-new-project"
-                        @click="onNewProject"
-                    >
+                    <button type="button" role="menuitem" class="item" id="menu-new-project" @click="onNewProject">
                         New Project
                         <kbd class="kbd">Ctrl+N</kbd>
                     </button>
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        id="menu-open-project"
-                        @click="onOpenProject"
-                    >
+                    <button type="button" role="menuitem" class="item" id="menu-open-project" @click="onOpenProject">
                         Open Project
                         <kbd class="kbd">Ctrl+O</kbd>
                     </button>
                     <Divider />
-                    <a role="menuitem" href="/settings" class="item"
-                        >Settings</a
-                    >
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        id="menu-toggle-toolbar"
-                        @click="onToggleToolbar"
-                    >
+                    <a role="menuitem" href="/settings" class="item">Settings</a>
+                    <button type="button" role="menuitem" class="item" id="menu-toggle-toolbar"
+                        @click="onToggleToolbar">
                         {{ toolbarVisible ? "Hide toolbar" : "Show toolbar" }}
                     </button>
                     <a role="menuitem" href="/about" class="item">About</a>
                     <Divider />
-                    <button
-                        type="button"
-                        role="menuitem"
-                        class="item"
-                        id="menu-fullscreen"
-                        @click="toggleFullscreen()"
-                    >
+                    <button type="button" role="menuitem" class="item" id="menu-fullscreen" @click="toggleFullscreen()">
                         <span>Fullscreen</span>
                         <kbd class="kbd">F11</kbd>
                     </button>
-                    <button
-                        type="button"
-                        role="menuitem"
-                        :class="['item', 'quit']"
-                        id="menu-quit"
-                        @click="quit()"
-                    >
+                    <button type="button" role="menuitem" :class="['item', 'quit']" id="menu-quit" @click="quit()">
                         Quit
                     </button>
                 </nav>
@@ -203,6 +182,53 @@ onMounted(() => {
     display: flex;
     flex: 0 0 auto;
     gap: 0.35rem;
+}
+
+.modeSwitch {
+    align-items: stretch;
+    background: var(--surface-sunken);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+    display: flex;
+    gap: 0.1rem;
+    padding: 0.12rem;
+}
+
+.modeOption {
+    background: transparent;
+    border: 0;
+    border-radius: calc(var(--radius-control) - 0.12rem);
+    color: var(--muted);
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+    min-height: 1.55rem;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+}
+
+.modeOption:hover:not(:disabled) {
+    background: var(--surface);
+    color: var(--text);
+}
+
+.modeOption.selected {
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    color: var(--accent-strong);
+    font-weight: 600;
+}
+
+.modeOption:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+}
+
+.modeOption:disabled {
+    cursor: default;
+    opacity: 1;
 }
 
 .titleGroup {
@@ -323,6 +349,23 @@ onMounted(() => {
     background: var(--surface-sunken);
     color: var(--text);
     outline: none;
+}
+
+.item.selected,
+.item:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.item:disabled:hover,
+.item.selected:hover {
+    background: transparent;
+}
+
+.selection {
+    color: var(--accent);
+    font-weight: 700;
+    margin-left: auto;
 }
 
 .item:active {

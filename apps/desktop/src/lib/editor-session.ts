@@ -1,6 +1,7 @@
 import { clearLastFilePath, loadLastFilePath, saveLastFilePath } from "./desktop.ts";
 import { blankManuscript } from "./editor/data.ts";
 import { epubFilename, generateEpub, isEpubFilename, parseEpub } from "./epub.ts";
+import { DEFAULT_OUTLINE } from "./editor/outline-templates.ts";
 import type { Manuscript } from "./editor/types.ts";
 import { basename } from "../../../../packages/shared/path.ts";
 
@@ -14,6 +15,18 @@ let pendingProjectParentPath: string | null = null;
 
 export function getActivePath(): string | null {
   return state.activePath;
+}
+
+function activeOutlinePath(): string {
+  const activePath = state.activePath;
+  if (!activePath || !isEpubFilename(activePath)) {
+    throw new Error("Open a project before using Outline.");
+  }
+  const separator = Math.max(activePath.lastIndexOf("/"), activePath.lastIndexOf("\\"));
+  if (separator < 0) throw new Error("The active manuscript has no project directory.");
+  const directory = separator === 0 ? "" : activePath.slice(0, separator);
+  const pathSeparator = activePath[separator];
+  return `${directory}${pathSeparator}Outline.md`;
 }
 
 export async function setActivePath(path: string): Promise<void> {
@@ -74,6 +87,27 @@ export function suggestedName(manuscript: Manuscript, filename: unknown): string
 
 export async function writeManuscript(path: string, manuscript: Manuscript): Promise<void> {
   await Deno.writeFile(path, await generateEpub(manuscript));
+}
+
+export async function loadOrCreateOutline(): Promise<string> {
+  const path = activeOutlinePath();
+  try {
+    return await Deno.readTextFile(path);
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+
+  try {
+    await Deno.writeTextFile(path, DEFAULT_OUTLINE, { createNew: true });
+    return DEFAULT_OUTLINE;
+  } catch (error) {
+    if (error instanceof Deno.errors.AlreadyExists) return await Deno.readTextFile(path);
+    throw error;
+  }
+}
+
+export async function writeOutline(content: string): Promise<void> {
+  await Deno.writeTextFile(activeOutlinePath(), content);
 }
 
 export function firstProjectEpub(

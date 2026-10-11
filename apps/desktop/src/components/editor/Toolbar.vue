@@ -1,9 +1,15 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { runCommand } from "../../lib/editor/surface.ts";
+import { editorMode, replaceOutline } from "../../lib/editor/state.ts";
+import { runCommand, mountContent } from "../../lib/editor/surface.ts";
+import { markdownToHtml } from "../../lib/utilties/markdown-utilities.ts";
+import { OUTLINE_TEMPLATES } from "../../lib/editor/outline-templates.ts";
+import { editorHistory } from "../../lib/editor/history.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import Tooltip from "../../../../../packages/shared/ui/components/Tooltip.vue";
 import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownMenu.vue";
+import Dialog from "../../../../../packages/shared/ui/components/Dialog.vue";
+import { useSignalValue } from "../vue-signals.ts";
 
 const commands = [
   { command: "bold", tip: "Bold (Ctrl+B)", label: "B" },
@@ -11,65 +17,87 @@ const commands = [
   { command: "insertUnorderedList", tip: "Bullet List", label: "List" },
 ] as const;
 const headingMenuOpen = ref(false);
+const templateMenuOpen = ref(false);
+const templateConfirmationOpen = ref(false);
+const selectedTemplate = ref<(typeof OUTLINE_TEMPLATES)[number] | null>(null);
+const modeState = useSignalValue(editorMode);
 const textStyles = [
   { label: "Normal text", value: "<p>" },
   { label: "Heading 1", value: "<h1>" },
   { label: "Heading 2", value: "<h2>" },
   { label: "Heading 3", value: "<h3>" },
 ] as const;
+
+function confirmTemplate(template: (typeof OUTLINE_TEMPLATES)[number]): void {
+  selectedTemplate.value = template;
+  templateConfirmationOpen.value = true;
+}
+
+function cancelTemplate(): void {
+  templateConfirmationOpen.value = false;
+  selectedTemplate.value = null;
+}
+
+function applyTemplate(): void {
+  const template = selectedTemplate.value;
+  if (!template) return;
+  replaceOutline(template.content, true);
+  mountContent(markdownToHtml(template.content));
+  editorHistory.clear();
+  cancelTemplate();
+}
 </script>
 
 <template>
   <div class="toolbar" role="toolbar" aria-label="Formatting">
-    <Tooltip
-      v-for="{ command, tip, label } in commands"
-      :key="command"
-      :content="tip"
-      position="bottom"
-    >
-      <Button
-        variant="quiet"
-        size="small"
-        :data-command="command"
-        @mousedown.prevent
-        @click="runCommand(command)"
-      >
+    <Tooltip v-for="{ command, tip, label } in commands" :key="command" :content="tip" position="bottom">
+      <Button variant="quiet" size="small" :data-command="command" @mousedown.prevent @click="runCommand(command)">
         <strong v-if="command === 'bold'">{{ label }}</strong>
         <em v-else-if="command === 'italic'">{{ label }}</em>
         <template v-else>{{ label }}</template>
       </Button>
     </Tooltip>
-    <DropdownMenu
-      placement="bottom-start"
-      :open="headingMenuOpen"
-      @open-change="headingMenuOpen = $event"
-    >
+    <DropdownMenu placement="bottom-start" :open="headingMenuOpen" @open-change="headingMenuOpen = $event">
       <template #trigger>
-        <Button
-          variant="quiet"
-          size="small"
-          aria-haspopup="true"
-          :aria-expanded="headingMenuOpen"
-          title="Text style"
-          @mousedown.prevent
-        >
+        <Button variant="quiet" size="small" aria-haspopup="true" :aria-expanded="headingMenuOpen" title="Text style"
+          @mousedown.prevent>
           Heading
         </Button>
       </template>
       <div class="styleMenu">
-        <button
-          v-for="{ label, value } in textStyles"
-          :key="value"
-          type="button"
-          role="menuitem"
-          class="styleItem"
-          @mousedown.prevent
-          @click="runCommand('formatBlock', value)"
-        >
+        <button v-for="{ label, value } in textStyles" :key="value" type="button" role="menuitem" class="styleItem"
+          @mousedown.prevent @click="runCommand('formatBlock', value)">
           {{ label }}
         </button>
       </div>
     </DropdownMenu>
+    <DropdownMenu v-if="modeState === 'outline'" id="outline-template-menu" class="templateSelector"
+      placement="bottom-end" :open="templateMenuOpen" @open-change="templateMenuOpen = $event">
+      <template #trigger>
+        <Button variant="quiet" size="small" aria-haspopup="menu" :aria-expanded="templateMenuOpen"
+          data-outline-template-trigger>
+          Change Template
+        </Button>
+      </template>
+      <div class="styleMenu">
+        <button v-for="template in OUTLINE_TEMPLATES" :key="template.id" type="button" role="menuitem" class="styleItem"
+          :data-outline-template="template.id" @click="confirmTemplate(template)">
+          {{ template.label }}
+        </button>
+      </div>
+    </DropdownMenu>
+    <Dialog id="outline-template-confirmation" title="Replace outline content?" :open="templateConfirmationOpen"
+      @close="cancelTemplate">
+      <p>
+        Apply {{ selectedTemplate?.label }}? This will replace all current outline content.
+      </p>
+      <template #footer>
+        <Button variant="quiet" size="small" @click="cancelTemplate">Cancel</Button>
+        <Button variant="primary" data-confirm-template @click="applyTemplate">
+          Replace outline
+        </Button>
+      </template>
+    </Dialog>
   </div>
 </template>
 
@@ -88,6 +116,10 @@ const textStyles = [
   padding: 0.25rem 1rem;
   position: relative;
   z-index: 40;
+}
+
+.templateSelector {
+  margin-left: auto;
 }
 
 .styleMenu {
