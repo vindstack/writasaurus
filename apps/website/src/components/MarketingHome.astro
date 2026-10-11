@@ -11,18 +11,25 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
     <section class="hero" aria-labelledby="hero-title">
         <div class="copy">
             <p class="eyebrow">Quiet focus. Big writing ambitions.</p>
-            <h1 id="hero-title">A quiet, private space for your next chapter.</h1>
+            <h1 id="hero-title">
+                A quiet, private space for your next chapter.
+            </h1>
             <p class="intro">
                 A calm, private place to build a book one chapter at a time.
                 Keep your drafts organized, your momentum steady, and your
                 manuscript right where it belongs: with you.
             </p>
             <div class="purchaseActions">
-                <a class="button button--primary purchaseButton" href="/checkout">
+                <a
+                    class="button button--primary purchaseButton"
+                    href="/checkout"
+                >
                     Get Writasaurus — $59.99 USD
                 </a>
                 <p class="licenseNote">
-                    One-time purchase. Personal license for up to two devices.{" "}
+                    One-time purchase. Personal license for up to two devices.{
+                        " "
+                    }
                     <a href="/agreement">Terms apply.</a>
                 </p>
             </div>
@@ -33,13 +40,13 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
                     <span class="paperLabel">WRITASAURUS · FIELD NOTES</span>
                     <span class="paperNumber">01</span>
                 </div>
-                <div class="rule" />
+                <div class="rule"></div>
                 <p class="chapter">Chapter One</p>
                 <p class="chapterTitle">A beginning<br />of your own.</p>
                 <div class="textLines">
-                    <span />
-                    <span />
-                    <span class="shortLine" />
+                    <span></span>
+                    <span></span>
+                    <span class="shortLine"></span>
                 </div>
             </div>
         </div>
@@ -48,23 +55,34 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
     <section class="features" aria-label="Writasaurus features">
         <article>
             <span class="featureIndex">01</span>
-            <h2>A novel's worth of order</h2>
-            <p>Chapters, word counts, and gentle daily goals—all in one focused place.</p>
+            <h2>Big books, made easy</h2>
+            <p>
+                Organize chapters, add introductions and forwards, revise
+                easily.
+            </p>
         </article>
         <article>
             <span class="featureIndex">02</span>
-            <h2>Your pages stay yours</h2>
-            <p>Your manuscript stays on your device and is never used to train AI.</p>
+            <h2>Private by design</h2>
+            <p>
+                Your work stays on your device, with no account or cloud
+                storage, and is never used to train AI.
+            </p>
         </article>
         <article>
             <span class="featureIndex">03</span>
-            <h2>Ready when you are</h2>
-            <p>Write privately, chapter by chapter, with your manuscript saved on your device.</p>
+            <h2>Stay motivated</h2>
+            <p>
+                Set writing goals and track your progress to stay motivated and
+                productive.
+            </p>
         </article>
     </section>
 
     <footer class="footer">
-        <span>© 2026 Vindstack LLC. Writasaurus is a trademark of Vindstack LLC.</span>
+        <span
+            >© 2026 Vindstack LLC. Writasaurus is a trademark of Vindstack LLC.</span
+        >
         <a href="/agreement">Terms and conditions</a>
     </footer>
 </main>
@@ -104,8 +122,8 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         display: grid;
         gap: clamp(2rem, 5vw, 5rem);
         grid-template-columns: minmax(0, 1.1fr) minmax(16rem, 0.9fr);
-        margin: 2.25rem auto 1.75rem;
-        max-width: 66rem;
+        margin: 2.5rem auto 2.5rem;
+        max-width: 56rem;
     }
 
     .copy {
@@ -178,7 +196,8 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         background: var(--surface);
         border: 1px solid var(--border);
         border-radius: 0.2rem 1.1rem 0.2rem 0.2rem;
-        box-shadow: 0 1.2rem 2.5rem color-mix(in srgb, var(--text) 12%, transparent);
+        box-shadow: 0 1.2rem 2.5rem
+            color-mix(in srgb, var(--text) 12%, transparent);
         min-height: 17rem;
         padding: 1.8rem 2rem;
         position: relative;
@@ -287,7 +306,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         .hero {
             gap: 1rem;
             grid-template-columns: 1fr;
-            margin: 1.75rem auto 1.25rem;
+            margin: 1.75rem auto 1.75rem;
         }
 
         .art {

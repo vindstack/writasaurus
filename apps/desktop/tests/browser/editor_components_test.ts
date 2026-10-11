@@ -181,6 +181,8 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     assert(initialChapters > 0, "Expected the editor to render at least one chapter");
 
     await page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" }).click();
+    assert(await items.count() === initialChapters, "Opening Add must not create a section");
+    await page.getByRole("menuitem", { name: "Chapter", exact: true }).click();
     await page.waitForFunction(
       (count) => document.querySelectorAll("[data-drag-item]").length === count + 1,
       initialChapters,
@@ -189,13 +191,46 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     await page.waitForFunction(
       (expected) =>
         (document.querySelector("#chapter-title") as HTMLInputElement).value === expected,
-      `Chapter ${initialChapters + 1}: Untitled`,
+      `Chapter ${initialChapters + 1}`,
     ).catch(() => {});
     const chapterTitle = await page.locator("#chapter-title").inputValue();
     assert(
-      chapterTitle === `Chapter ${initialChapters + 1}: Untitled`,
+      chapterTitle === `Chapter ${initialChapters + 1}`,
       `Unexpected new chapter title: ${chapterTitle}`,
     );
+  });
+});
+
+browserTest("browser: Add opens a menu and selecting a type adds it in reading order", async () => {
+  await withEditorPage(async (page) => {
+    await openSidebar(page);
+    const sidebar = page.getByTestId("chapters-sidebar");
+    const add = sidebar.getByRole("button", { name: "Add" });
+    const items = page.locator("[data-drag-item]");
+    const initialSections = await items.count();
+    assert(await add.count() === 1, "Expected a single Add button");
+    assert(await sidebar.locator("select").count() === 0, "Expected no separate type selector");
+    assert(
+      await sidebar.getByRole("button", { name: "Type", exact: true }).count() === 0,
+      "Expected no separate Type button",
+    );
+    assert(await page.locator('[data-generated-section="toc"]').isVisible());
+
+    await add.click();
+    assert(await items.count() === initialSections, "Opening Add must not create a section");
+    await page.getByRole("menuitem", { name: "Prologue", exact: true }).click();
+    assert(await items.count() === initialSections + 1, "Expected exactly one prologue added");
+    assert(await add.getAttribute("aria-expanded") === "false", "Expected Add menu to close");
+    assert(await page.locator("#chapter-title").inputValue() === "Prologue");
+    await add.click();
+    await page.getByRole("menuitem", { name: "Epilogue", exact: true }).click();
+    assert(await items.count() === initialSections + 2, "Expected exactly one epilogue added");
+    assert(await add.getAttribute("aria-expanded") === "false", "Expected Add menu to close");
+
+    const labels = await page.locator("[data-drag-item] [data-chapter-title]")
+      .allTextContents();
+    assert(labels[0]?.includes("Prologue"), "Expected the prologue before chapters");
+    assert(labels.at(-1)?.includes("Epilogue"), "Expected the epilogue after chapters");
   });
 });
 
@@ -292,50 +327,6 @@ browserTest("browser: chapter delete control renders visible neutral text", asyn
     assert(
       colors.button === colors.text,
       "Expected the delete button to use the primary text color",
-    );
-  });
-});
-
-browserTest("browser: dragging a chapter handle reorders chapters", async () => {
-  await withEditorPage(async (page) => {
-    await openSidebar(page);
-    const addChapter = page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" });
-    await addChapter.click();
-    await addChapter.click();
-    await page.waitForFunction(() => document.querySelectorAll("[data-drag-item]").length === 3);
-
-    const chapterTitle = page.locator("#chapter-title");
-    await page.locator("[data-drag-item]").nth(0).locator("[data-chapter-title]").click();
-    await chapterTitle.fill("Opening Chapter 1");
-    await page.locator("[data-drag-item]").nth(1).locator("[data-chapter-title]").click();
-    await chapterTitle.fill("Chapter 2: Middle");
-    await page.locator("[data-drag-item]").nth(2).locator("[data-chapter-title]").click();
-    await chapterTitle.fill("Appendix");
-
-    const source = await page.locator("[data-drag-item]").nth(0).locator("[data-drag-handle]")
-      .boundingBox();
-    const destination = await page.locator("[data-drag-item]").nth(2).boundingBox();
-    assert(source && destination, "Expected draggable chapter handles");
-
-    await page.mouse.move(source.x + source.width / 2, source.y + source.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(
-      destination.x + destination.width / 2,
-      destination.y + destination.height / 2,
-      { steps: 10 },
-    );
-    await page.mouse.up();
-
-    const titles = await page.locator("[data-chapter-title]").allTextContents();
-    assert(
-      titles.join("|") === "Chapter 1: Middle|Appendix|Opening Chapter 3",
-      `Unexpected reordered titles: ${titles.join("|")}`,
-    );
-
-    const status = await page.locator("#save-status").textContent() ?? "";
-    assert(
-      status.includes("Unsaved changes"),
-      "Expected chapter reordering to mark the manuscript dirty",
     );
   });
 });

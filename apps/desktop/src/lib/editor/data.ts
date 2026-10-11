@@ -4,7 +4,13 @@ import {
   createSlugFromString,
   getWordAndCharCountFromString,
 } from "../utilties/string-utilities.ts";
-import type { Chapter, Manuscript } from "./types.ts";
+import {
+  type Chapter,
+  type Manuscript,
+  SECTION_TYPE_LABELS,
+  SECTION_TYPES,
+  type SectionType,
+} from "./types.ts";
 
 export function blankManuscript(title = "Untitled Manuscript"): Manuscript {
   return {
@@ -19,7 +25,7 @@ export function blankManuscript(title = "Untitled Manuscript"): Manuscript {
   };
 }
 
-export function chapter(title: string, content: string): Chapter {
+export function chapter(title: string, content: string, type: SectionType = "chapter"): Chapter {
   const stats = count(textFromHtml(content));
   return {
     id: crypto.randomUUID(),
@@ -27,7 +33,16 @@ export function chapter(title: string, content: string): Chapter {
     content,
     wordCount: stats.words,
     charCount: stats.chars,
+    type,
   };
+}
+
+export function defaultSectionTitle(type: SectionType, number = 1): string {
+  const label = SECTION_TYPE_LABELS[type];
+  if (type === "chapter" || type === "part" || type === "appendix") {
+    return `${label} ${number}`;
+  }
+  return label;
 }
 
 export function slug(value: string): string {
@@ -63,6 +78,7 @@ export function parseManuscript(source: string, filename: string): Manuscript {
 
   const chapters: Chapter[] = [];
   let title = "Chapter 1";
+  let sectionType: SectionType = "chapter";
   let lines: string[] = [];
   const flush = () => {
     if (!lines.some((line) => line.trim()) && chapters.length) return;
@@ -71,17 +87,39 @@ export function parseManuscript(source: string, filename: string): Manuscript {
     if (heading?.[1]?.trim() === title.trim()) {
       markdown = markdown.slice(heading[0].length).replace(/^[\r\n]+/, "");
     }
-    chapters.push(chapter(title, markdownToHtml(markdown)));
+    chapters.push(chapter(title, markdownToHtml(markdown), sectionType));
   };
   for (const line of body.split(/\r?\n/)) {
     const marker = line.trim().match(
       /^(?:<!--\s*chapter:?\s*(.*?)\s*-->|---chapter:?\s*(.*?)\s*---)$/i,
     );
-    const heading = line.trim().match(/^#{1,2}\s+(chapter\b.*|prologue|epilogue|introduction)$/i);
+    const sectionMarker = line.trim().match(
+      /^<!--\s*section:\s*([\w-]+)\s*\|\s*(.*?)\s*-->$/i,
+    );
+    const heading = line.trim().match(
+      /^#{1,2}\s+(chapter\b.*|part\b.*|prologue|epilogue|introduction|foreword|preface|dedication|epigraph|acknowledgments|afterword|appendix\b.*|glossary|bibliography|index|colophon|copyright page)$/i,
+    );
+    const markedType = sectionMarker?.[1].toLowerCase();
+    if (sectionMarker && SECTION_TYPES.includes(markedType as SectionType)) {
+      if (lines.some((part) => part.trim())) flush();
+      sectionType = markedType as SectionType;
+      title = sectionMarker[2].trim() || defaultSectionTitle(sectionType, chapters.length + 1);
+      lines = [];
+      continue;
+    }
     const markerTitle = marker?.[1] ?? marker?.[2] ?? heading?.[1];
     if (markerTitle !== undefined) {
       if (lines.some((part) => part.trim())) flush();
       title = markerTitle.trim() || `Chapter ${chapters.length + 1}`;
+      const normalizedTitle = markerTitle.trim().toLowerCase();
+      sectionType = marker
+        ? "chapter"
+        : SECTION_TYPES.find((type) =>
+          normalizedTitle === SECTION_TYPE_LABELS[type].toLowerCase() ||
+          (type === "chapter" && normalizedTitle.startsWith("chapter ")) ||
+          (type === "part" && normalizedTitle.startsWith("part ")) ||
+          (type === "appendix" && normalizedTitle.startsWith("appendix "))
+        ) ?? "chapter";
       lines = [];
     } else if (line.trim() || lines.length) {
       lines.push(line);
@@ -102,9 +140,13 @@ export function serialize(manuscript: Manuscript): string {
     totalChapters: manuscript.chapters.length,
     totalWords: manuscript.chapters.reduce((sum, item) => sum + item.wordCount, 0),
   };
-  const chapters = manuscript.chapters.map((item) =>
-    `<!-- chapter: ${item.title.replace(/-->/g, "")} -->\n\n${htmlToMarkdown(item.content)}`
-  );
+  const chapters = manuscript.chapters.map((item) => {
+    const title = item.title.replace(/-->/g, "");
+    const marker = item.type === undefined || item.type === "chapter"
+      ? `<!-- chapter: ${title} -->`
+      : `<!-- section: ${item.type} | ${title} -->`;
+    return `${marker}\n\n${htmlToMarkdown(item.content)}`;
+  });
   return `---\n${JSON.stringify(metadata, null, 2)}\n---\n\n${chapters.join("\n\n")}\n`;
 }
 

@@ -1,4 +1,4 @@
-import type { Chapter, Manuscript } from "./editor/types.ts";
+import { type Chapter, type Manuscript, SECTION_TYPES, type SectionType } from "./editor/types.ts";
 import { chapter } from "./editor/data.ts";
 import { createSlugFromString } from "./utilties/string-utilities.ts";
 
@@ -351,7 +351,8 @@ section[epub\\:type~="chapter"] {
   break-before: page;
 }
 
-.chapter-title {
+.chapter-title,
+.section-title {
   page-break-before: always;
   break-before: page;
   page-break-after: avoid;
@@ -361,6 +362,10 @@ section[epub\\:type~="chapter"] {
   margin-top: 2em;
   margin-bottom: 1.5em;
   text-align: center;
+}
+
+.section-title {
+  font-size: 1.7em;
 }
 
 /* Page breaks within content */
@@ -417,6 +422,28 @@ hr {
   width: 30%;
 }
 `.trim();
+
+const EPUB_DOC_ROLES: Partial<Record<SectionType, string>> = {
+  chapter: "doc-chapter",
+  part: "doc-part",
+  prologue: "doc-prologue",
+  introduction: "doc-introduction",
+  foreword: "doc-foreword",
+  preface: "doc-preface",
+  dedication: "doc-dedication",
+  epigraph: "doc-epigraph",
+  acknowledgments: "doc-acknowledgments",
+  epilogue: "doc-epilogue",
+  afterword: "doc-afterword",
+  appendix: "doc-appendix",
+  glossary: "doc-glossary",
+  bibliography: "doc-bibliography",
+  index: "doc-index",
+};
+
+function sectionType(chapter: Chapter): SectionType {
+  return chapter.type ?? "chapter";
+}
 
 export async function generateEpub(manuscript: Manuscript): Promise<Uint8Array> {
   const encoder = new TextEncoder();
@@ -530,6 +557,8 @@ ${ncxNavPoints}
 
   // 7. OEBPS/chapter-${i+1}.xhtml for each chapter
   manuscript.chapters.forEach((chapter, i) => {
+    const type = sectionType(chapter);
+    const role = EPUB_DOC_ROLES[type];
     const chapterBody = htmlToXhtml(chapter.content);
     const chapterXhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
@@ -540,8 +569,10 @@ ${ncxNavPoints}
   <link rel="stylesheet" type="text/css" href="style.css"/>
 </head>
 <body class="chapter" style="page-break-before: always; break-before: page;">
-  <section epub:type="chapter" role="doc-chapter" class="chapter-content" style="page-break-before: always; break-before: page;">
-    <h1 class="chapter-title" style="page-break-before: always; break-before: page;">${
+  <section epub:type="${type}"${
+      role ? ` role="${role}"` : ""
+    } class="chapter-content" style="page-break-before: always; break-before: page;">
+    <h1 class="chapter-title section-title" style="page-break-before: always; break-before: page;">${
       escapeXml(chapter.title)
     }</h1>
     ${chapterBody}
@@ -569,6 +600,7 @@ ${ncxNavPoints}
 
   const spineItems = [
     '    <itemref idref="titlepage"/>',
+    '    <itemref idref="nav"/>',
     ...manuscript.chapters.map((_, i) => `    <itemref idref="chapter-${i + 1}"/>`),
   ].join("\n");
 
@@ -658,7 +690,6 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
     if (
       docText.includes('epub:type="titlepage"') ||
       docText.includes('class="titlepage"') ||
-      docText.includes('epub:type="toc"') ||
       docText.includes('role="doc-toc"')
     ) {
       continue;
@@ -680,7 +711,11 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
     let contentHtml = rawContent.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>\s*/i, "").trim();
     if (!contentHtml) contentHtml = "<p></p>";
 
-    chapters.push(chapter(chapterTitle, contentHtml));
+    const sectionTypeValue = docText.match(/<section\b[^>]*\bepub:type=["']([^"']+)["']/i)?.[1]
+      ?.split(/\s+/)
+      .find((value) => SECTION_TYPES.includes(value as SectionType));
+    const type = sectionTypeValue as SectionType | undefined;
+    chapters.push(chapter(chapterTitle, contentHtml, type ?? "chapter"));
   }
 
   const cleanFilename = filename.endsWith(".epub")

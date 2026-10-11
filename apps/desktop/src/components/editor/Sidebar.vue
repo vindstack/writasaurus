@@ -11,16 +11,25 @@ import {
   sidebarOpen,
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
+import { SECTION_TYPE_LABELS, SECTION_TYPES, type SectionType } from "../../lib/editor/types.ts";
 import { useSignalValue } from "../vue-signals.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import Chip from "../../../../../packages/shared/ui/components/Chip.vue";
+import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownMenu.vue";
 import SlideoutPanel from "./SlideoutPanel.vue";
 
 const manuscriptState = useSignalValue(manuscript);
 const activeIndex = useSignalValue(activeChapterIndex);
 const isOpen = useSignalValue(sidebarOpen);
+const addMenuOpen = ref(false);
 const list = ref<HTMLOListElement | null>(null);
 let destroyDragDrop: (() => void) | undefined;
+
+function addSection(type: SectionType): void {
+  addChapter(type);
+  titleFocusRequest.value++;
+  addMenuOpen.value = false;
+}
 
 onMounted(() => {
   if (!list.value) return;
@@ -43,12 +52,46 @@ function choose(index: number): void {
 </script>
 
 <template>
-  <SlideoutPanel :open="isOpen" side="left" label="Chapters" class="sidebar" data-testid="chapters-sidebar">
+  <SlideoutPanel :open="isOpen" side="left" label="Book sections" class="sidebar" data-testid="chapters-sidebar">
     <div class="heading">
-      <h2>Chapters</h2>
-      <Button variant="quiet" size="small" @click="addChapter(); titleFocusRequest.value++">
-        Add
-      </Button>
+      <h2>Sections</h2>
+      <div class="heading-actions">
+        <span
+          class="generated-toc"
+          data-generated-section="toc"
+          aria-label="Table of contents, generated for EPUB"
+          title="The EPUB table of contents is generated from book sections"
+        >TOC</span>
+        <DropdownMenu
+          placement="bottom-end"
+          :open="addMenuOpen"
+          @open-change="addMenuOpen = $event"
+          @keydown.esc="addMenuOpen = false"
+        >
+          <template #trigger>
+            <Button
+              variant="quiet"
+              size="small"
+              aria-haspopup="menu"
+              :aria-expanded="addMenuOpen"
+            >
+              Add
+            </Button>
+          </template>
+          <div class="section-menu">
+            <button
+              v-for="type in SECTION_TYPES"
+              :key="type"
+              type="button"
+              role="menuitem"
+              class="section-menu-item"
+              @click="addSection(type)"
+            >
+              {{ SECTION_TYPE_LABELS[type] }}
+            </button>
+          </div>
+        </DropdownMenu>
+      </div>
     </div>
     <ol id="chapter-list" class="list" ref="list">
       <li v-for="(chapter, index) in manuscriptState.chapters" :key="chapter.id"
@@ -58,7 +101,12 @@ function choose(index: number): void {
           aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder">
           ⋮
         </button>
-        <span data-chapter-title @click="choose(index)">{{ chapter.title }}</span>
+        <span data-chapter-title @click="choose(index)">
+          {{ chapter.title }}
+          <small v-if="chapter.type && chapter.type !== 'chapter'">
+            · {{ SECTION_TYPE_LABELS[chapter.type] }}
+          </small>
+        </span>
         <Chip variant="outline" class="chip">
           <small>{{ chapter.wordCount.toLocaleString() }}w</small>
         </Chip>
@@ -76,7 +124,7 @@ function choose(index: number): void {
 
 <style scoped>
 .sidebar {
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
 }
 
 .heading {
@@ -84,6 +132,39 @@ function choose(index: number): void {
   display: flex;
   justify-content: space-between;
   padding-bottom: 0.25rem;
+}
+
+.heading-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.section-menu {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  box-shadow: 0 0.5rem 1.5rem color-mix(in srgb, var(--text) 14%, transparent);
+  display: grid;
+  max-height: min(70vh, 24rem);
+  min-width: 12rem;
+  overflow-y: auto;
+  padding: 0.25rem;
+}
+
+.section-menu-item {
+  background: transparent;
+  border: 0;
+  border-radius: 0.25rem;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+}
+
+.section-menu-item:hover,
+.section-menu-item:focus-visible {
+  background: var(--surface-sunken);
 }
 
 .heading h2 {
@@ -127,6 +208,12 @@ function choose(index: number): void {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generated-toc {
+  color: var(--muted);
+  font-size: 0.65rem;
   white-space: nowrap;
 }
 

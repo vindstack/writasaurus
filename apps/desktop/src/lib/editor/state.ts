@@ -1,6 +1,6 @@
 import { batch, computed, signal } from "@preact/signals";
-import type { Chapter, Manuscript } from "./types.ts";
-import { blankManuscript, chapter as createChapter, count } from "./data.ts";
+import type { Chapter, Manuscript, SectionType } from "./types.ts";
+import { blankManuscript, chapter as createChapter, count, defaultSectionTitle } from "./data.ts";
 
 /**
  * Single source of truth for the editor. Components read these signals directly, so only the
@@ -27,7 +27,32 @@ export const totalWords = computed(() =>
   manuscript.value.chapters.reduce((total, item) => total + item.wordCount, 0)
 );
 
-const CHAPTER_NUMBER_PATTERN = /\b(chapter\s+)\d+\b/i;
+const NUMBERED_SECTION_TYPES = new Set<SectionType>(["chapter", "part", "appendix"]);
+const FRONT_MATTER_TYPES = new Set<SectionType>([
+  "copyright-page",
+  "dedication",
+  "epigraph",
+  "foreword",
+  "preface",
+  "introduction",
+  "prologue",
+]);
+const BACK_MATTER_TYPES = new Set<SectionType>([
+  "epilogue",
+  "afterword",
+  "appendix",
+  "glossary",
+  "bibliography",
+  "index",
+  "acknowledgments",
+  "colophon",
+]);
+
+function placement(type: SectionType): number {
+  if (FRONT_MATTER_TYPES.has(type)) return 0;
+  if (type === "part") return 1;
+  return BACK_MATTER_TYPES.has(type) ? 3 : 2;
+}
 
 /** Replaces the whole document, e.g. after opening or starting a manuscript. */
 export function replaceManuscript(
@@ -86,17 +111,30 @@ export function markSaved(message = ""): void {
   });
 }
 
-export function addChapter(): void {
+export function addChapter(type: SectionType = "chapter"): void {
   const current = manuscript.peek();
+  const sectionNumber =
+    current.chapters.filter((item) => (item.type ?? "chapter") === type).length + 1;
+  const newChapter = createChapter(defaultSectionTitle(type, sectionNumber), "<p></p>", type);
+  const targetPlacement = placement(type);
+  const firstLaterSection = current.chapters.findIndex((item) =>
+    placement(item.type ?? "chapter") > targetPlacement
+  );
+  const lastSamePlacement = current.chapters.reduce(
+    (last, item, index) => placement(item.type ?? "chapter") === targetPlacement ? index : last,
+    -1,
+  );
+  const insertionIndex = firstLaterSection >= 0
+    ? firstLaterSection
+    : Math.max(lastSamePlacement + 1, current.chapters.length);
+  const chapters = [...current.chapters];
+  chapters.splice(insertionIndex, 0, newChapter);
   batch(() => {
     manuscript.value = {
       ...current,
-      chapters: [
-        ...current.chapters,
-        createChapter(`Chapter ${current.chapters.length + 1}: Untitled`, "<p></p>"),
-      ],
+      chapters,
     };
-    activeChapterIndex.value = current.chapters.length;
+    activeChapterIndex.value = insertionIndex;
     hasUnsavedChanges.value = true;
   });
 }
@@ -132,10 +170,21 @@ export function reorderChapter(fromIndex: number, toIndex: number): void {
   const chapters = [...current.chapters];
   const [moved] = chapters.splice(fromIndex, 1);
   chapters.splice(toIndex, 0, moved);
-  const renumbered = chapters.map((item, index) => ({
-    ...item,
-    title: item.title.replace(CHAPTER_NUMBER_PATTERN, `$1${index + 1}`),
-  }));
+  const sectionNumbers = new Map<SectionType, number>();
+  const renumbered = chapters.map((item) => {
+    const type = item.type ?? "chapter";
+    if (!NUMBERED_SECTION_TYPES.has(type)) return item;
+    const number = (sectionNumbers.get(type) ?? 0) + 1;
+    sectionNumbers.set(type, number);
+    const label = type === "appendix" ? "appendix" : type;
+    return {
+      ...item,
+      title: item.title.replace(
+        new RegExp(`\\b(${label}\\s+)\\d+\\b`, "i"),
+        (_match, prefix: string) => `${prefix}${number}`,
+      ),
+    };
+  });
 
   let active = activeChapterIndex.peek();
   if (active === fromIndex) active = toIndex;
@@ -151,7 +200,16 @@ export function reorderChapter(fromIndex: number, toIndex: number): void {
 
 export function renameChapter(title: string): void {
   const index = activeChapterIndex.peek();
-  updateChapter(index, (item) => ({ ...item, title: title.trim() || `Chapter ${index + 1}` }));
+  const current = manuscript.peek();
+  const item = current.chapters[index];
+  const type = item?.type ?? "chapter";
+  const sectionNumber =
+    current.chapters.slice(0, index + 1).filter((chapter) => (chapter.type ?? "chapter") === type)
+      .length;
+  updateChapter(index, (chapter) => ({
+    ...chapter,
+    title: title.trim() || defaultSectionTitle(type, sectionNumber),
+  }));
   batch(() => {
     hasUnsavedChanges.value = true;
     saveMessage.value = "";
