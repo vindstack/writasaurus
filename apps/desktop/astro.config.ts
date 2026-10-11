@@ -17,6 +17,9 @@ export default defineConfig({
   },
   vite: {
     envDir: "../../",
+    optimizeDeps: {
+      include: ["harper.js", "harper.js/slimBinaryInlined"],
+    },
     ssr: {
       noExternal: ["@astrojs/vue"],
     },
