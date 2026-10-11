@@ -1,4 +1,4 @@
-import { isReturnToEditorShortcut } from "../src/lib/shortcuts.ts";
+import { getProjectShortcutAction, isReturnToEditorShortcut } from "../src/lib/shortcuts.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -9,6 +9,30 @@ function assertEquals<T>(actual: T, expected: T): void {
     throw new Error(`Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 }
+
+Deno.test("shortcuts: project and writing assistance shortcuts are distinct", () => {
+  assertEquals(
+    getProjectShortcutAction({ key: "n", ctrlKey: true }),
+    "new-project",
+  );
+  assertEquals(
+    getProjectShortcutAction({ key: "o", ctrlKey: true }),
+    "open-project",
+  );
+  assertEquals(
+    getProjectShortcutAction({ key: "a", ctrlKey: true, shiftKey: true }),
+    "writing-assistance",
+  );
+  assertEquals(
+    getProjectShortcutAction({ key: "n", ctrlKey: true, shiftKey: true }),
+    null,
+  );
+  assertEquals(
+    getProjectShortcutAction({ key: "o", ctrlKey: true, shiftKey: true }),
+    null,
+  );
+  assertEquals(getProjectShortcutAction({ key: "n" }), null);
+});
 
 Deno.test("shortcuts: isReturnToEditorShortcut recognizes Ctrl+Shift+E", () => {
   const event = {

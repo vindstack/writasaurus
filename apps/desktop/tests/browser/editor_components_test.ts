@@ -344,10 +344,30 @@ browserTest("browser: save status shows the saved indicator", async () => {
   await withEditorPage(async (page) => {
     const status = page.locator("#save-status");
     assert((await status.textContent())?.includes("Saved"), "Expected the Saved message");
+    const fontSize = await status.evaluate((element) => getComputedStyle(element).fontSize);
+    assert(fontSize === "11.52px", `Expected small save-status text, got ${fontSize}`);
     const color = await status.locator("[data-indicator]").evaluate((element) =>
       getComputedStyle(element).backgroundColor
     );
     assert(color === "rgb(77, 104, 75)", `Expected saved indicator color, got ${color}`);
+  });
+});
+
+browserTest("browser: unsaved changes do not block leaving the editor", async () => {
+  await withEditorPage(async (page) => {
+    await page.locator("#editor").click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" unsaved text");
+    await page.waitForFunction(() =>
+      document.querySelector("#save-status")?.textContent?.includes("Unsaved changes")
+    );
+
+    const prevented = await page.evaluate(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    assert(!prevented, "Expected unsaved changes not to block leaving the editor");
   });
 });
 
@@ -627,18 +647,16 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       const toolbar = document.querySelector('[role="toolbar"]');
       const footer = document.querySelector("footer.statusbar");
       const title = document.querySelector<HTMLInputElement>("#manuscript-title");
-      const filename = document.querySelector("#filename");
       const saveStatus = document.querySelector("#save-status");
       const titleGroup = document.querySelector(".titleGroup");
       const menu = document.querySelector(".right");
       if (
-        !header || !toolbar || !footer || !title || !filename || !saveStatus || !titleGroup ||
+        !header || !toolbar || !footer || !title || !saveStatus || !titleGroup ||
         !menu
       ) {
         return null;
       }
       const titleRect = title.getBoundingClientRect();
-      const filenameRect = filename.getBoundingClientRect();
       const saveStatusRect = saveStatus.getBoundingClientRect();
       const headerBackground = getComputedStyle(header).backgroundColor;
       const toolbarBackground = getComputedStyle(toolbar).backgroundColor;
@@ -652,12 +670,9 @@ browserTest("browser: editor header and footer are compact and equally sized", a
         headerBackground,
         toolbarBackground,
         titleCenterY: titleRect.top + titleRect.height / 2,
-        filenameCenterY: filenameRect.top + filenameRect.height / 2,
         saveStatusCenterY: saveStatusRect.top + saveStatusRect.height / 2,
         titleLeft: titleRect.left,
         titleRight: titleRect.right,
-        filenameLeft: filenameRect.left,
-        titleFilenameGap: filenameRect.left - titleRect.right,
         saveStatusLeft: saveStatusRect.left,
         saveStatusRight: saveStatusRect.right,
         titleFieldSizing: getComputedStyle(title).fieldSizing,
@@ -701,14 +716,8 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       "Expected the toolbar background to be subtly distinct from the header",
     );
     assert(
-      measurements.titleRight <= measurements.filenameLeft &&
-        measurements.titleLeft < measurements.filenameLeft &&
-        measurements.filenameLeft < measurements.saveStatusLeft,
-      "Expected the title, filename, and save status to appear left-to-right",
-    );
-    assert(
-      measurements.titleFilenameGap <= 12,
-      `Expected standard title/filename spacing, got ${measurements.titleFilenameGap}px`,
+      measurements.titleRight <= measurements.saveStatusLeft,
+      "Expected the title and saved status to appear left-to-right",
     );
     assert(
       measurements.titleGroupAlignment === "flex-start" &&
@@ -727,9 +736,12 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       `Expected title input width to closely fit its text, got ${measurements.titleInputWidth}px for ${measurements.titleTextWidth}px of text`,
     );
     assert(
-      Math.abs(measurements.titleCenterY - measurements.filenameCenterY) < 2 &&
-        Math.abs(measurements.filenameCenterY - measurements.saveStatusCenterY) < 2,
-      "Expected the title, filename, and save status to be inline and vertically aligned",
+      Math.abs(measurements.titleCenterY - measurements.saveStatusCenterY) < 2,
+      "Expected the title and save status to be inline and vertically aligned",
+    );
+    assert(
+      await page.locator("#filename").count() === 0,
+      "Expected the EPUB filename to be hidden from the editor header",
     );
   });
 });
@@ -789,7 +801,7 @@ browserTest("browser: quiet buttons underline their text", async () => {
   });
 });
 
-browserTest("browser: menu contains direct manuscript and save actions", async () => {
+browserTest("browser: menu opens projects without standalone manuscript actions", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#menu-toggle").click();
     await page.waitForFunction(() =>
@@ -801,22 +813,26 @@ browserTest("browser: menu contains direct manuscript and save actions", async (
       "Expected Save As action",
     );
     assert(
-      (await menu.locator("#menu-new-manuscript").textContent())?.includes("New Manuscript"),
-      "Expected New Manuscript action",
+      (await menu.locator("#menu-new-project").textContent())?.includes("New Project"),
+      "Expected New Project action",
     );
     assert(
-      (await menu.locator("#menu-open-manuscript").textContent())?.includes("Open Manuscript"),
-      "Expected Open Manuscript action",
+      (await menu.locator("#menu-new-project kbd").textContent())?.trim() === "Ctrl+N",
+      "Expected New Project shortcut hint",
     );
+    assert(
+      (await menu.locator("#menu-open-project").textContent())?.includes("Open Project"),
+      "Expected Open Project action",
+    );
+    assert(
+      (await menu.locator("#menu-open-project kbd").textContent())?.trim() === "Ctrl+O",
+      "Expected Open Project shortcut hint",
+    );
+    assert(await menu.locator("#menu-new-manuscript").count() === 0);
+    assert(await menu.locator("#menu-open-manuscript").count() === 0);
     assert(
       await page.locator('input[type="file"]').count() === 0,
       "Expected no browser file picker",
-    );
-    assert(
-      await menu.locator("#menu-new-manuscript").evaluate((element) =>
-        getComputedStyle(element).borderTopWidth
-      ) === "0px",
-      "Expected a standard borderless menu item",
     );
   });
 });
@@ -1012,28 +1028,25 @@ browserTest(
   },
 );
 
-browserTest(
-  "browser: starting a new manuscript from the welcome page opens the editor",
-  async () => {
-    const server = Deno.serve(
-      { hostname: "127.0.0.1", port: 0, onListen() {} },
-      editorTestHandler(),
+browserTest("browser: welcome page offers a clear styled project creation dialog", async () => {
+  await withEditorPage(async (page) => {
+    await page.goto(new URL("/welcome", page.url()).href);
+    assert(await page.locator("#welcome-project-open").isVisible());
+    assert(await page.locator("#welcome-project-new").isVisible());
+    assert(await page.locator("#welcome-new").count() === 0);
+    assert(await page.locator("#welcome-sample").count() === 0);
+
+    await page.locator("#welcome-project-new").click();
+    const dialog = page.locator("#create-project-dialog");
+    assert(await dialog.isVisible(), "Expected project creation to use the styled dialog");
+    assert(
+      (await dialog.textContent())?.includes(
+        "Writasaurus will make a new folder there and put the EPUB manuscript inside it.",
+      ),
+      "Expected the dialog to explain the parent folder selection",
     );
-    const address = server.addr as Deno.NetAddr;
-    const browser = await launchBrowser();
-    const page = await browser.newPage();
-    try {
-      await page.goto(`http://${address.hostname}:${address.port}/welcome`);
-      await page.locator("#welcome-new").click();
-      await page.waitForURL(`http://${address.hostname}:${address.port}/`);
-      await page.waitForSelector('[data-ready="true"]');
-      assert(
-        await page.locator("#manuscript-title").inputValue() === "Untitled Manuscript",
-        "Expected the new manuscript title to render in the editor",
-      );
-    } finally {
-      await browser.close();
-      await server.shutdown();
-    }
-  },
-);
+    assert(await dialog.locator("#project-name").isVisible());
+    assert(await dialog.locator("#choose-project-location").isVisible());
+    assert(await dialog.locator("#create-project-submit").isDisabled());
+  });
+});

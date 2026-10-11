@@ -80,6 +80,44 @@ export async function chooseFile(
   }
 }
 
+export async function chooseDirectory(action: "open" | "new"): Promise<string | null> {
+  const command = await dialogCommand();
+  if (!command) return null;
+  const perm = await Deno.permissions.query({ name: "run", command });
+  if (perm.state !== "granted") return null;
+
+  const title = action === "open" ? "Open Project" : "Create New Project";
+  let args: string[];
+  if (command === "zenity") {
+    args = ["--file-selection", "--directory", `--title=${title}`];
+  } else if (command === "kdialog") {
+    args = ["--getexistingdirectory", ".", `--title=${title}`];
+  } else if (command === "osascript") {
+    args = ["-e", `POSIX path of (choose folder with prompt "${title}")`];
+  } else {
+    args = [
+      "-NoProfile",
+      "-Command",
+      "Add-Type -AssemblyName System.Windows.Forms; " +
+      "$d=New-Object System.Windows.Forms.FolderBrowserDialog; " +
+      `$d.Description='${title}'; ` +
+      "if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.SelectedPath)}",
+    ];
+  }
+
+  try {
+    const output = await new Deno.Command(command, {
+      args,
+      stdout: "piped",
+      stderr: "null",
+    }).output();
+    if (!output.success) return null;
+    return new TextDecoder().decode(output.stdout).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function appStateDir(): string | null {
   const home = Deno.env.get("HOME");
   if (Deno.build.os === "linux") {

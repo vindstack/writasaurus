@@ -1,9 +1,12 @@
 <script setup lang="ts">
+import { ref } from "vue";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
-import { blankManuscript, parseManuscript, SAMPLE_NOVEL } from "../../lib/editor/data.ts";
-import { saveLocal, setSkipWelcome } from "../../lib/editor/storage.ts";
-import { requestOpen } from "../../lib/open-manuscript.ts";
+import { setSkipWelcome } from "../../lib/editor/storage.ts";
+import { requestProject } from "../../lib/open-project.ts";
 import { usePageEffects } from "../../composables/usePageEffects.ts";
+import ProjectCreateDialog from "./ProjectCreateDialog.vue";
+
+const createProjectOpen = ref(false);
 
 function navigateToEditor(): void {
   globalThis.location.href = "/";
@@ -16,22 +19,8 @@ function returnToEditor(): void {
 
 usePageEffects(returnToEditor);
 
-async function closeActiveFile(): Promise<void> {
-  try {
-    await fetch("/api/editor/close", { method: "POST" });
-  } catch (error) {
-    console.warn("Could not clear the previously active file.", error);
-  }
-}
-
-async function startFrom(manuscript: ReturnType<typeof blankManuscript>): Promise<void> {
-  saveLocal(manuscript, 0);
-  await closeActiveFile();
-  navigateToEditor();
-}
-
-async function open(): Promise<void> {
-  const result = await requestOpen();
+async function openExistingProject(): Promise<void> {
+  const result = await requestProject();
   if (result.kind === "cancelled") return;
   navigateToEditor();
 }
@@ -39,18 +28,18 @@ async function open(): Promise<void> {
 
 <template>
   <div class="actions">
-    <Button variant="primary" block id="welcome-open" @click="open">Browse Local File</Button>
-    <Button block id="welcome-new" @click="startFrom(blankManuscript())">
-      Start New Manuscript
+    <Button variant="primary" block id="welcome-project-open" @click="openExistingProject">
+      Open Existing Project
     </Button>
-    <Button
-      block
-      id="welcome-sample"
-      @click="startFrom(parseManuscript(SAMPLE_NOVEL, 'the-chroniclers-compass.epub'))"
-    >
-      Load Sample Novel
+    <Button block id="welcome-project-new" @click="createProjectOpen = true">
+      Create New Project
     </Button>
   </div>
+  <ProjectCreateDialog
+    :open="createProjectOpen"
+    @close="createProjectOpen = false"
+    @created="navigateToEditor"
+  />
   <div class="footer">
     <a
       href="/"

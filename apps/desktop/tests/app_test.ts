@@ -17,28 +17,30 @@ Deno.test("hydrates the desktop editor on the root route as one island", async (
   assert(!page.includes("style="));
 });
 
-Deno.test("renders welcome page with open manuscript options and return to editor link", async () => {
+Deno.test("renders welcome page with project options and return to editor link", async () => {
   const response = await app.request("/welcome");
   assert(response.status === 200);
   const page = await response.text();
-  assert(page.includes("Open Manuscript"));
+  assert(page.includes("Your Projects"));
   assert(page.includes("Writasaurus"));
-  assert(page.includes("Browse Local File"));
-  assert(page.includes("Start New Manuscript"));
-  assert(page.includes("Load Sample Novel"));
+  assert(page.includes("Open Existing Project"));
+  assert(page.includes("Create New Project"));
+  assert(!page.includes("Start New Manuscript"));
+  assert(!page.includes("Load Sample Novel"));
+  assert(!page.includes("Open EPUB"));
   assert(!page.includes('type="file"'));
   assert(!page.includes(".markdown"));
   assert(!page.includes(".txt"));
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
-  assert(page.includes("<title>Open Manuscript — Writasaurus</title>"));
+  assert(page.includes("<title>Projects — Writasaurus</title>"));
   assert(page.includes('component-url="/_astro/WelcomeActions.'));
   assert(page.includes('href="/about"'));
 
   const aliasResponse = await app.request("/open");
   assert(aliasResponse.status === 200);
   const aliasPage = await aliasResponse.text();
-  assert(aliasPage.includes("Open Manuscript"));
+  assert(aliasPage.includes("Your Projects"));
 });
 
 Deno.test("renders about page with description and return to editor link", async () => {

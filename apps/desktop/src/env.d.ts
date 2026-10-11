@@ -19,13 +19,18 @@ declare const Deno: {
   };
   readFile(path: string): Promise<Uint8Array>;
   readTextFile(path: string): Promise<string>;
-  writeFile(path: string, data: Uint8Array): Promise<void>;
+  writeFile(
+    path: string,
+    data: Uint8Array,
+    options?: { createNew?: boolean; append?: boolean },
+  ): Promise<void>;
   writeTextFile(
     path: string,
     data: string,
     options?: { createNew?: boolean; append?: boolean },
   ): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
+  readDir(path: string): AsyncIterable<{ name: string; isFile: boolean }>;
   remove(path: string): Promise<void>;
   exit(code?: number): never;
   errors: {

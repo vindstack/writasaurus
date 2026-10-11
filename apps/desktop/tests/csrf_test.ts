@@ -13,7 +13,10 @@ const unsafeRoutes = [
   "/api/editor/exit",
   "/api/editor/save",
   "/api/editor/save-epub",
-  "/api/editor/open",
+  "/api/editor/project/open",
+  "/api/editor/project/location",
+  "/api/editor/project/new",
+  "/api/editor/project/cancel",
 ];
 
 Deno.test("csrf: rejects cross-origin unsafe requests", async () => {

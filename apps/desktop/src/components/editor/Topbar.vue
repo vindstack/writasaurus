@@ -22,14 +22,13 @@ import Divider from "../../../../../packages/shared/ui/components/Divider.vue";
 import SaveStatus from "../SaveStatus.vue";
 
 defineProps<{
-    onNew: () => void;
-    onOpen: () => void;
+    onNewProject: () => void;
+    onOpenProject: () => void;
     toolbarVisible: boolean;
     onToggleToolbar: () => void;
 }>();
 
 const titleInput = ref<HTMLInputElement | null>(null);
-const filenameElement = ref<HTMLSpanElement | null>(null);
 const manuscriptState = useSignalValue(manuscript);
 const unsavedState = useSignalValue(hasUnsavedChanges);
 const messageState = useSignalValue(saveMessage);
@@ -37,7 +36,6 @@ const menuState = useSignalValue(menuOpen);
 const title = computed(() =>
     String(manuscriptState.value.frontmatter.title ?? "Untitled Manuscript"),
 );
-const filename = computed(() => manuscriptState.value.filename);
 const message = computed(
     () =>
         messageState.value ||
@@ -47,7 +45,6 @@ const message = computed(
 onMounted(() => {
     const sync = () => {
         if (titleInput.value) syncTruncationTooltip(titleInput.value);
-        if (filenameElement.value) syncTruncationTooltip(filenameElement.value);
     };
     sync();
     addEventListener("resize", sync);
@@ -72,18 +69,12 @@ onMounted(() => {
                 "
                 @blur="commitManuscriptTitle"
             />
-            <span class="meta">
-                <span id="filename" class="filename" ref="filenameElement">{{
-                    filename
-                }}</span>
-                <span class="saveGroup">
-                    <SaveStatus
-                        id="save-status"
-                        :status="unsavedState ? 'unsaved' : 'saved'"
-                        :message="message"
-                    />
-                </span>
-            </span>
+            <SaveStatus
+                id="save-status"
+                class="saveStatus"
+                :status="unsavedState ? 'unsaved' : 'saved'"
+                :message="message"
+            />
         </div>
         <div class="right">
             <DropdownMenu
@@ -134,19 +125,21 @@ onMounted(() => {
                         type="button"
                         role="menuitem"
                         class="item"
-                        id="menu-new-manuscript"
-                        @click="onNew"
+                        id="menu-new-project"
+                        @click="onNewProject"
                     >
-                        New Manuscript
+                        New Project
+                        <kbd class="kbd">Ctrl+N</kbd>
                     </button>
                     <button
                         type="button"
                         role="menuitem"
                         class="item"
-                        id="menu-open-manuscript"
-                        @click="onOpen"
+                        id="menu-open-project"
+                        @click="onOpenProject"
                     >
-                        Open Manuscript
+                        Open Project
+                        <kbd class="kbd">Ctrl+O</kbd>
                     </button>
                     <Divider />
                     <a role="menuitem" href="/settings" class="item"
@@ -223,6 +216,11 @@ onMounted(() => {
     text-align: left;
 }
 
+.saveStatus {
+    color: var(--muted);
+    font-size: 0.72rem;
+}
+
 .title {
     background: transparent;
     border: 0;
@@ -249,41 +247,6 @@ onMounted(() => {
     border-color: transparent;
     box-shadow: none;
     outline: none;
-}
-
-.filename {
-    color: inherit;
-    display: inline-block;
-    flex: 0 1 auto;
-    font-size: inherit;
-    line-height: inherit;
-    max-width: 20rem;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.meta {
-    align-items: center;
-    color: var(--muted);
-    display: inline-flex;
-    font-size: 0.72rem;
-    gap: 0.4rem;
-    line-height: 1.2;
-    max-width: 100%;
-    min-width: 0;
-    overflow: hidden;
-}
-
-.saveGroup {
-    align-items: center;
-    color: inherit;
-    display: inline-flex;
-    flex: 0 0 auto;
-    font-size: inherit;
-    gap: 0.35rem;
-    line-height: inherit;
 }
 
 .menuToggle {

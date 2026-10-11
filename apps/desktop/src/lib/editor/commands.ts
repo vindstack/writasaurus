@@ -21,13 +21,7 @@ export async function saveAsEpub(): Promise<void> {
 }
 
 export async function quit(): Promise<void> {
-  if (
-    hasUnsavedChanges.peek() &&
-    confirm("You have unsaved changes. Do you want to save before closing?")
-  ) {
-    await save();
-  }
-  if (hasUnsavedChanges.peek()) return;
+  await save();
   try {
     await fetch("/api/editor/exit", { method: "POST" });
   } catch {

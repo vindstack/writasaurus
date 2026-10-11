@@ -6,19 +6,10 @@ import {
   replaceManuscript,
   saveMessage,
 } from "./state.ts";
-import { epubFilename, isEpubFilename, parseEpub } from "../epub.ts";
-import { requestOpen } from "../open-manuscript.ts";
+import { epubFilename } from "../epub.ts";
+import { requestProject } from "../open-project.ts";
 import { editorHistory } from "./history.ts";
 import { batch } from "@preact/signals";
-
-export async function loadFile(file: File): Promise<void> {
-  if (!isEpubFilename(file.name)) {
-    throw new Error("Only EPUB manuscripts can be opened.");
-  }
-  const parsed = await parseEpub(new Uint8Array(await file.arrayBuffer()), file.name);
-  replaceManuscript(parsed, { desktopFileLoaded: false });
-  editorHistory.clear();
-}
 
 async function saveOnDesktop(current: Manuscript, saveAs: boolean): Promise<void> {
   try {
@@ -54,16 +45,9 @@ export function saveEpubToDisk(): Promise<void> {
   return saveToDisk(true);
 }
 
-/** Opens a manuscript via the native dialog. */
-export async function openManuscript(): Promise<void> {
-  const result = await requestOpen();
+export async function openProject(): Promise<void> {
+  const result = await requestProject();
   if (result.kind === "cancelled") return;
-  if (result.kind === "opened") {
-    // The server already owns the active path; adopt the manuscript it returned.
-    desktopFileLoaded.value = true;
-    if (result.manuscript) {
-      replaceManuscript(result.manuscript, { desktopFileLoaded: true });
-      editorHistory.clear();
-    }
-  }
+  replaceManuscript(result.manuscript, { desktopFileLoaded: true });
+  editorHistory.clear();
 }

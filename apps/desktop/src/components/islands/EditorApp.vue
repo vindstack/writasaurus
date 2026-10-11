@@ -1,19 +1,22 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { isEpubFilename } from "../../lib/epub.ts";
 import { saveLocal } from "../../lib/editor/storage.ts";
-import { loadFile, openManuscript } from "../../lib/editor/file-io.ts";
-import { restoreEditor, startNewManuscript } from "../../lib/editor/session.ts";
+import { openProject } from "../../lib/editor/file-io.ts";
+import { restoreEditor } from "../../lib/editor/session.ts";
 import { focusEditor, redo, undo } from "../../lib/editor/surface.ts";
 import { save, toggleFullscreen } from "../../lib/editor/commands.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import { checkSavedLicense, licenseConfiguration } from "../../lib/license.ts";
+import { getProjectShortcutAction } from "../../lib/shortcuts.ts";
+import type { Manuscript } from "../../lib/editor/types.ts";
+import { editorHistory } from "../../lib/editor/history.ts";
 import {
     activeChapterIndex,
     desktopFileLoaded,
     hasUnsavedChanges,
     manuscript,
     menuOpen,
+    replaceManuscript,
     sidebarOpen,
     statsIndex,
 } from "../../lib/editor/state.ts";
@@ -25,6 +28,7 @@ import WritingArea from "../editor/WritingArea.vue";
 import AssistancePanel from "../editor/AssistancePanel.vue";
 import StatusBar from "../editor/StatusBar.vue";
 import LicenseGate from "./LicenseGate.vue";
+import ProjectCreateDialog from "./ProjectCreateDialog.vue";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
 const {
@@ -36,6 +40,7 @@ const ready = ref(false);
 const licensed = ref(false);
 const licenseCheckError = ref("");
 const toolbarVisible = ref(true);
+const createProjectOpen = ref(false);
 let disposed = false;
 let stopPersistence: (() => void) | undefined;
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -74,7 +79,17 @@ onMounted(() => {
     const onKeyDown = (event: KeyboardEvent) => {
         const modifier = event.ctrlKey || event.metaKey;
         const key = event.key.toLowerCase();
-        if (modifier && key === "z") {
+        const projectAction = getProjectShortcutAction(event);
+        if (projectAction === "new-project") {
+            event.preventDefault();
+            createProjectOpen.value = true;
+        } else if (projectAction === "open-project") {
+            event.preventDefault();
+            void openProject();
+        } else if (projectAction === "writing-assistance") {
+            event.preventDefault();
+            void toggleAssistance();
+        } else if (modifier && key === "z") {
             event.preventDefault();
             if (event.shiftKey) redo();
             else undo();
@@ -87,9 +102,6 @@ onMounted(() => {
         } else if (modifier && key === "g") {
             event.preventDefault();
             statsIndex.value = (statsIndex.value + 1) % 3;
-        } else if (modifier && key === "n") {
-            event.preventDefault();
-            void toggleAssistance();
         } else if (modifier && key === "s") {
             event.preventDefault();
             void save();
@@ -115,26 +127,9 @@ onMounted(() => {
             });
         }
     };
-    const onDragOver = (event: DragEvent) => event.preventDefault();
-    const onDrop = (event: DragEvent) => {
-        event.preventDefault();
-        const file = event.dataTransfer?.files[0];
-        if (file && isEpubFilename(file.name)) void loadFile(file);
-    };
-    const onBeforeUnload = (event: BeforeUnloadEvent) => {
-        if (!hasUnsavedChanges.peek()) return;
-        event.preventDefault();
-        event.returnValue = "";
-    };
     document.addEventListener("keydown", onKeyDown);
-    document.addEventListener("dragover", onDragOver);
-    document.addEventListener("drop", onDrop);
-    addEventListener("beforeunload", onBeforeUnload);
     cleanupListeners = () => {
         document.removeEventListener("keydown", onKeyDown);
-        document.removeEventListener("dragover", onDragOver);
-        document.removeEventListener("drop", onDrop);
-        removeEventListener("beforeunload", onBeforeUnload);
     };
 });
 
@@ -181,6 +176,11 @@ function onLicenseActivated(): void {
     }, 24 * 60 * 60 * 1000);
 }
 
+function useCreatedProject(created: Manuscript): void {
+    replaceManuscript(created, { desktopFileLoaded: true });
+    editorHistory.clear();
+}
+
 </script>
 
 <template>
@@ -199,10 +199,15 @@ function onLicenseActivated(): void {
         :data-ready="String(ready)"
     >
         <Topbar
-            :on-new="() => void startNewManuscript()"
-            :on-open="() => void openManuscript()"
+            :on-new-project="() => createProjectOpen = true"
+            :on-open-project="() => void openProject()"
             :toolbar-visible="toolbarVisible"
             :on-toggle-toolbar="() => toolbarVisible = !toolbarVisible"
+        />
+        <ProjectCreateDialog
+            :open="createProjectOpen"
+            @close="createProjectOpen = false"
+            @created="useCreatedProject"
         />
         <Toolbar v-if="toolbarVisible" />
         <main class="main">

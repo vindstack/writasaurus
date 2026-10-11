@@ -1,4 +1,5 @@
 import { createTestApp } from "./helpers.ts";
+import { firstProjectEpub } from "../src/lib/editor-session.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -13,6 +14,25 @@ function assertEquals<T>(actual: T, expected: T): void {
 function createDesktopApp() {
   return createTestApp();
 }
+
+Deno.test("project: selects the first EPUB filename in sorted order", () => {
+  const filename = firstProjectEpub([
+    { name: "z-last.epub", isFile: true },
+    { name: "folder.epub", isFile: false },
+    { name: "notes.txt", isFile: true },
+    { name: "a-first.EPUB", isFile: true },
+  ]);
+  assertEquals(filename, "a-first.EPUB");
+});
+
+Deno.test("project: opening a project returns 204 if no folder is chosen", async () => {
+  const app = createDesktopApp();
+  const response = await app.request("/api/editor/project/open", {
+    method: "POST",
+    headers: { origin: "http://localhost" },
+  });
+  assertEquals(response.status, 204);
+});
 
 Deno.test("editor-api: status reports active file properties", async () => {
   const app = createDesktopApp();
@@ -100,15 +120,6 @@ Deno.test("editor-api: exit invokes the configured desktop shutdown callback", a
   assertEquals(exitCalled, true);
 });
 
-Deno.test("editor-api: open returns 204 if no file chosen", async () => {
-  const app = createDesktopApp();
-  const res = await app.request("/api/editor/open", {
-    method: "POST",
-    headers: { origin: "http://localhost" },
-  });
-  assertEquals(res.status, 204);
-});
-
 Deno.test("editor-api: save-epub validates request payload", async () => {
   const app = createDesktopApp();
   const invalidPayloads = [
@@ -149,4 +160,30 @@ Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
     }),
   });
   assertEquals(res.status, 204);
+});
+
+Deno.test("project: create requires a project folder name", async () => {
+  const app = createDesktopApp();
+  const response = await app.request("/api/editor/project/new", {
+    method: "POST",
+    headers: {
+      origin: "http://localhost",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+  assertEquals(response.status, 400);
+});
+
+Deno.test("project: create requires a selected parent folder", async () => {
+  const app = createDesktopApp();
+  const response = await app.request("/api/editor/project/new", {
+    method: "POST",
+    headers: {
+      origin: "http://localhost",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ projectName: "Test Project" }),
+  });
+  assertEquals(response.status, 400);
 });

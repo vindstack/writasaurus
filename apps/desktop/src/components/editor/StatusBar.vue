@@ -68,10 +68,10 @@ const nextIndex = computed(() => (indexState.value + 1) % wordStats.value.length
       size="small"
       class="toggle"
       aria-label="Toggle writing assistance panel"
-      title="Toggle writing assistance panel (Ctrl+N)"
+      title="Toggle writing assistance panel (Ctrl+Shift+A)"
       @click="toggleAssistance()"
     >
-      Writing Assistance <kbd class="kbd">Ctrl+N</kbd>
+      Writing Assistance <kbd class="kbd">Ctrl+Shift+A</kbd>
     </Button>
   </footer>
 </template>
