@@ -44,7 +44,7 @@
     "build:desktop": "deno task --cwd apps/desktop build",
     "build:website": "deno task --cwd apps/website build",
     "dev:desktop": "deno task --cwd apps/desktop desktop:dev",
-    "dev:website": "deno --env-file=.env task --cwd apps/website dev",
+    "dev:website": "deno --env-file=.env --allow-write=apps/website/.data task --cwd apps/website dev",
     "desktop": "deno task --cwd apps/desktop desktop",
     "test": "deno task --cwd apps/desktop test && deno task --cwd apps/website test",
     "check": "deno fmt --check apps scripts packages deno.json .env.example README.md && deno lint && deno check scripts/release-desktop.ts scripts/prepare-latest.ts scripts/db-migrate.ts scripts/generate-license-secrets.ts && deno task --cwd apps/desktop check && deno task --cwd apps/website check && deno task test",

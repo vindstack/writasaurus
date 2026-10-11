@@ -109,8 +109,7 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
     encryptionKey: Deno.env.get("LICENSE_ENCRYPTION_KEY"),
     signingPrivateKey: Deno.env.get("LICENSE_SIGNING_PRIVATE_KEY"),
     siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
-    resendApiKey: Deno.env.get("RESEND_API_KEY"),
-    resendFrom: Deno.env.get("RESEND_FROM_EMAIL"),
+    emailLogFile: Deno.env.get("EMAIL_LOG_FILE"),
     sessionSecret: Deno.env.get("SESSION_SECRET"),
     r2AccountId: Deno.env.get("WRITASAURUS_R2_ACCOUNT_ID"),
     r2AccessKeyId: Deno.env.get("WRITASAURUS_R2_ACCESS_KEY_ID"),
@@ -142,8 +141,8 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
   Deno.env.set("LICENSE_ENCRYPTION_KEY", encryptionKey);
   Deno.env.set("LICENSE_SIGNING_PRIVATE_KEY", encode(signingPrivateKey));
   Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
-  Deno.env.set("RESEND_API_KEY", "test-api-key");
-  Deno.env.set("RESEND_FROM_EMAIL", "Writasaurus <test@example.com>");
+  const emailLogFile = `.data/test-emails-${crypto.randomUUID()}.jsonl`;
+  Deno.env.set("EMAIL_LOG_FILE", emailLogFile);
   Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
   Deno.env.set("WRITASAURUS_R2_ACCOUNT_ID", "test-account");
   Deno.env.set("WRITASAURUS_R2_ACCESS_KEY_ID", "test-access-key");
@@ -151,7 +150,6 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
   Deno.env.set("WRITASAURUS_R2_BUCKET", "test-bucket");
   setLicenseStoreForTests(new MemoryLicenseStore());
   const originalFetch = globalThis.fetch;
-  const sentEmailBodies: string[] = [];
   const release = {
     version: "1.2.3",
     releasedAt: "2026-10-10T00:00:00.000Z",
@@ -190,10 +188,7 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
   };
   globalThis.fetch = (input, init) => {
     if (String(input) === "https://api.resend.com/emails") {
-      if (typeof init?.body === "string") {
-        sentEmailBodies.push(JSON.parse(init.body).text);
-      }
-      return Promise.resolve(Response.json({ id: "test-email" }));
+      return Promise.reject(new Error("Development emails must not call Resend."));
     }
     if (String(input) === "https://writasaurus.test/latest.json") {
       return Promise.resolve(Response.json(release));
@@ -218,6 +213,10 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
     const firstPage = await success.text();
     const key = firstPage.match(/<code>(WRIT-[A-F0-9]{48})<\/code>/)?.[1];
     assert(key, "Expected the mock purchase key on the first success page.");
+    const purchaseEmail = JSON.parse((await Deno.readTextFile(emailLogFile)).trim()) as {
+      text: string;
+    };
+    assert(purchaseEmail.text.includes(key), "Expected the purchase email to be written locally.");
     assert(firstPage.includes("Download Writasaurus"));
     for (const platform of ["linux", "macos", "windows"]) {
       assert(
@@ -255,7 +254,10 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
       body: authRequestForm,
     });
     assert(authRequest.status === 303);
-    const passcode = sentEmailBodies.at(-1)?.match(/account is (\d{8})/)?.[1];
+    const loggedEmails = (await Deno.readTextFile(emailLogFile)).trim().split("\n").map((
+      line,
+    ) => JSON.parse(line) as { text: string });
+    const passcode = loggedEmails.at(-1)?.text.match(/account is (\d{8})/)?.[1];
     assert(passcode, "Expected a sign-in code to be emailed after purchase.");
     const authVerifyForm = new FormData();
     authVerifyForm.set("email", "writer@example.com");
@@ -322,6 +324,11 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
   } finally {
     globalThis.fetch = originalFetch;
     setLicenseStoreForTests(undefined);
+    try {
+      await Deno.remove(emailLogFile);
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
     for (
       const [name, value] of Object.entries({
         PAYMENT_PROVIDER: original.provider,
@@ -329,8 +336,7 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
         LICENSE_ENCRYPTION_KEY: original.encryptionKey,
         LICENSE_SIGNING_PRIVATE_KEY: original.signingPrivateKey,
         PUBLIC_SITE_URL: original.siteUrl,
-        RESEND_API_KEY: original.resendApiKey,
-        RESEND_FROM_EMAIL: original.resendFrom,
+        EMAIL_LOG_FILE: original.emailLogFile,
         SESSION_SECRET: original.sessionSecret,
         WRITASAURUS_R2_ACCOUNT_ID: original.r2AccountId,
         WRITASAURUS_R2_ACCESS_KEY_ID: original.r2AccessKeyId,

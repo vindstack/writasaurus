@@ -26,8 +26,9 @@ deno task check               # format, lint, types, and tests
 
 To exercise checkout without Stripe, run the website with
 `PAYMENT_PROVIDER=mock deno task dev:website`. Mock purchases are available only outside Deno
-Deploy; email delivery still requires Resend credentials. Mock purchases persist in memory for the
-life of the server process.
+Deploy; local email messages are written to `apps/website/.data/emails.jsonl` instead of being sent
+through Resend. The log is ignored by Git and may contain sign-in codes and license keys. Mock
+purchases persist in memory for the life of the server process.
 
 ## Website deployment
 

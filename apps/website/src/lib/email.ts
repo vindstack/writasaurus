@@ -11,6 +11,20 @@ function escapeHtml(value: string): string {
 }
 
 export async function sendEmail(message: EmailMessage): Promise<void> {
+  if (!Deno.env.get("DENO_DEPLOYMENT_ID")) {
+    const logPath = Deno.env.get("EMAIL_LOG_FILE")?.trim() || ".data/emails.jsonl";
+    const separator = logPath.lastIndexOf("/");
+    const logDirectory = separator >= 0 ? logPath.slice(0, separator) || "/" : ".";
+    await Deno.mkdir(logDirectory, { recursive: true });
+    await Deno.writeTextFile(
+      logPath,
+      `${JSON.stringify({ sentAt: new Date().toISOString(), ...message })}\n`,
+      { append: true, create: true },
+    );
+    console.info(`Development email written to ${logPath}`);
+    return;
+  }
+
   const apiKey = Deno.env.get("RESEND_API_KEY")?.trim();
   const from = Deno.env.get("RESEND_FROM_EMAIL")?.trim();
   if (!apiKey || !from) throw new Error("Resend email is not configured.");
