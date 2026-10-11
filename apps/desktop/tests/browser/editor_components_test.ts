@@ -491,7 +491,7 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
       "Expected the spelling warning to be highlighted in the editor",
     );
 
-    await page.keyboard.press("Control+n");
+    await page.keyboard.press("Control+Shift+a");
     await page.waitForFunction(() =>
       document.querySelector('[data-testid="assistance-panel"]')?.getAttribute("data-collapsed") ===
         "true"
@@ -500,7 +500,7 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
       !await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling")),
       "Expected closing writing assistance to clear its highlights",
     );
-    await page.keyboard.press("Control+n");
+    await page.keyboard.press("Control+Shift+a");
     await page.waitForFunction(() =>
       document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes("1 issue")
     );
@@ -529,7 +529,7 @@ browserTest(
   async () => {
     await withEditorPage(async (page) => {
       await page.locator(PANEL).waitFor({ state: "attached" });
-      await page.keyboard.press("Control+n");
+      await page.keyboard.press("Control+Shift+a");
 
       // A long chapter keeps the reported issue off screen until the panel scrolls to it.
       await page.locator("#editor").evaluate((element) => {
@@ -911,7 +911,7 @@ browserTest("browser: Desktop menu and F11 toggle fullscreen", async () => {
 browserTest("browser: editor content never mixes text with block siblings", async () => {
   await withEditorPage(async (page) => {
     await page.locator(PANEL).waitFor({ state: "attached" });
-    await page.keyboard.press("Control+n");
+    await page.keyboard.press("Control+Shift+a");
 
     // Contenteditable routinely produces this shape: a bare text node beside generated
     // blocks. WebKit lays that text out in an anonymous block box and refuses to paint
