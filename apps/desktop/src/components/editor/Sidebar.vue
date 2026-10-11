@@ -43,52 +43,27 @@ function choose(index: number): void {
 </script>
 
 <template>
-  <SlideoutPanel
-    :open="isOpen"
-    side="left"
-    label="Chapters"
-    class="sidebar"
-    data-testid="chapters-sidebar"
-  >
+  <SlideoutPanel :open="isOpen" side="left" label="Chapters" class="sidebar" data-testid="chapters-sidebar">
     <div class="heading">
       <h2>Chapters</h2>
-      <Button
-        variant="quiet"
-        size="small"
-        @click="addChapter(); titleFocusRequest.value++"
-      >
+      <Button variant="quiet" size="small" @click="addChapter(); titleFocusRequest.value++">
         Add
       </Button>
     </div>
     <ol id="chapter-list" class="list" ref="list">
-      <li
-        v-for="(chapter, index) in manuscriptState.chapters"
-        :key="chapter.id"
-        :class="['item', index === activeIndex && 'active']"
-        data-drag-item
-        :aria-current="index === activeIndex ? 'true' : undefined"
-      >
-        <button
-          type="button"
-          class="handle"
-          data-drag-handle
-          :aria-label="`Reorder ${chapter.title}`"
-          aria-keyshortcuts="ArrowUp ArrowDown"
-          title="Drag to reorder"
-        >
+      <li v-for="(chapter, index) in manuscriptState.chapters" :key="chapter.id"
+        :class="['item', index === activeIndex && 'active']" data-drag-item
+        :aria-current="index === activeIndex ? 'true' : undefined">
+        <button type="button" class="handle" data-drag-handle :aria-label="`Reorder ${chapter.title}`"
+          aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder">
           ⋮
         </button>
         <span data-chapter-title @click="choose(index)">{{ chapter.title }}</span>
         <Chip variant="outline" class="chip">
           <small>{{ chapter.wordCount.toLocaleString() }}w</small>
         </Chip>
-        <button
-          type="button"
-          class="delete"
-          :aria-label="`Delete ${chapter.title}`"
-          title="Delete chapter"
-          @click.stop="deleteChapter(index)"
-        >
+        <button type="button" class="delete button--small" :aria-label="`Delete ${chapter.title}`"
+          title="Delete chapter" @click.stop="deleteChapter(index)">
           Delete
         </button>
       </li>
@@ -148,7 +123,7 @@ function choose(index: number): void {
   padding: 0.55rem;
 }
 
-.item > span {
+.item>span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -227,5 +202,4 @@ function choose(index: number): void {
   color: var(--muted);
   font-size: 0.72rem;
 }
-
 </style>
