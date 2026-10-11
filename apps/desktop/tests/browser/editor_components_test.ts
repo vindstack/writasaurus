@@ -758,19 +758,49 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
   await withEditorPage(async (page) => {
     const toolbarPosition = await page.evaluate(() => {
       const toolbar = document.querySelector('[role="toolbar"]');
+      const toolbarContent = toolbar?.querySelector(".toolbarContent");
       const editor = document.querySelector("#editor");
-      if (!toolbar || !editor) return null;
+      if (!toolbar || !toolbarContent || !editor) return null;
       const toolbarRect = toolbar.getBoundingClientRect();
+      const contentRect = toolbarContent.getBoundingClientRect();
       const editorRect = editor.getBoundingClientRect();
       return {
         toolbarBottom: toolbarRect.bottom,
         editorTop: editorRect.top,
+        toolbarWidth: toolbarRect.width,
+        toolbarLeft: toolbarRect.left,
+        viewportWidth: document.documentElement.clientWidth,
+        contentLeft: contentRect.left,
+        contentRight: contentRect.right,
+        editorLeft: editorRect.left,
+        editorRight: editorRect.right,
+        borderLeftWidth: getComputedStyle(toolbar).borderLeftWidth,
+        borderRightWidth: getComputedStyle(toolbar).borderRightWidth,
+        borderTopWidth: getComputedStyle(toolbar).borderTopWidth,
+        borderBottomWidth: getComputedStyle(toolbar).borderBottomWidth,
+        borderBottomLeftRadius: getComputedStyle(toolbar).borderBottomLeftRadius,
+        borderBottomRightRadius: getComputedStyle(toolbar).borderBottomRightRadius,
       };
     });
     assert(toolbarPosition, "Expected toolbar and editor to render");
     assert(
       toolbarPosition.toolbarBottom <= toolbarPosition.editorTop,
       "Expected the toolbar to be on a separate line above the editor",
+    );
+    assert(
+      toolbarPosition.toolbarWidth === toolbarPosition.viewportWidth &&
+        toolbarPosition.toolbarLeft === 0 &&
+        Math.abs(toolbarPosition.contentLeft - toolbarPosition.editorLeft) < 2 &&
+        Math.abs(toolbarPosition.contentRight - toolbarPosition.editorRight) < 2 &&
+        toolbarPosition.borderLeftWidth === "0px" &&
+        toolbarPosition.borderRightWidth === "0px" &&
+        toolbarPosition.borderTopWidth === "0px" &&
+        toolbarPosition.borderBottomWidth === "1px" &&
+        toolbarPosition.borderBottomLeftRadius === "0px" &&
+        toolbarPosition.borderBottomRightRadius === "0px",
+      `Expected the toolbar to be full-width with a bottom border and square corners: ${
+        JSON.stringify(toolbarPosition)
+      }`,
     );
 
     await page.locator("#editor").evaluate((element) => {
