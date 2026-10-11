@@ -20,7 +20,11 @@ declare const Deno: {
   readFile(path: string): Promise<Uint8Array>;
   readTextFile(path: string): Promise<string>;
   writeFile(path: string, data: Uint8Array): Promise<void>;
-  writeTextFile(path: string, data: string): Promise<void>;
+  writeTextFile(
+    path: string,
+    data: string,
+    options?: { append?: boolean; create?: boolean },
+  ): Promise<void>;
   mkdir(path: string, options?: { recursive?: boolean }): Promise<void>;
   remove(path: string): Promise<void>;
   exit(code?: number): never;

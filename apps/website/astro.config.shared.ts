@@ -1,6 +1,6 @@
 import vue from "@astrojs/vue";
 
-export const sharedConfig: import("astro").AstroUserConfig = {
+export const sharedConfig = {
   output: "server" as const,
   devToolbar: {
     enabled: false,
@@ -23,4 +23,4 @@ export const sharedConfig: import("astro").AstroUserConfig = {
       noExternal: ["@astrojs/vue"],
     },
   },
-};
+} satisfies import("astro").AstroUserConfig;
