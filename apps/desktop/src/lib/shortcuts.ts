@@ -13,6 +13,7 @@ export interface ShortcutEvent {
 
 export type ProjectShortcutAction =
   | "new-project"
+  | "next-chapter"
   | "open-project"
   | "toggle-project-view"
   | "writing-assistance";
@@ -22,6 +23,7 @@ export function getProjectShortcutAction(event: ShortcutEvent): ProjectShortcutA
 
   const key = event.key.toLowerCase();
   if (!event.shiftKey && key === "n") return "new-project";
+  if (event.shiftKey && key === "n") return "next-chapter";
   if (!event.shiftKey && key === "o") return "open-project";
   if (!event.shiftKey && key === "g") return "toggle-project-view";
   if (event.shiftKey && key === "a") return "writing-assistance";

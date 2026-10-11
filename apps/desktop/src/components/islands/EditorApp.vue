@@ -17,6 +17,7 @@ import type { Manuscript } from "../../lib/editor/types.ts";
 import { editorHistory } from "../../lib/editor/history.ts";
 import {
     activeChapterIndex,
+    advanceChapter,
     desktopFileLoaded,
     editorMode,
     hasUnsavedChanges,
@@ -96,6 +97,9 @@ onMounted(() => {
         } else if (projectAction === "open-project") {
             event.preventDefault();
             void openProject();
+        } else if (projectAction === "next-chapter" && editorMode.peek() === "manuscript") {
+            event.preventDefault();
+            advanceChapter();
         } else if (projectAction === "toggle-project-view") {
             event.preventDefault();
             if (editorMode.peek() === "manuscript") void openOutline();

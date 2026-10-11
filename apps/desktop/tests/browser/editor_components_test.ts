@@ -159,12 +159,24 @@ browserTest("browser: chapters and assistance panels use compact spacing", async
       const assistance = document.querySelector('[data-testid="assistance-panel"]');
       const chaptersHeading = chapters?.querySelector(".heading");
       const assistanceHeading = assistance?.querySelector(".heading");
-      if (!chapters || !assistance || !chaptersHeading || !assistanceHeading) return null;
+      const section = chapters?.querySelector("[data-drag-item]");
+      const handle = section?.querySelector("[data-drag-handle]");
+      const chip = section?.querySelector(".chip");
+      const remove = section?.querySelector(".delete");
+      if (
+        !chapters || !assistance || !chaptersHeading || !assistanceHeading || !section ||
+        !handle || !chip || !remove
+      ) return null;
       return {
         chaptersPadding: getComputedStyle(chapters).padding,
         assistancePadding: getComputedStyle(assistance).padding,
         chaptersHeadingPadding: getComputedStyle(chaptersHeading).paddingBottom,
         assistanceGap: getComputedStyle(assistance).gap,
+        chapterHeight: getComputedStyle(section).height,
+        chapterPadding: getComputedStyle(section).padding,
+        reorderHeight: getComputedStyle(handle).height,
+        chipPadding: getComputedStyle(chip).padding,
+        deleteHeight: getComputedStyle(remove).height,
       };
     });
     assert(spacing, "Expected chapter and assistance panels");
@@ -175,6 +187,11 @@ browserTest("browser: chapters and assistance panels use compact spacing", async
     assert(
       spacing.chaptersHeadingPadding === "4px" && spacing.assistanceGap === "8px",
       `Expected compact header and section spacing, got ${spacing.chaptersHeadingPadding} and ${spacing.assistanceGap}`,
+    );
+    assert(
+      spacing.chapterHeight === "36px" && spacing.chapterPadding === "4.8px 6.4px" &&
+        spacing.reorderHeight === "24px" && spacing.deleteHeight === "24px",
+      `Expected compact section rows and controls, got ${JSON.stringify(spacing)}`,
     );
   });
 });
@@ -206,6 +223,152 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     assert(
       chapterTitle === `Chapter ${initialChapters + 1}`,
       `Unexpected new chapter title: ${chapterTitle}`,
+    );
+  });
+});
+
+browserTest("browser: clicking anywhere in a section row selects it", async () => {
+  await withEditorPage(async (page) => {
+    await openSidebar(page);
+    const sidebar = page.getByTestId("chapters-sidebar");
+    await sidebar.getByRole("button", { name: "Add" }).click();
+    await page.getByRole("menuitem", { name: "Chapter", exact: true }).click();
+    const rows = page.locator("[data-drag-item]");
+    assert(await rows.count() > 1, "Expected multiple sections to select");
+
+    const currentIndex = await rows.evaluateAll((items) =>
+      items.findIndex((item) => item.getAttribute("aria-current") === "true")
+    );
+    const targetIndex = currentIndex === 0 ? 1 : 0;
+    const target = rows.nth(targetIndex);
+    const rowBounds = await target.boundingBox();
+    assert(rowBounds, "Expected target section row bounds");
+
+    await page.mouse.click(rowBounds.x + rowBounds.width - 2, rowBounds.y + rowBounds.height / 2);
+    await page.waitForFunction(
+      (index) =>
+        document.querySelectorAll("[data-drag-item]")[index]
+          ?.getAttribute("aria-current") === "true",
+      targetIndex,
+    );
+  });
+});
+
+browserTest("browser: end-of-chapter action opens the next chapter or creates one", async () => {
+  await withEditorPage(async (page) => {
+    await openSidebar(page);
+    const sidebar = page.getByTestId("chapters-sidebar");
+    const add = sidebar.getByRole("button", { name: "Add" });
+    await add.click();
+    await page.getByRole("menuitem", { name: "Chapter", exact: true }).click();
+
+    await page.locator("[data-drag-item] [data-chapter-title]").first().click();
+    const action = page.locator("[data-next-chapter]");
+    const shortChapterLayout = await action.evaluate((button) => {
+      const viewport = button.closest("[data-editor-viewport]");
+      if (!viewport) return null;
+      return {
+        buttonBottom: button.getBoundingClientRect().bottom,
+        viewportBottom: viewport.getBoundingClientRect().bottom,
+        scrollHeight: viewport.scrollHeight,
+        clientHeight: viewport.clientHeight,
+      };
+    });
+    assert(shortChapterLayout, "Expected short-chapter viewport layout");
+    assert(
+      shortChapterLayout.scrollHeight <= shortChapterLayout.clientHeight + 1 &&
+        shortChapterLayout.viewportBottom - shortChapterLayout.buttonBottom < 36,
+      "Expected the action to sit at the viewport bottom without requiring a scroll for short chapters",
+    );
+    await action.scrollIntoViewIfNeeded();
+    const layout = await action.evaluate((button) => {
+      const navigation = button.parentElement;
+      const viewport = button.closest("[data-editor-viewport]");
+      const referenceSmallButton = document.querySelector(".statusbar button.button--small");
+      if (!navigation || !viewport || !referenceSmallButton) return null;
+      const buttonStyle = getComputedStyle(button);
+      const referenceStyle = getComputedStyle(referenceSmallButton);
+      const shortcut = button.querySelector("kbd");
+      return {
+        buttonHeight: button.getBoundingClientRect().height,
+        buttonRight: button.getBoundingClientRect().right,
+        borderBottomStyle: buttonStyle.borderBottomStyle,
+        borderBottomWidth: buttonStyle.borderBottomWidth,
+        navigationRight: navigation.getBoundingClientRect().right,
+        viewportContentRight: viewport.getBoundingClientRect().left + viewport.clientLeft +
+          viewport.clientWidth,
+        small: button.classList.contains("button--small"),
+        quietOutline: button.classList.contains("button--quiet-outline"),
+        textDecorationLine: buttonStyle.textDecorationLine,
+        fontSize: buttonStyle.fontSize,
+        minHeight: buttonStyle.minHeight,
+        padding: buttonStyle.padding,
+        referenceHeight: referenceSmallButton.getBoundingClientRect().height,
+        referenceFontSize: referenceStyle.fontSize,
+        shortcutText: shortcut?.textContent?.trim(),
+      };
+    });
+    assert(layout, "Expected chapter navigation layout");
+    assert(
+      layout.small && layout.quietOutline && layout.borderBottomStyle === "solid" &&
+        layout.borderBottomWidth === "1px" && layout.textDecorationLine === "none" &&
+        Math.abs(layout.buttonHeight - layout.referenceHeight) < 2 &&
+        layout.fontSize === "12px" && layout.fontSize === layout.referenceFontSize &&
+        layout.minHeight === "28px" &&
+        layout.padding === "4px 8px" && layout.shortcutText === "Ctrl+Shift+N" &&
+        Math.abs(layout.navigationRight - layout.viewportContentRight) < 2 &&
+        Math.abs(layout.navigationRight - layout.buttonRight - 16) < 2,
+      `Expected the button--small quiet-outline action at the editor viewport's lower-right edge: ${
+        JSON.stringify(layout)
+      }`,
+    );
+    const actionLabel = await action.evaluate((button) =>
+      Array.from(button.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent).join("").trim()
+    );
+    assert(actionLabel === "Go to Chapter 2", "Expected the end action to offer the next chapter");
+    await action.click();
+    await page.waitForFunction(
+      () => (document.querySelector("#chapter-title") as HTMLInputElement)?.value === "Chapter 2",
+    );
+
+    await action.scrollIntoViewIfNeeded();
+    const createActionLabel = await action.evaluate((button) =>
+      Array.from(button.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent).join("").trim()
+    );
+    assert(
+      createActionLabel === "Create Next Chapter",
+      "Expected the final chapter to offer creating the next chapter",
+    );
+    const initialCount = await page.locator("[data-drag-item]").count();
+    await action.click();
+    await page.waitForFunction(
+      (count) => document.querySelectorAll("[data-drag-item]").length === count + 1,
+      initialCount,
+    );
+    assert(
+      await page.locator("#chapter-title").inputValue() === "Chapter 3",
+      "Expected the created chapter title to be focused",
+    );
+    await page.locator("[data-drag-item] [data-chapter-title]").first().click();
+    await page.keyboard.press("Control+Shift+n");
+    await page.waitForFunction(
+      () => (document.querySelector("#chapter-title") as HTMLInputElement)?.value === "Chapter 2",
+    );
+    await page.keyboard.press("Control+Shift+n");
+    await page.waitForFunction(
+      () => (document.querySelector("#chapter-title") as HTMLInputElement)?.value === "Chapter 3",
+    );
+    const countBeforeShortcutCreate = await page.locator("[data-drag-item]").count();
+    await page.keyboard.press("Control+Shift+n");
+    await page.waitForFunction(
+      (count) => document.querySelectorAll("[data-drag-item]").length === count + 1,
+      countBeforeShortcutCreate,
+    );
+    assert(
+      await page.locator("#chapter-title").inputValue() === "Chapter 4",
+      "Expected Ctrl+Shift+N to create the next chapter at the end",
     );
   });
 });

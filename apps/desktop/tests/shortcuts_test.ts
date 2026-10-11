@@ -16,6 +16,10 @@ Deno.test("shortcuts: project and writing assistance shortcuts are distinct", ()
     "new-project",
   );
   assertEquals(
+    getProjectShortcutAction({ key: "n", ctrlKey: true, shiftKey: true }),
+    "next-chapter",
+  );
+  assertEquals(
     getProjectShortcutAction({ key: "o", ctrlKey: true }),
     "open-project",
   );
@@ -32,7 +36,15 @@ Deno.test("shortcuts: project and writing assistance shortcuts are distinct", ()
     "writing-assistance",
   );
   assertEquals(
+    getProjectShortcutAction({ key: "N", metaKey: true, shiftKey: true }),
+    "next-chapter",
+  );
+  assertEquals(
     getProjectShortcutAction({ key: "n", ctrlKey: true, shiftKey: true }),
+    "next-chapter",
+  );
+  assertEquals(
+    getProjectShortcutAction({ key: "n", shiftKey: true }),
     null,
   );
   assertEquals(

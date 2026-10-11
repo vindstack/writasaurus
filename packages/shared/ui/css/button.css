@@ -53,7 +53,13 @@ button[data-variant="primary"]:hover:not(:disabled, [aria-disabled="true"]) {
   text-underline-offset: 0.15em;
 }
 
-:where(.button--small) {
+.button--quiet-outline {
+  background: transparent;
+  border-color: var(--border);
+  text-decoration: none;
+}
+
+.button--small {
   font-size: 0.75rem;
   gap: var(--space-2);
   min-height: 1.75rem;

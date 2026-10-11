@@ -96,12 +96,13 @@ function choose(index: number): void {
     <ol id="chapter-list" class="list" ref="list">
       <li v-for="(chapter, index) in manuscriptState.chapters" :key="chapter.id"
         :class="['item', index === activeIndex && 'active']" data-drag-item
+        @click="choose(index)"
         :aria-current="index === activeIndex ? 'true' : undefined">
         <button type="button" class="handle" data-drag-handle :aria-label="`Reorder ${chapter.title}`"
-          aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder">
+          aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder" @click.stop>
           ⋮
         </button>
-        <span data-chapter-title @click="choose(index)">
+        <span data-chapter-title>
           {{ chapter.title }}
           <small v-if="chapter.type && chapter.type !== 'chapter'">
             · {{ SECTION_TYPE_LABELS[chapter.type] }}
@@ -179,7 +180,7 @@ function choose(index: number): void {
 .list {
   align-content: start;
   display: grid;
-  gap: 0.25rem;
+  gap: 0.2rem;
   grid-auto-rows: max-content;
   list-style: none;
   margin: 0;
@@ -198,10 +199,15 @@ function choose(index: number): void {
   border-radius: 0.4rem;
   cursor: pointer;
   display: grid;
-  gap: 0.5rem;
+  gap: 0.35rem;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
-  min-height: 2.75rem;
-  padding: 0.55rem;
+  line-height: 1.3;
+  min-height: 2.25rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.item:hover:not(.active) {
+  background: var(--surface-sunken);
 }
 
 .item>span {
@@ -244,6 +250,7 @@ function choose(index: number): void {
   display: inline-flex;
   font-size: 0.9rem;
   justify-content: center;
+  min-height: 1.5rem;
   padding: 0 0.25rem;
   transition: color 0.15s;
   user-select: none;
@@ -257,6 +264,8 @@ function choose(index: number): void {
   --border: transparent;
 
   font-size: 0.72rem;
+  line-height: 1.2;
+  padding: 0.12rem 0.4rem;
 }
 
 .delete {
@@ -269,6 +278,8 @@ function choose(index: number): void {
   display: inline-flex;
   font-size: 0.7rem;
   justify-content: center;
+  line-height: 1.2;
+  min-height: 1.5rem;
   padding: 0.2rem 0.35rem;
 }
 

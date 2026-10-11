@@ -2,7 +2,7 @@
 withDefaults(
   defineProps<{
     href?: string;
-    variant?: "default" | "primary" | "quiet";
+    variant?: "default" | "primary" | "quiet" | "quiet-outline";
     size?: "default" | "small";
     block?: boolean;
     title?: string;
@@ -23,6 +23,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
       'button',
       variant === 'primary' && 'button--primary',
       variant === 'quiet' && 'button--quiet',
+      variant === 'quiet-outline' && 'button--quiet-outline',
       size === 'small' && 'button--small',
       block && 'button--block',
     ]"
@@ -38,6 +39,7 @@ defineEmits<{ click: [event: MouseEvent] }>();
       'button',
       variant === 'primary' && 'button--primary',
       variant === 'quiet' && 'button--quiet',
+      variant === 'quiet-outline' && 'button--quiet-outline',
       size === 'small' && 'button--small',
       block && 'button--block',
     ]"

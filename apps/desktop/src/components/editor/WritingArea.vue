@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import {
   executeEditorCommand,
   mountContent,
@@ -7,21 +7,28 @@ import {
   scheduleHistoryCapture,
 } from "../../lib/editor/surface.ts";
 import {
+  activeChapterIndex,
   activeChapter,
+  advanceChapter,
   markChanged,
   markOutlineChanged,
+  manuscript,
   outlineContent,
   renameChapter,
   titleFocusRequest,
 } from "../../lib/editor/state.ts";
 import { useSignalValue } from "../vue-signals.ts";
 import { markdownToHtml } from "../../lib/utilties/markdown-utilities.ts";
+import Button from "../../../../../packages/shared/ui/components/Button.vue";
 
 const props = defineProps<{ mode: "manuscript" | "outline" }>();
 const chapterState = useSignalValue(activeChapter);
+const activeIndexState = useSignalValue(activeChapterIndex);
+const manuscriptState = useSignalValue(manuscript);
 const focusRequest = useSignalValue(titleFocusRequest);
 const editor = ref<HTMLDivElement | null>(null);
 const title = ref<HTMLInputElement | null>(null);
+const nextChapter = computed(() => manuscriptState.value.chapters[activeIndexState.value + 1]);
 let stopChapterWatch: (() => void) | undefined;
 let stopTitleWatch: (() => void) | undefined;
 let stopFocusWatch: (() => void) | undefined;
@@ -107,14 +114,28 @@ onBeforeUnmount(() => {
         }"
       />
     </section>
+    <div v-if="props.mode === 'manuscript'" class="chapterNavigation">
+      <Button
+        variant="quiet-outline"
+        size="small"
+        aria-keyshortcuts="Control+Shift+N Meta+Shift+N"
+        data-next-chapter
+        title="Next or create chapter (Ctrl+Shift+N)"
+        @click="advanceChapter"
+      >
+        {{ nextChapter ? `Go to ${nextChapter.title}` : "Create Next Chapter" }}
+        <kbd class="chapterShortcut" aria-hidden="true">Ctrl+Shift+N</kbd>
+      </Button>
+    </div>
   </div>
 </template>
 
 <style scoped>
 .viewport {
   box-sizing: border-box;
-  display: block;
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
   min-width: 0;
@@ -127,10 +148,11 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  flex: 1 0 auto;
   gap: 0.25rem;
   margin: 0 auto;
   max-width: 36rem;
-  min-height: 100%;
+  min-height: 0;
   min-width: 0;
   padding: 1rem 1.5rem;
   width: 100%;
@@ -188,6 +210,26 @@ onBeforeUnmount(() => {
   tab-size: 4;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.chapterNavigation {
+  box-sizing: border-box;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem 1rem;
+  width: 100%;
+}
+
+.chapterShortcut {
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.65rem;
+  line-height: 1.2;
+  padding: 0.05rem 0.3rem;
+  white-space: nowrap;
 }
 
 .viewport[data-mode="outline"] .canvas :deep(:is(h1, h2, h3)) {

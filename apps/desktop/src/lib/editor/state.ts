@@ -185,6 +185,15 @@ export function selectChapter(index: number): void {
   if (index !== activeChapterIndex.peek()) activeChapterIndex.value = index;
 }
 
+export function advanceChapter(): void {
+  if (activeChapterIndex.peek() + 1 < manuscript.peek().chapters.length) {
+    selectChapter(activeChapterIndex.peek() + 1);
+    return;
+  }
+  addChapter();
+  titleFocusRequest.value++;
+}
+
 export function reorderChapter(fromIndex: number, toIndex: number): void {
   const current = manuscript.peek();
   const size = current.chapters.length;
