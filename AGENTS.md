@@ -5,10 +5,10 @@
 This is a Deno 2 project built on Astro and Vue. Use Deno tasks and import-map dependencies; never
 use Node.js or npm commands.
 
-- `deno task dev` starts Astro at `http://localhost:8000` with HMR.
-- `deno task build` builds the app into `dist/` (generated, gitignored).
-- `deno task start` serves the generated Astro server build.
-- `deno task desktop:dev` runs Astro's development server in a Deno Desktop window.
+- `deno task dev:website` starts the website Astro server at `http://localhost:8000` with HMR.
+- `deno task build:website` builds the website into `apps/website/dist/`.
+- `deno task build:desktop` builds the desktop app into `apps/desktop/dist/`.
+- `deno task dev:desktop` runs Astro's development server in a Deno Desktop window.
 - `deno task desktop` builds the native application for the current platform into `desktop/`.
 - `deno task check` runs formatting checks, linting, type checks, and the full test suite.
 

@@ -15,17 +15,19 @@ separate applications in one Deno workspace.
 Use Deno 2:
 
 ```sh
-deno task dev                 # website at http://localhost:8000
-deno task desktop:dev         # desktop app in a native window
-deno task build               # build both applications
+deno task dev:website         # website at http://localhost:8000
+deno task dev:desktop         # desktop app in a native window
+deno task build:website       # build the website
+deno task build:desktop       # build the desktop app
 deno task desktop             # package desktop app for this platform
 deno task test                # build and run unit and Playwright tests
 deno task check               # format, lint, types, and tests
 ```
 
-To exercise checkout without Stripe, run the website with `PAYMENT_PROVIDER=mock deno task dev`.
-Mock purchases are available only outside Deno Deploy; email delivery still requires Resend
-credentials. Mock purchases persist in memory for the life of the server process.
+To exercise checkout without Stripe, run the website with
+`PAYMENT_PROVIDER=mock deno task dev:website`. Mock purchases are available only outside Deno
+Deploy; email delivery still requires Resend credentials. Mock purchases persist in memory for the
+life of the server process.
 
 ## Website deployment
 
@@ -60,7 +62,7 @@ schema:
 ```sh
 deno task db:dev:up
 deno task db:migrate
-deno --env-file=.env task --cwd apps/website dev
+deno task dev:website
 ```
 
 The local database credentials in `.env.example` are only for development. The Compose service

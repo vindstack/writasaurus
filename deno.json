@@ -41,14 +41,11 @@
     }
   },
   "tasks": {
-    "dev": "deno --env-file=.env task --cwd apps/website dev",
-    "dev:server": "deno --env-file=.env task --cwd apps/website dev",
-    "build": "deno task --cwd apps/desktop build && deno task --cwd apps/website build",
-    "desktop:build": "deno task --cwd apps/desktop build",
-    "website:build": "deno task --cwd apps/website build",
-    "start": "deno task --cwd apps/website start",
+    "build:desktop": "deno task --cwd apps/desktop build",
+    "build:website": "deno task --cwd apps/website build",
+    "dev:desktop": "deno task --cwd apps/desktop desktop:dev",
+    "dev:website": "deno --env-file=.env task --cwd apps/website dev",
     "desktop": "deno task --cwd apps/desktop desktop",
-    "desktop:dev": "deno task --cwd apps/desktop desktop:dev",
     "test": "deno task --cwd apps/desktop test && deno task --cwd apps/website test",
     "check": "deno fmt --check apps scripts packages deno.json .env.example README.md && deno lint && deno check scripts/release-desktop.ts scripts/prepare-latest.ts scripts/db-migrate.ts scripts/generate-license-secrets.ts && deno task --cwd apps/desktop check && deno task --cwd apps/website check && deno task test",
     "license:secrets": "deno run scripts/generate-license-secrets.ts",
