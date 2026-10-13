@@ -1,9 +1,11 @@
+import { rename } from "node:fs/promises";
 import { clearLastFilePath, loadLastFilePath, saveLastFilePath } from "./desktop.ts";
 import { blankManuscript } from "./editor/data.ts";
 import { epubFilename, generateEpub, isEpubFilename, parseEpub } from "./epub.ts";
 import { DEFAULT_OUTLINE } from "./editor/outline-templates.ts";
 import type { Manuscript } from "./editor/types.ts";
 import { basename } from "../../../../packages/shared/path.ts";
+import { getLegacyDailySettings } from "./app-settings-store.ts";
 
 /**
  * Server-side state for the Desktop app: the manuscript file currently open on disk.
@@ -120,8 +122,30 @@ export interface DraftSummary {
   filename: string;
 }
 
-interface ProjectSettings {
+export const DEFAULT_MANUSCRIPT_WORD_GOAL = 80_000;
+
+export interface DailyWritingHistoryEntry {
+  date: string;
+  words: number;
+  goal: number;
+}
+
+export interface ProjectDailyWritingProgress {
+  date: string;
+  startingWords: Record<string, number>;
+}
+
+export interface ProjectUserSettings {
+  manuscriptWordGoal: number;
+  dailyWordGoal: number;
+  dailyWritingProgress: ProjectDailyWritingProgress;
+  dailyWritingHistory: DailyWritingHistoryEntry[];
+  dailyWritingTrackingStarted: string;
+}
+
+export interface ProjectSettings {
   drafts: DraftSummary[];
+  user_settings: ProjectUserSettings;
 }
 
 const PROJECT_SETTINGS_FILENAME = "settings.json";
@@ -158,7 +182,47 @@ async function numberedDrafts(directory: string): Promise<DraftSummary[]> {
   return drafts.sort((left, right) => left.number - right.number);
 }
 
-function parseProjectSettings(source: string): ProjectSettings {
+function isDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const date = new Date(`${value}T00:00:00`);
+  const [year, month, day] = value.split("-").map(Number);
+  return !Number.isNaN(date.getTime()) && date.getFullYear() === year &&
+    date.getMonth() + 1 === month && date.getDate() === day;
+}
+
+function today(): string {
+  const now = new Date();
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+}
+
+async function newProjectUserSettings(): Promise<ProjectUserSettings> {
+  return {
+    manuscriptWordGoal: DEFAULT_MANUSCRIPT_WORD_GOAL,
+    dailyWordGoal: (await getLegacyDailySettings()).dailyWordGoal,
+    dailyWritingProgress: { date: "", startingWords: {} },
+    dailyWritingHistory: [],
+    dailyWritingTrackingStarted: today(),
+  };
+}
+
+function trimHistory(history: DailyWritingHistoryEntry[], referenceDate = today()) {
+  const cutoff = new Date(`${referenceDate}T00:00:00`);
+  cutoff.setDate(cutoff.getDate() - 29);
+  const minimumDate = [
+    cutoff.getFullYear(),
+    String(cutoff.getMonth() + 1).padStart(2, "0"),
+    String(cutoff.getDate()).padStart(2, "0"),
+  ].join("-");
+  return history.filter((entry) => entry.date >= minimumDate).sort((left, right) =>
+    left.date.localeCompare(right.date)
+  );
+}
+
+async function parseProjectSettings(source: string): Promise<ProjectSettings> {
   const parsed: unknown = JSON.parse(source);
   if (
     !parsed || typeof parsed !== "object" || !("drafts" in parsed) ||
@@ -180,27 +244,254 @@ function parseProjectSettings(source: string): ProjectSettings {
     numbers.add(item.number);
     drafts.push({ number: item.number, filename: item.filename });
   }
-  return { drafts: drafts.sort((left, right) => left.number - right.number) };
+  const userSettings = "user_settings" in parsed ? parsed.user_settings : {};
+  const manuscriptWordGoal = userSettings && typeof userSettings === "object" &&
+      !Array.isArray(userSettings) && "manuscriptWordGoal" in userSettings
+    ? userSettings.manuscriptWordGoal
+    : DEFAULT_MANUSCRIPT_WORD_GOAL;
+  const dailyWordGoal = userSettings && typeof userSettings === "object" &&
+      !Array.isArray(userSettings) && "dailyWordGoal" in userSettings
+    ? userSettings.dailyWordGoal
+    : (await getLegacyDailySettings()).dailyWordGoal;
+  const dailyWritingProgress = userSettings && typeof userSettings === "object" &&
+      !Array.isArray(userSettings) && "dailyWritingProgress" in userSettings
+    ? userSettings.dailyWritingProgress
+    : { date: "", startingWords: {} };
+  const dailyWritingHistory = userSettings && typeof userSettings === "object" &&
+      !Array.isArray(userSettings) && "dailyWritingHistory" in userSettings
+    ? userSettings.dailyWritingHistory
+    : [];
+  const dailyWritingTrackingStarted = userSettings && typeof userSettings === "object" &&
+      !Array.isArray(userSettings) && "dailyWritingTrackingStarted" in userSettings
+    ? userSettings.dailyWritingTrackingStarted
+    : today();
+  if (
+    !userSettings || typeof userSettings !== "object" || Array.isArray(userSettings) ||
+    typeof manuscriptWordGoal !== "number" || !Number.isSafeInteger(manuscriptWordGoal) ||
+    manuscriptWordGoal < 1 || typeof dailyWordGoal !== "number" ||
+    !Number.isSafeInteger(dailyWordGoal) || dailyWordGoal < 1 ||
+    !dailyWritingProgress || typeof dailyWritingProgress !== "object" ||
+    Array.isArray(dailyWritingProgress) || !("date" in dailyWritingProgress) ||
+    typeof dailyWritingProgress.date !== "string" ||
+    (dailyWritingProgress.date !== "" && !isDate(dailyWritingProgress.date)) ||
+    !("startingWords" in dailyWritingProgress) ||
+    !dailyWritingProgress.startingWords ||
+    typeof dailyWritingProgress.startingWords !== "object" ||
+    Array.isArray(dailyWritingProgress.startingWords) ||
+    !Object.entries(dailyWritingProgress.startingWords).every(([key, words]) =>
+      key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0
+    ) ||
+    !Array.isArray(dailyWritingHistory) ||
+    !dailyWritingHistory.every((entry) =>
+      !!entry && typeof entry === "object" && !Array.isArray(entry) &&
+      "date" in entry && isDate(entry.date) &&
+      "words" in entry && Number.isSafeInteger(entry.words) && entry.words >= 0 &&
+      "goal" in entry && Number.isSafeInteger(entry.goal) && entry.goal >= 1
+    ) ||
+    new Set(dailyWritingHistory.map((entry) => entry.date)).size !== dailyWritingHistory.length ||
+    !isDate(dailyWritingTrackingStarted)
+  ) {
+    throw new Error("The project settings file contains invalid user settings.");
+  }
+  return {
+    drafts: drafts.sort((left, right) => left.number - right.number),
+    user_settings: {
+      manuscriptWordGoal,
+      dailyWordGoal,
+      dailyWritingProgress: {
+        date: dailyWritingProgress.date,
+        startingWords: { ...dailyWritingProgress.startingWords } as Record<string, number>,
+      },
+      dailyWritingHistory: trimHistory(dailyWritingHistory),
+      dailyWritingTrackingStarted,
+    },
+  };
 }
 
 async function saveProjectSettings(directory: string, settings: ProjectSettings): Promise<void> {
-  await Deno.writeTextFile(
-    draftPath(directory, PROJECT_SETTINGS_FILENAME),
-    `${JSON.stringify(settings, null, 2)}\n`,
-  );
+  const path = draftPath(directory, PROJECT_SETTINGS_FILENAME);
+  const temporaryPath = `${path}.tmp`;
+  await Deno.writeTextFile(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`);
+  try {
+    await rename(temporaryPath, path);
+  } catch (error) {
+    await Deno.remove(temporaryPath).catch(() => {});
+    throw error;
+  }
 }
 
-async function projectDrafts(directory: string): Promise<DraftSummary[]> {
+async function readProjectSettings(directory: string): Promise<ProjectSettings> {
   const path = draftPath(directory, PROJECT_SETTINGS_FILENAME);
   try {
-    return parseProjectSettings(await Deno.readTextFile(path)).drafts;
+    const source = await Deno.readTextFile(path);
+    const settings = await parseProjectSettings(source);
+    const stored: unknown = JSON.parse(source);
+    const userSettings = typeof stored === "object" && stored !== null &&
+        "user_settings" in stored && stored.user_settings &&
+        typeof stored.user_settings === "object"
+      ? stored.user_settings as Record<string, unknown>
+      : {};
+    if (
+      [
+        "manuscriptWordGoal",
+        "dailyWordGoal",
+        "dailyWritingProgress",
+        "dailyWritingHistory",
+        "dailyWritingTrackingStarted",
+      ].some((key) => !(key in userSettings)) ||
+      settings.user_settings.dailyWritingHistory.length !==
+        ("dailyWritingHistory" in userSettings && Array.isArray(userSettings.dailyWritingHistory)
+          ? userSettings.dailyWritingHistory.length
+          : 0)
+    ) {
+      await saveProjectSettings(directory, settings);
+    }
+    return settings;
   } catch (error) {
     if (!(error instanceof Deno.errors.NotFound)) throw error;
   }
 
-  const drafts = await numberedDrafts(directory);
-  await saveProjectSettings(directory, { drafts });
-  return drafts;
+  const settings = {
+    drafts: await numberedDrafts(directory),
+    user_settings: await newProjectUserSettings(),
+  };
+  await saveProjectSettings(directory, settings);
+  return settings;
+}
+
+export async function getProjectSettings(directory: string): Promise<ProjectSettings> {
+  return await readProjectSettings(directory);
+}
+
+export async function updateProjectSettings(
+  update: unknown,
+  directory: string,
+): Promise<ProjectSettings> {
+  if (!update || typeof update !== "object" || Array.isArray(update)) {
+    throw new TypeError("Provide project settings to update.");
+  }
+  const fields = Object.keys(update);
+  if (
+    !fields.length || fields.some((key) => key !== "manuscriptWordGoal" && key !== "dailyWordGoal")
+  ) {
+    throw new TypeError("Provide valid project settings to update.");
+  }
+  for (const key of fields) {
+    const value = update[key as keyof typeof update];
+    if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) {
+      throw new TypeError(`${key} must be a positive whole number.`);
+    }
+  }
+  const current = await readProjectSettings(directory);
+  const settings = {
+    ...current,
+    user_settings: { ...current.user_settings, ...update },
+  };
+  await saveProjectSettings(directory, settings);
+  return settings;
+}
+
+export interface ActiveProjectDetails {
+  settings: ProjectSettings;
+  manuscript: {
+    id: string;
+    title: string;
+    totalWords: number;
+  };
+}
+
+export async function getActiveProjectDetails(): Promise<ActiveProjectDetails | null> {
+  const activePath = state.activePath;
+  const directory = activePath && isEpubFilename(activePath) ? projectDirectory(activePath) : null;
+  if (!activePath || !directory) return null;
+
+  const settings = await getProjectSettings(directory);
+  const activeManuscript = await parseEpub(await Deno.readFile(activePath), basename(activePath));
+  return {
+    settings,
+    manuscript: {
+      id: String(activeManuscript.frontmatter.writasaurusId ?? activeManuscript.filename),
+      title: String(activeManuscript.frontmatter.title ?? "Untitled Manuscript"),
+      totalWords: activeManuscript.chapters.reduce((total, item) => total + item.wordCount, 0),
+    },
+  };
+}
+
+export async function updateActiveProjectSettings(
+  update: unknown,
+): Promise<ProjectSettings | null> {
+  const activePath = state.activePath;
+  const directory = activePath && isEpubFilename(activePath) ? projectDirectory(activePath) : null;
+  if (!directory) return null;
+  return await updateProjectSettings(update, directory);
+}
+
+export async function recordActiveProjectDailyProgress(
+  manuscriptId: string,
+  totalWords: number,
+): Promise<
+  {
+    progress: ProjectDailyWritingProgress;
+    writtenWords: number;
+    dailyWordGoal: number;
+    history: DailyWritingHistoryEntry[];
+  } | null
+> {
+  if (
+    !manuscriptId || manuscriptId.length > 1024 || !Number.isSafeInteger(totalWords) ||
+    totalWords < 0
+  ) {
+    throw new TypeError("Invalid daily writing progress request.");
+  }
+  const activePath = state.activePath;
+  const directory = activePath && isEpubFilename(activePath) ? projectDirectory(activePath) : null;
+  if (!directory) return null;
+
+  const settings = await getProjectSettings(directory);
+  const date = today();
+  const progress = settings.user_settings.dailyWritingProgress.date === date
+    ? settings.user_settings.dailyWritingProgress
+    : { date, startingWords: {} };
+  if (progress.startingWords[manuscriptId] === undefined) {
+    const legacy = await getLegacyDailySettings();
+    const legacyStart = legacy.dailyWritingProgress.date === date
+      ? legacy.dailyWritingProgress.startingWords[manuscriptId]
+      : undefined;
+    progress.startingWords[manuscriptId] = legacyStart ?? totalWords;
+  }
+  const writtenWords = Math.max(totalWords - progress.startingWords[manuscriptId], 0);
+  const history = [...settings.user_settings.dailyWritingHistory];
+  const todayEntry = history.find((entry) => entry.date === date);
+  if (todayEntry) {
+    todayEntry.words = Math.max(todayEntry.words, writtenWords);
+    todayEntry.goal = settings.user_settings.dailyWordGoal;
+  } else {
+    history.push({
+      date,
+      words: writtenWords,
+      goal: settings.user_settings.dailyWordGoal,
+    });
+  }
+  const trimmedHistory = trimHistory(history);
+  const next: ProjectSettings = {
+    ...settings,
+    user_settings: {
+      ...settings.user_settings,
+      dailyWritingProgress: progress,
+      dailyWritingHistory: trimmedHistory,
+    },
+  };
+  await saveProjectSettings(directory, next);
+  return {
+    progress,
+    writtenWords,
+    dailyWordGoal: next.user_settings.dailyWordGoal,
+    history: trimmedHistory,
+  };
+}
+
+async function projectDrafts(directory: string): Promise<DraftSummary[]> {
+  return (await readProjectSettings(directory)).drafts;
 }
 
 function latestDraft(drafts: DraftSummary[]): DraftSummary | null {
@@ -256,7 +547,8 @@ export async function createDraft(
   const directory = projectDirectory(activePath);
   if (directory === null) throw new Error("The active manuscript has no project directory.");
 
-  let drafts = await projectDrafts(directory);
+  const currentSettings = await getProjectSettings(directory);
+  let drafts = currentSettings.drafts;
   if (!drafts.length) throw new Error("The project does not have a draft to copy.");
 
   const latestNumber = latestDraft(drafts)!.number;
@@ -289,7 +581,7 @@ export async function createDraft(
   });
   drafts = [...drafts, { number, filename }];
   try {
-    await saveProjectSettings(directory, { drafts });
+    await saveProjectSettings(directory, { ...currentSettings, drafts });
   } catch (error) {
     await Deno.remove(draftPath(directory, filename));
     throw error;
@@ -325,7 +617,10 @@ export async function createProjectEpub(projectPath = pendingProjectPath): Promi
   const manuscript = { ...blankManuscript(projectName), filename: "draft_1.epub" };
   const epubPath = projectFilePath(projectPath, epubFilename(manuscript));
   await Deno.writeFile(epubPath, await generateEpub(manuscript), { createNew: true });
-  await saveProjectSettings(projectPath, { drafts: [{ number: 1, filename: "draft_1.epub" }] });
+  await saveProjectSettings(projectPath, {
+    drafts: [{ number: 1, filename: "draft_1.epub" }],
+    user_settings: await newProjectUserSettings(),
+  });
   await setActivePath(epubPath);
   pendingProjectPath = null;
   return manuscript;
@@ -348,7 +643,10 @@ export async function createProject(
   const epub = await generateEpub(manuscript);
   await Deno.mkdir(projectPath);
   await Deno.writeFile(epubPath, epub, { createNew: true });
-  await saveProjectSettings(projectPath, { drafts: [{ number: 1, filename: "draft_1.epub" }] });
+  await saveProjectSettings(projectPath, {
+    drafts: [{ number: 1, filename: "draft_1.epub" }],
+    user_settings: await newProjectUserSettings(),
+  });
   await setActivePath(epubPath);
   pendingProjectPath = null;
   pendingProjectParentPath = null;

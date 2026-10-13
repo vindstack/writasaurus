@@ -11,10 +11,19 @@ Deno.test("app settings API: rejects invalid settings, progress, and license inp
     request: new Request("http://localhost/api/editor/settings", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ dailyWordGoal: 0 }),
+      body: JSON.stringify({ wordsPerPage: 0 }),
     }),
   });
   assert(settingsResponse.status === 400);
+
+  const legacyGoalResponse = await updateSettings({
+    request: new Request("http://localhost/api/editor/settings", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ dailyWordGoal: 1 }),
+    }),
+  });
+  assert(legacyGoalResponse.status === 400);
 
   const progressResponse = await updateDailyProgress({
     request: new Request("http://localhost/api/editor/daily-progress", {

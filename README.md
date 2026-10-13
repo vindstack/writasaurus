@@ -11,7 +11,9 @@ separate applications in one Deno workspace.
 - `packages/shared/` contains release, licensing-token, and private R2 utilities.
 
 Desktop project folders store manuscript versions as `draft_1.epub`, `draft_2.epub`, and so on;
-`settings.json` keeps their numbered draft list. The editor opens the latest draft by default and
+`settings.json` keeps their numbered draft list, project-specific manuscript and daily word goals,
+and a rolling 30-day writing history. The Goals page reports writing and goal-completion streaks and
+estimates manuscript completion from that history. The editor opens the latest draft by default and
 can create a blank draft or copy any earlier one. A Markdown outline is saved as `Outline.md` beside
 the drafts. Outline mode includes replaceable templates and autosaves changes to the project folder.
 

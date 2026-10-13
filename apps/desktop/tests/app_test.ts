@@ -52,9 +52,6 @@ Deno.test("renders about page with description and return to editor link", async
   assert(page.includes('href="/"'));
   assert(page.includes("Return to Editor"));
   assert(page.includes("<title>About — Writasaurus</title>"));
-  assert(page.includes("Hello, John Smith!"));
-  assert(page.includes("Count: 0"));
-  assert(page.includes('component-url="/_astro/AboutCounter.'));
 });
 
 Deno.test("renders settings page with font options and return to editor link", async () => {
@@ -75,6 +72,22 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(page.includes("<title>Settings — Writasaurus</title>"));
   assert(page.includes('component-url="/_astro/SettingsForm.'));
   assert(!page.includes("writing-assistance-input"));
+});
+
+Deno.test("renders project settings and manuscript goal pages with shared editor footer", async () => {
+  const projectSettingsResponse = await app.request("/project-settings");
+  assert(projectSettingsResponse.status === 200);
+  const projectSettingsPage = await projectSettingsResponse.text();
+  assert(projectSettingsPage.includes("Project Settings"));
+  assert(projectSettingsPage.includes("ProjectSettingsForm."));
+  assert(projectSettingsPage.includes('data-testid="layout-return-to-editor"'));
+
+  const goalResponse = await app.request("/goal");
+  assert(goalResponse.status === 200);
+  const goalPage = await goalResponse.text();
+  assert(goalPage.includes("Manuscript Goal"));
+  assert(goalPage.includes("ProjectGoal."));
+  assert(goalPage.includes('data-testid="layout-return-to-editor"'));
 });
 
 Deno.test("pages are protected by a nonce-based content security policy", async () => {

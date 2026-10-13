@@ -7,11 +7,9 @@ import {
 } from "../../../../../packages/shared/settings.ts";
 import {
   appSettingsError,
-  getDailyWordGoalPreference,
   getFontPreference,
   getWordsPerPagePreference,
   loadAppSettings,
-  saveDailyWordGoalPreference,
   saveFontPreference,
   saveWordsPerPagePreference,
 } from "../../lib/app-settings-client.ts";
@@ -19,7 +17,6 @@ import { usePageEffects } from "../../composables/usePageEffects.ts";
 
 const font = ref<string>("alegreya");
 const wordsPerPage = ref("300");
-const dailyGoal = ref("1500");
 const status = ref("");
 const error = ref("");
 let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -78,7 +75,6 @@ onMounted(async () => {
     font.value = saved;
     applyFontPreference(saved);
     wordsPerPage.value = String(getWordsPerPagePreference());
-    dailyGoal.value = String(getDailyWordGoalPreference());
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Could not load Writasaurus settings.";
   }
@@ -163,30 +159,6 @@ onUnmounted(() => clearTimeout(timeout));
           saveWordsPerPagePreference,
           getWordsPerPagePreference,
           'Words per page saved.',
-        )"
-      />
-    </div>
-
-    <div class="group">
-      <label for="daily-word-goal-input" class="label">
-        <strong>Daily Writing Goal</strong>
-        <span class="help">Number of words to aim for each day (default: 1,500).</span>
-      </label>
-      <input
-        id="daily-word-goal-input"
-        class="input"
-        type="number"
-        min="1"
-        max="100000"
-        step="100"
-        v-model="dailyGoal"
-        @input="onNumberInput(dailyGoal, $event, saveDailyWordGoalPreference)"
-        @change="onNumberChange(
-          dailyGoal,
-          $event,
-          saveDailyWordGoalPreference,
-          getDailyWordGoalPreference,
-          'Daily writing goal saved.',
         )"
       />
     </div>

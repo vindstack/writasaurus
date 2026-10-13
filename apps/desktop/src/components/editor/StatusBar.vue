@@ -2,11 +2,12 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import {
   appSettingsError,
-  ensureDailyWritingProgress,
-  getDailyWordGoalPreference,
-  getDailyWrittenWords,
   getWordsPerPagePreference,
 } from "../../lib/app-settings-client.ts";
+import {
+  recordDailyWritingProgress,
+  type ProjectDailyProgress,
+} from "../../lib/project-daily-progress-client.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import {
   activeChapter,
@@ -25,27 +26,51 @@ const manuscriptState = useSignalValue(manuscript);
 const modeState = useSignalValue(editorMode);
 const outlineState = useSignalValue(outlineContent);
 const wordsPerPage = computed(() => getWordsPerPagePreference());
-const dailyWordGoal = computed(() => getDailyWordGoalPreference());
+const projectDailyProgress = ref<ProjectDailyProgress | null>(null);
+const dailyProgressError = ref("");
+const dailyWordGoal = computed(() => projectDailyProgress.value?.dailyWordGoal ?? 1);
 const manuscriptId = computed(() => {
   const current = manuscriptState.value;
   return String(current.frontmatter.writasaurusId ?? "").trim() || current.filename;
 });
 const dailyWords = computed(() => {
-  return getDailyWrittenWords(manuscriptId.value, totalState.value);
+  const startingWords = projectDailyProgress.value?.progress.startingWords[manuscriptId.value];
+  return startingWords === undefined ? 0 : Math.max(totalState.value - startingWords, 0);
 });
 const dailyProgress = computed(() => Math.min(dailyWords.value, dailyWordGoal.value));
 const celebration = ref(false);
 let celebrationTimer: ReturnType<typeof setTimeout> | undefined;
+let dailyProgressTimer: ReturnType<typeof setTimeout> | undefined;
+let lastTrackedManuscriptId = "";
 
-watch(
-  [manuscriptId, () => totalState.value],
-  ([id, total]) => {
-    void ensureDailyWritingProgress(id, total).catch((error: unknown) => {
-      console.error("Could not update daily writing progress.", error);
-    });
-  },
-  { immediate: true },
-);
+async function saveDailyProgress(): Promise<void> {
+  const id = manuscriptId.value;
+  const total = totalState.value;
+  try {
+    const result = await recordDailyWritingProgress(id, total);
+    if (id !== manuscriptId.value) return;
+    projectDailyProgress.value = result;
+    dailyProgressError.value = "";
+  } catch (error) {
+    dailyProgressError.value = error instanceof Error
+      ? error.message
+      : "Could not update daily writing progress.";
+    console.error("Could not update daily writing progress.", error);
+  }
+}
+
+watch([manuscriptId, () => totalState.value], ([id]) => {
+  const manuscriptChanged = lastTrackedManuscriptId !== id;
+  if (manuscriptChanged) {
+    projectDailyProgress.value = null;
+    lastTrackedManuscriptId = id;
+    clearTimeout(dailyProgressTimer);
+    void saveDailyProgress();
+    return;
+  }
+  clearTimeout(dailyProgressTimer);
+  dailyProgressTimer = setTimeout(() => void saveDailyProgress(), 500);
+}, { immediate: true });
 
 watch(dailyWords, (words, previousWords) => {
   if (previousWords < dailyWordGoal.value && words >= dailyWordGoal.value) {
@@ -57,7 +82,11 @@ watch(dailyWords, (words, previousWords) => {
   }
 });
 
-onUnmounted(() => clearTimeout(celebrationTimer));
+onUnmounted(() => {
+  clearTimeout(celebrationTimer);
+  clearTimeout(dailyProgressTimer);
+  void saveDailyProgress();
+});
 
 const chapterStats = computed(() => {
   const chapter = chapterState.value;
@@ -84,7 +113,7 @@ const outlineWords = computed(() =>
 
 <template>
   <div class="footerStack">
-    <div v-if="modeState === 'manuscript'" class="progressTrack">
+    <div v-if="modeState === 'manuscript' && projectDailyProgress" class="progressTrack">
       <progress
         class="dailyProgress"
         :value="dailyProgress"
@@ -103,7 +132,9 @@ const outlineWords = computed(() =>
         {{ celebration ? "Daily writing goal reached!" : "" }}
       </span>
     </div>
-    <p v-if="appSettingsError" class="settingsError" role="alert">{{ appSettingsError }}</p>
+    <p v-if="dailyProgressError || appSettingsError" class="settingsError" role="alert">
+      {{ dailyProgressError || appSettingsError }}
+    </p>
     <footer class="statusbar">
       <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
         title="Toggle chapters panel (Ctrl+B)" @click="sidebarOpen.value = !sidebarOpen.value">

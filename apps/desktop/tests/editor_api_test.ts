@@ -1,7 +1,20 @@
 import { createTestApp } from "./helpers.ts";
-import { projectEpubPath } from "../src/lib/editor-session.ts";
+import {
+  closeActiveFile,
+  DEFAULT_MANUSCRIPT_WORD_GOAL,
+  getActivePath,
+  getActiveProjectDetails,
+  getProjectSettings,
+  projectEpubPath,
+  recordActiveProjectDailyProgress,
+  setActivePath,
+  updateActiveProjectSettings,
+  updateProjectSettings,
+} from "../src/lib/editor-session.ts";
+import { loadLastFilePath } from "../src/lib/desktop.ts";
 import { blankManuscript } from "../src/lib/editor/data.ts";
 import { generateEpub } from "../src/lib/epub.ts";
+import { GET as getProjectSettingsApi } from "../src/pages/api/editor/project-settings.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -23,12 +36,98 @@ Deno.test("project: ignores legacy EPUBs without migrating them", async () => {
     const epub = await generateEpub(blankManuscript("Legacy Book"));
     await Deno.writeFile(`${directory}/legacy-book.epub`, epub);
     assertEquals(await projectEpubPath(directory), null);
-    assertEquals(
-      await Deno.readTextFile(`${directory}/settings.json`),
-      '{\n  "drafts": []\n}\n',
-    );
+    const settings = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    assertEquals(settings.drafts.length, 0);
+    assertEquals(settings.user_settings.manuscriptWordGoal, DEFAULT_MANUSCRIPT_WORD_GOAL);
     assertEquals(await Deno.stat(`${directory}/legacy-book.epub`).then(() => true), true);
   } finally {
+    await Deno.remove(directory, { recursive: true });
+  }
+});
+
+Deno.test("project: user settings default, persist, and preserve draft metadata", async () => {
+  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-settings-" });
+  try {
+    await Deno.writeTextFile(
+      `${directory}/settings.json`,
+      JSON.stringify({ drafts: [{ number: 1, filename: "draft_1.epub" }] }),
+    );
+    const defaults = await getProjectSettings(directory);
+    assertEquals(defaults.user_settings.manuscriptWordGoal, 80_000);
+    assert(defaults.user_settings.dailyWordGoal > 0);
+    assertEquals(defaults.drafts[0].filename, "draft_1.epub");
+
+    const updated = await updateProjectSettings({
+      manuscriptWordGoal: 95_000,
+      dailyWordGoal: 2_000,
+    }, directory);
+    assertEquals(updated.user_settings.manuscriptWordGoal, 95_000);
+    assertEquals(updated.user_settings.dailyWordGoal, 2_000);
+    assertEquals(updated.drafts[0].filename, "draft_1.epub");
+    const reloaded = await getProjectSettings(directory);
+    assertEquals(reloaded.user_settings.manuscriptWordGoal, 95_000);
+    assertEquals(reloaded.user_settings.dailyWordGoal, 2_000);
+
+    for (const manuscriptWordGoal of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      let rejected = false;
+      try {
+        await updateProjectSettings({ manuscriptWordGoal }, directory);
+      } catch (error) {
+        rejected = error instanceof TypeError;
+      }
+      assert(rejected, `Expected ${manuscriptWordGoal} to be rejected`);
+    }
+  } finally {
+    await Deno.remove(directory, { recursive: true });
+  }
+});
+
+Deno.test("project settings API: reports when there is no active project", async () => {
+  const response = await getProjectSettingsApi();
+  assertEquals(response.status, 409);
+});
+
+Deno.test("project: active project details include saved goal and manuscript word count", async () => {
+  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-project-" });
+  const previousActivePath = getActivePath();
+  const previousSavedPath = await loadLastFilePath();
+  try {
+    const manuscript = blankManuscript("Progress Test");
+    manuscript.filename = "draft_1.epub";
+    manuscript.chapters[0].content = "<p>one two three four</p>";
+    manuscript.chapters[0].wordCount = 4;
+    await Deno.writeFile(`${directory}/draft_1.epub`, await generateEpub(manuscript));
+    await setActivePath(`${directory}/draft_1.epub`);
+
+    const initial = await getActiveProjectDetails();
+    assert(initial !== null);
+    assertEquals(initial.manuscript.title, "Progress Test");
+    assertEquals(initial.manuscript.totalWords, 4);
+    assertEquals(initial.settings.user_settings.manuscriptWordGoal, 80_000);
+
+    const firstProgress = await recordActiveProjectDailyProgress(initial.manuscript.id, 4);
+    assert(firstProgress !== null);
+    assertEquals(firstProgress.writtenWords, 0);
+    const updatedProgress = await recordActiveProjectDailyProgress(initial.manuscript.id, 7);
+    assert(updatedProgress !== null);
+    assertEquals(updatedProgress.writtenWords, 3);
+    assertEquals(updatedProgress.history.at(-1)?.words, 3);
+
+    assert(
+      await updateActiveProjectSettings({
+        manuscriptWordGoal: 90_000,
+        dailyWordGoal: 2_000,
+      }),
+    );
+    const updated = await getActiveProjectDetails();
+    assert(updated !== null);
+    assertEquals(updated.settings.user_settings.manuscriptWordGoal, 90_000);
+    assertEquals(updated.settings.user_settings.dailyWordGoal, 2_000);
+    assertEquals(updated.manuscript.totalWords, 4);
+  } finally {
+    if (previousActivePath) await setActivePath(previousActivePath);
+    else if (previousSavedPath) await setActivePath(previousSavedPath);
+    else await closeActiveFile();
     await Deno.remove(directory, { recursive: true });
   }
 });

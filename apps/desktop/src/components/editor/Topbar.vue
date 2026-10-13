@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { syncTruncationTooltip } from "../../lib/text/text.ts";
 import {
     quit,
@@ -18,11 +18,14 @@ import {
     outlineSaveMessage,
     renameManuscript,
     saveMessage,
+    totalWords,
 } from "../../lib/editor/state.ts";
+import type { ActiveProjectDetails } from "../../lib/editor-session.ts";
 import { useSignalValue } from "../vue-signals.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import DropdownMenu from "../../../../../packages/shared/ui/components/DropdownMenu.vue";
 import Divider from "../../../../../packages/shared/ui/components/Divider.vue";
+import Progress from "../../../../../packages/shared/ui/components/Progress.vue";
 import SaveStatus from "../SaveStatus.vue";
 
 const props = defineProps<{
@@ -36,6 +39,7 @@ const props = defineProps<{
 
 const titleInput = ref<HTMLInputElement | null>(null);
 const manuscriptState = useSignalValue(manuscript);
+const totalWordState = useSignalValue(totalWords);
 const unsavedState = useSignalValue(hasUnsavedChanges);
 const messageState = useSignalValue(saveMessage);
 const modeState = useSignalValue(editorMode);
@@ -43,8 +47,21 @@ const outlineUnsavedState = useSignalValue(outlineHasUnsavedChanges);
 const outlineMessageState = useSignalValue(outlineSaveMessage);
 const projectLoadedState = useSignalValue(desktopFileLoaded);
 const menuState = useSignalValue(menuOpen);
+const projectWordGoal = ref<number | null>(null);
+const projectGoalError = ref("");
+let projectGoalRequest = 0;
+let stopProjectGoalWatch: (() => void) | undefined;
 const title = computed(() =>
     String(manuscriptState.value.frontmatter.title ?? "Untitled Manuscript"),
+);
+const goalProgress = computed(() =>
+    Math.min(totalWordState.value, projectWordGoal.value ?? 0)
+);
+const goalTitle = computed(() =>
+    projectGoalError.value ||
+    `Goals — ${totalWordState.value.toLocaleString()} of ${
+        (projectWordGoal.value ?? 0).toLocaleString()
+    } words`,
 );
 const message = computed(
     () => modeState.value === "outline"
@@ -54,13 +71,52 @@ const message = computed(
 );
 
 onMounted(() => {
-    const sync = () => {
-        if (titleInput.value) syncTruncationTooltip(titleInput.value);
-    };
-    sync();
-    addEventListener("resize", sync);
-    onUnmounted(() => removeEventListener("resize", sync));
+    syncTitleTooltip();
+    addEventListener("resize", syncTitleTooltip);
+    stopProjectGoalWatch = watch(
+        [
+            projectLoadedState,
+            () => String(manuscriptState.value.frontmatter.writasaurusId ?? ""),
+        ],
+        ([loaded]) => {
+            const request = ++projectGoalRequest;
+            projectWordGoal.value = null;
+            projectGoalError.value = "";
+            if (!loaded) return;
+
+            void fetch("/api/editor/project-settings").then(async (response) => {
+                if (!response.ok) {
+                    if (response.status === 409) return null;
+                    throw new Error(await response.text());
+                }
+                const project: ActiveProjectDetails = await response.json();
+                const wordGoal = project.settings.user_settings.manuscriptWordGoal;
+                if (!Number.isSafeInteger(wordGoal) || wordGoal < 1) {
+                    throw new Error("The project manuscript word goal is invalid.");
+                }
+                return wordGoal;
+            }).then((wordGoal) => {
+                if (request === projectGoalRequest) projectWordGoal.value = wordGoal;
+            }).catch((error: unknown) => {
+                if (request !== projectGoalRequest) return;
+                projectGoalError.value = error instanceof Error
+                    ? error.message
+                    : "Could not load the project manuscript goal.";
+                console.error("Could not load the project manuscript goal.", error);
+            });
+        },
+        { immediate: true },
+    );
 });
+
+onUnmounted(() => {
+    removeEventListener("resize", syncTitleTooltip);
+    stopProjectGoalWatch?.();
+});
+
+function syncTitleTooltip(): void {
+    if (titleInput.value) syncTruncationTooltip(titleInput.value);
+}
 </script>
 
 <template>
@@ -79,6 +135,26 @@ onMounted(() => {
                 : 'saved'" :message="message" />
         </div>
         <div class="right">
+            <Button
+                v-if="projectLoadedState"
+                href="/goal"
+                variant="quiet"
+                size="small"
+                class="goalsLink"
+                data-testid="manuscript-goals-link"
+                aria-label="Goals"
+                :title="goalTitle"
+            >
+                <span>Goals</span>
+                <Progress
+                    v-if="projectWordGoal !== null"
+                    class="goalsProgress"
+                    label="Manuscript word-goal progress"
+                    :value="goalProgress"
+                    :max="projectWordGoal"
+                />
+                <span v-else-if="projectGoalError" class="goalError" aria-hidden="true">!</span>
+            </Button>
             <div
                 class="modeSwitch"
                 role="group"
@@ -141,6 +217,9 @@ onMounted(() => {
                     </button>
                     <Divider />
                     <a role="menuitem" href="/settings" class="item">Settings</a>
+                    <a role="menuitem" href="/project-settings" class="item" id="menu-project-settings">
+                        Project Settings
+                    </a>
                     <button type="button" role="menuitem" class="item" id="menu-toggle-toolbar"
                         @click="onToggleToolbar">
                         {{ toolbarVisible ? "Hide toolbar" : "Show toolbar" }}
@@ -182,6 +261,28 @@ onMounted(() => {
     display: flex;
     flex: 0 0 auto;
     gap: 0.35rem;
+}
+
+.goalsLink {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.12rem;
+    justify-content: center;
+    line-height: 1;
+    min-height: 1.9rem;
+    padding: 0.12rem 0.35rem;
+    text-decoration: none;
+    width: 3.5rem;
+}
+
+.goalsLink :deep(.progress) {
+    height: 0.2rem;
+}
+
+.goalError {
+    color: var(--danger);
+    font-weight: 700;
 }
 
 .modeSwitch {

@@ -1,7 +1,7 @@
 import {
   clearLicenseToken,
   getAppSettings,
-  getDailyWrittenWords,
+  getLegacyDailySettings,
   getLicenseToken,
   setLicenseToken,
   updateAppSettings,
@@ -26,7 +26,7 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
     assert(defaults.version === 1);
     assert(defaults.font === "alegreya");
     assert(defaults.wordsPerPage === 300);
-    assert(defaults.dailyWordGoal === 1500);
+    assert(!("dailyWordGoal" in defaults));
     assert(defaults.writingAssistanceWords.length === 0);
     assert(defaults.writingAssistanceIgnores.length === 0);
     assert(!("licenseToken" in defaults), "Expected the public settings API to omit the token");
@@ -34,25 +34,23 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
     const updated = await updateAppSettings({
       font: "georgia",
       wordsPerPage: 420,
-      dailyWordGoal: 2400,
       writingAssistanceWords: ["Writasaurus", "Writasaurus"],
       writingAssistanceIgnores: ["grammar:example"],
     }, directory);
     assert(updated.font === "georgia");
     assert(updated.wordsPerPage === 420);
-    assert(updated.dailyWordGoal === 2400);
+    assert(!("dailyWordGoal" in updated));
     assert(updated.writingAssistanceWords.length === 1);
     assert(updated.writingAssistanceIgnores[0] === "grammar:example");
-
-    assert((await getDailyWrittenWords("manuscript-1", 10, directory)).writtenWords === 0);
-    assert((await getDailyWrittenWords("manuscript-1", 15, directory)).writtenWords === 5);
-    assert((await getDailyWrittenWords("manuscript-1", 8, directory)).writtenWords === 0);
 
     await setLicenseToken("signed-license-token", directory);
     assert(await getLicenseToken(directory) === "signed-license-token");
     assert((await getAppSettings(directory)).font === "georgia");
     await clearLicenseToken(directory);
     assert(await getLicenseToken(directory) === null);
+    const persisted = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    assert(!("dailyWordGoal" in persisted));
+    assert(!("dailyWritingProgress" in persisted));
 
     if (Deno.build.os !== "windows") {
       const directoryMode = (await Deno.stat(directory)).mode! & 0o777;
@@ -63,6 +61,32 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
       );
       assert(fileMode === 0o600, `Expected private settings permissions, got ${fileMode}`);
     }
+  });
+});
+
+Deno.test("app settings: exposes legacy daily settings for project migration", async () => {
+  await withTempSettings(async (directory) => {
+    await Deno.writeTextFile(
+      `${directory}/settings.json`,
+      JSON.stringify({
+        version: 1,
+        font: "alegreya",
+        wordsPerPage: 300,
+        dailyWordGoal: 2400,
+        dailyWritingProgress: {
+          date: new Date().toISOString().slice(0, 10),
+          startingWords: { "manuscript-1": 125 },
+        },
+        writingAssistanceWords: [],
+        writingAssistanceIgnores: [],
+        licenseToken: null,
+      }),
+    );
+    const legacy = await getLegacyDailySettings(directory);
+    assert(legacy.dailyWordGoal === 2400);
+    assert(legacy.dailyWritingProgress.startingWords["manuscript-1"] === 125);
+    const settings = await getAppSettings(directory);
+    assert(!("dailyWordGoal" in settings));
   });
 });
 

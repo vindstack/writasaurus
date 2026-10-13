@@ -7,7 +7,7 @@ import {
   type FontOption,
 } from "../../../../packages/shared/settings.ts";
 import { applicationDataDirectory } from "./desktop.ts";
-import type { AppSettings, AppSettingsUpdate, DailyWritingProgress } from "./app-settings-types.ts";
+import type { AppSettings, AppSettingsUpdate } from "./app-settings-types.ts";
 
 interface StoredAppSettings extends AppSettings {
   licenseToken: string | null;
@@ -34,8 +34,6 @@ function defaultSettings(): StoredAppSettings {
     version: 1,
     font: DEFAULT_FONT,
     wordsPerPage: DEFAULT_WORDS_PER_PAGE,
-    dailyWordGoal: DEFAULT_DAILY_WORD_GOAL,
-    dailyWritingProgress: { date: "", startingWords: {} },
     writingAssistanceWords: [],
     writingAssistanceIgnores: [],
     licenseToken: null,
@@ -59,21 +57,10 @@ function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function isDailyProgress(value: unknown): value is DailyWritingProgress {
-  if (!isRecord(value) || typeof value.date !== "string" || !isRecord(value.startingWords)) {
-    return false;
-  }
-  if (value.date !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(value.date)) return false;
-  return Object.entries(value.startingWords).every(([key, words]) =>
-    key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0
-  );
-}
-
 function parseSettings(value: unknown): StoredAppSettings {
   if (
     !isRecord(value) || value.version !== 1 || typeof value.font !== "string" ||
     !VALID_FONTS.has(value.font as FontOption) || !isWordCount(value.wordsPerPage) ||
-    !isWordCount(value.dailyWordGoal) || !isDailyProgress(value.dailyWritingProgress) ||
     !isStringList(value.writingAssistanceWords) ||
     !isStringList(value.writingAssistanceIgnores) ||
     !(value.licenseToken === null ||
@@ -86,11 +73,6 @@ function parseSettings(value: unknown): StoredAppSettings {
     version: 1,
     font: value.font as FontOption,
     wordsPerPage: value.wordsPerPage,
-    dailyWordGoal: value.dailyWordGoal,
-    dailyWritingProgress: {
-      date: value.dailyWritingProgress.date,
-      startingWords: { ...value.dailyWritingProgress.startingWords } as Record<string, number>,
-    },
     writingAssistanceWords: [...value.writingAssistanceWords],
     writingAssistanceIgnores: [...value.writingAssistanceIgnores],
     licenseToken: value.licenseToken,
@@ -159,7 +141,6 @@ function validateSettingsUpdate(value: unknown): AppSettingsUpdate {
         update.font = field as FontOption;
         break;
       case "wordsPerPage":
-      case "dailyWordGoal":
         if (!isWordCount(field)) throw new TypeError(`${key} must be a positive whole number.`);
         update[key] = field;
         break;
@@ -191,41 +172,54 @@ export async function updateAppSettings(value: unknown, directory?: string): Pro
   });
 }
 
-function today(): string {
-  const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
+export interface LegacyDailySettings {
+  dailyWordGoal: number;
+  dailyWritingProgress: { date: string; startingWords: Record<string, number> };
 }
 
-export async function getDailyWrittenWords(
-  manuscriptId: string,
-  totalWords: number,
-  directory?: string,
-): Promise<{ progress: DailyWritingProgress; writtenWords: number }> {
-  if (
-    !manuscriptId || manuscriptId.length > 1024 || !Number.isSafeInteger(totalWords) ||
-    totalWords < 0
-  ) {
-    throw new TypeError("Invalid daily writing progress request.");
-  }
-  return await serializeWrite(async () => {
-    const current = await readStoredSettings(directory);
-    const date = today();
-    const progress = current.dailyWritingProgress.date === date
-      ? current.dailyWritingProgress
-      : { date, startingWords: {} };
-    if (progress.startingWords[manuscriptId] === undefined) {
-      progress.startingWords[manuscriptId] = totalWords;
-      await writeStoredSettings({ ...current, dailyWritingProgress: progress }, directory);
+export async function getLegacyDailySettings(directory?: string): Promise<LegacyDailySettings> {
+  let value: unknown;
+  try {
+    value = JSON.parse(await Deno.readTextFile(settingsPath(directory)));
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      return {
+        dailyWordGoal: DEFAULT_DAILY_WORD_GOAL,
+        dailyWritingProgress: { date: "", startingWords: {} },
+      };
     }
-    return {
-      progress,
-      writtenWords: Math.max(totalWords - progress.startingWords[manuscriptId], 0),
-    };
-  });
+    if (error instanceof SyntaxError) {
+      throw new Error("The Writasaurus settings file contains invalid JSON.", { cause: error });
+    }
+    throw error;
+  }
+  if (!isRecord(value)) {
+    throw new Error("The Writasaurus settings file is invalid.");
+  }
+
+  const dailyWordGoal = isWordCount(value.dailyWordGoal)
+    ? value.dailyWordGoal
+    : DEFAULT_DAILY_WORD_GOAL;
+  const progressValue = value.dailyWritingProgress;
+  const progressRecord = isRecord(progressValue) ? progressValue : null;
+  const startingWords = progressRecord && isRecord(progressRecord.startingWords)
+    ? progressRecord.startingWords
+    : null;
+  const validProgress = progressRecord !== null && typeof progressRecord.date === "string" &&
+    (progressRecord.date === "" || /^\d{4}-\d{2}-\d{2}$/.test(progressRecord.date)) &&
+    startingWords !== null &&
+    Object.entries(startingWords).every(([key, words]) =>
+      key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0
+    );
+  return {
+    dailyWordGoal,
+    dailyWritingProgress: validProgress && progressRecord && startingWords
+      ? {
+        date: typeof progressRecord.date === "string" ? progressRecord.date : "",
+        startingWords: { ...startingWords } as Record<string, number>,
+      }
+      : { date: "", startingWords: {} },
+  };
 }
 
 export async function getLicenseToken(directory?: string): Promise<string | null> {

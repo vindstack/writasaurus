@@ -1,0 +1,24 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import CardPage from "../components/CardPage.astro";
+import ProjectSettingsForm from "../components/islands/ProjectSettingsForm.vue";
+import PageEffects from "../components/islands/PageEffects.vue";
+---
+
+<BaseLayout title="Project Settings — Writasaurus">
+  <CardPage size="wide" brandHref="/" roomy>
+    <h2>Project Settings</h2>
+    <p class="intro">
+      Set the daily and manuscript word-count goals for the currently open project.
+    </p>
+    <ProjectSettingsForm client:load />
+  </CardPage>
+  <PageEffects client:load />
+</BaseLayout>
+
+<style>
+  .intro {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>

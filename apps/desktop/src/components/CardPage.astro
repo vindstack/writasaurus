@@ -22,6 +22,11 @@ const { size, brandHref, roomy = false, prose = false } = Astro.props;
       </section>
     </main>
   </div>
+  <footer class="pageFooter">
+    <a class="button button--quiet" href="/" data-testid="layout-return-to-editor">
+      ← Return to Editor
+    </a>
+  </footer>
 </div>
 
 <style>
@@ -76,9 +81,32 @@ const { size, brandHref, roomy = false, prose = false } = Astro.props;
   font-size: 1.5rem;
 }
 
+.pageFooter {
+  bottom: 0.75rem;
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  z-index: 1;
+}
+
+.pageFooter :global(a) {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+.pageFooter :global(a:hover),
+.pageFooter :global(a:focus-visible) {
+  opacity: 1;
+}
+
 @media (max-width: 36rem) {
   .card {
     padding: 1.25rem;
+  }
+
+  .pageFooter {
+    bottom: 0.5rem;
+    right: 0.5rem;
   }
 }
 </style>

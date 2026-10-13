@@ -93,19 +93,37 @@ function browserTest(name: string, fn: () => Promise<void>): void {
   });
 }
 
+interface EditorTestOptions {
+  projectSettingsAvailable?: boolean;
+  useDesktopStatus?: boolean;
+  fakeLoadedProject?: boolean;
+  fakeWordCount?: number;
+  dailyHistory?: { date: string; words: number; goal: number }[];
+}
+
 function editorTestHandler(
-  projectLoaded = false,
+  {
+    projectSettingsAvailable = false,
+    useDesktopStatus = false,
+    fakeLoadedProject = false,
+    fakeWordCount = 40_000,
+    dailyHistory = [],
+  }: EditorTestOptions = {},
 ): (request: Request) => Response | Promise<Response> {
   const app = createTestApp().fetch;
+  const browserManuscript = blankManuscript("Browser Test Manuscript");
+  browserManuscript.chapters[0].wordCount = fakeWordCount;
   const settings: AppSettings = {
     version: 1,
     font: "alegreya",
     wordsPerPage: 300,
-    dailyWordGoal: 1500,
-    dailyWritingProgress: { date: "", startingWords: {} },
     writingAssistanceWords: [],
     writingAssistanceIgnores: [],
   };
+  let projectWordGoal = 80_000;
+  let dailyWordGoal = 1_500;
+  let dailyWritingProgress = { date: "", startingWords: {} as Record<string, number> };
+  const dailyWritingHistory = [...dailyHistory];
   let licenseToken: string | null = null;
   const today = () => {
     const now = new Date();
@@ -120,8 +138,15 @@ function editorTestHandler(
     if (path === "/api/editor/settings" && request.method === "GET") {
       return Response.json(settings);
     }
-    if (path === "/api/editor/status" && !projectLoaded) {
-      return Response.json({ activeFile: null, activePath: null });
+    if (path === "/api/editor/status") {
+      if (fakeLoadedProject) {
+        return Response.json({
+          activeFile: "draft_1.epub",
+          activePath: "/tmp/writasaurus-browser-project/draft_1.epub",
+          manuscript: browserManuscript,
+        });
+      }
+      if (!useDesktopStatus) return Response.json({ activeFile: null, activePath: null });
     }
     if (path === "/api/editor/settings" && request.method === "PATCH") {
       return request.json().then((update) => {
@@ -129,18 +154,46 @@ function editorTestHandler(
         return Response.json(settings);
       });
     }
+    if (path === "/api/editor/project-settings") {
+      if (!projectSettingsAvailable) {
+        return new Response("Open a project to access project settings.", { status: 409 });
+      }
+      if (request.method === "PATCH") {
+        return request.json().then((payload) => {
+          const manuscriptGoal = payload?.user_settings?.manuscriptWordGoal;
+          if (Number.isSafeInteger(manuscriptGoal) && manuscriptGoal > 0) {
+            projectWordGoal = manuscriptGoal;
+          }
+          const dailyGoal = payload?.user_settings?.dailyWordGoal;
+          if (Number.isSafeInteger(dailyGoal) && dailyGoal > 0) dailyWordGoal = dailyGoal;
+          return projectDetails();
+        });
+      }
+      return projectDetails();
+    }
     if (path === "/api/editor/daily-progress" && request.method === "POST") {
+      if (!projectSettingsAvailable) {
+        return new Response("Open a project to track daily writing progress.", { status: 409 });
+      }
       return request.json().then((payload) => {
         const date = today();
-        if (settings.dailyWritingProgress.date !== date) {
-          settings.dailyWritingProgress = { date, startingWords: {} };
+        if (dailyWritingProgress.date !== date) {
+          dailyWritingProgress = { date, startingWords: {} };
         }
-        const starting = settings.dailyWritingProgress.startingWords[payload.manuscriptId] ??
+        const starting = dailyWritingProgress.startingWords[payload.manuscriptId] ??
           payload.totalWords;
-        settings.dailyWritingProgress.startingWords[payload.manuscriptId] = starting;
+        dailyWritingProgress.startingWords[payload.manuscriptId] = starting;
+        const writtenWords = Math.max(payload.totalWords - starting, 0);
+        const entry = dailyWritingHistory.find((item) => item.date === date);
+        if (entry) {
+          entry.words = Math.max(entry.words, writtenWords);
+          entry.goal = dailyWordGoal;
+        } else dailyWritingHistory.push({ date, words: writtenWords, goal: dailyWordGoal });
         return Response.json({
-          progress: settings.dailyWritingProgress,
-          writtenWords: Math.max(payload.totalWords - starting, 0),
+          progress: dailyWritingProgress,
+          writtenWords,
+          dailyWordGoal,
+          history: dailyWritingHistory,
         });
       });
     }
@@ -159,15 +212,35 @@ function editorTestHandler(
     }
     return app(request);
   };
+
+  function projectDetails(): Response {
+    return Response.json({
+      settings: {
+        drafts: [{ number: 1, filename: "draft_1.epub" }],
+        user_settings: {
+          manuscriptWordGoal: projectWordGoal,
+          dailyWordGoal,
+          dailyWritingProgress,
+          dailyWritingHistory,
+          dailyWritingTrackingStarted: dailyWritingHistory[0]?.date ?? today(),
+        },
+      },
+      manuscript: {
+        id: "browser-test-manuscript",
+        title: "Browser Test Manuscript",
+        totalWords: fakeWordCount,
+      },
+    });
+  }
 }
 
 async function withEditorPage(
   test: (page: Page) => Promise<void>,
-  projectLoaded = false,
+  options: EditorTestOptions = {},
 ): Promise<void> {
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 0, onListen() {} },
-    editorTestHandler(projectLoaded),
+    editorTestHandler(options),
   );
   const address = server.addr as Deno.NetAddr;
   const browser = await launchBrowser();
@@ -901,10 +974,10 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
 browserTest("browser: daily writing progress completes with a goal celebration", async () => {
   await withEditorPage(async (page) => {
     await page.evaluate(async () => {
-      await fetch("/api/editor/settings", {
+      await fetch("/api/editor/project-settings", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ dailyWordGoal: 2 }),
+        body: JSON.stringify({ user_settings: { dailyWordGoal: 2 } }),
       });
     });
     await page.reload();
@@ -973,7 +1046,7 @@ browserTest("browser: daily writing progress completes with a goal celebration",
         JSON.stringify(restoredProgress)
       }`,
     );
-  });
+  }, { projectSettingsAvailable: true });
 });
 
 browserTest("browser: app preferences persist through the settings API", async () => {
@@ -985,18 +1058,167 @@ browserTest("browser: app preferences persist through the settings API", async (
       document.querySelector("#settings-status")?.textContent?.includes("Font preference saved.")
     );
 
-    const dailyGoal = page.locator("#daily-word-goal-input");
-    await dailyGoal.fill("2400");
-    await dailyGoal.dispatchEvent("change");
-    await page.waitForFunction(() =>
-      document.querySelector("#settings-status")?.textContent?.includes(
-        "Daily writing goal saved.",
-      )
-    );
     await page.reload();
 
     assert(await page.locator("#font-select").inputValue() === "georgia");
-    assert(await page.locator("#daily-word-goal-input").inputValue() === "2400");
+    assert(await page.locator("#daily-word-goal-input").count() === 0);
+  });
+});
+
+browserTest("browser: project settings configure manuscript goal progress", async () => {
+  const dayDate = (daysAgo: number) => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    date.setDate(date.getDate() - daysAgo);
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, "0"),
+      String(date.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
+  const history = [
+    { date: dayDate(3), words: 1_000, goal: 1_500 },
+    { date: dayDate(2), words: 1_600, goal: 1_500 },
+    { date: dayDate(1), words: 1_600, goal: 1_500 },
+  ];
+  await withEditorPage(
+    async (page) => {
+      await page.getByRole("button", { name: "Menu" }).click();
+      assert(await page.getByRole("menuitem", { name: "Project Settings" }).isVisible());
+      assert(await page.getByRole("menuitem", { name: "Manuscript Goal" }).count() === 0);
+      const goalsLink = page.getByTestId("manuscript-goals-link");
+      await goalsLink.waitFor();
+      const initialProgress = await goalsLink.getByRole("progressbar", {
+        name: "Manuscript word-goal progress",
+      }).evaluate((element) => {
+        const bar = element as HTMLProgressElement;
+        return { value: bar.value, max: bar.max };
+      });
+      assert(
+        initialProgress.value === 40_000 && initialProgress.max === 80_000,
+        "Expected the Goals button to show progress toward the current manuscript goal",
+      );
+      assert(
+        await goalsLink.evaluate((link) => {
+          const modeSwitch = link.parentElement?.querySelector(".modeSwitch");
+          return Boolean(
+            modeSwitch &&
+              (link.compareDocumentPosition(modeSwitch) & Node.DOCUMENT_POSITION_FOLLOWING),
+          );
+        }),
+        "Expected the Goals button immediately before the Manuscript/Outline toggle",
+      );
+
+      await page.goto(new URL("/project-settings", page.url()).toString());
+      assert(await page.locator("#daily-word-goal").inputValue() === "1500");
+      const saveResponsePromise = page.waitForResponse(
+        (response) =>
+          response.url().includes("/api/editor/project-settings") &&
+          response.request().method() === "PATCH",
+        { timeout: 5000 },
+      );
+      await page.locator("#manuscript-word-goal").fill("90000");
+      await page.locator("#daily-word-goal").fill("2000");
+      assert(await page.getByRole("button", { name: "Save Goal" }).count() === 0);
+      assert(await page.getByRole("link", { name: "View Goal Progress" }).count() === 0);
+      assert(
+        await page.locator(".card a[href='/']").evaluate((link) =>
+          link.classList.contains("button--primary")
+        ),
+        "Expected the in-card Return to Editor button to be primary",
+      );
+      assert(
+        await page.locator("[data-testid='layout-return-to-editor']").evaluate((link) =>
+          !link.closest(".card") && getComputedStyle(link.parentElement!).position === "fixed" &&
+          getComputedStyle(link.parentElement!).bottom !== "auto" &&
+          getComputedStyle(link.parentElement!).right !== "auto"
+        ),
+        "Expected a bottom-right Return to Editor link outside the settings card",
+      );
+      const saveResponse = await saveResponsePromise;
+      assert(
+        saveResponse.ok(),
+        `Expected project goal save to succeed, got ${saveResponse.status()}`,
+      );
+      await page.getByText("Project goals saved.").waitFor();
+
+      await page.goto(new URL("/goal", page.url()).toString());
+      await page.getByText("Browser Test Manuscript").waitFor();
+      const editGoalLink = page.getByRole("link", { name: "Edit", exact: true });
+      assert(await editGoalLink.isVisible(), "Expected an inline Edit link beside the goal count");
+      assert(
+        await editGoalLink.evaluate((link) =>
+          link.closest(".counts") !== null && link.classList.contains("button--small") &&
+          !link.classList.contains("button--primary")
+        ),
+        "Expected the goal edit link to use the small default button style inline with the goal count",
+      );
+      assert(
+        await page.locator(".card a[href='/']").count() === 0,
+        "Expected no in-card Return to Editor link on the Goal page",
+      );
+      assert(
+        await page.getByTestId("layout-return-to-editor").isVisible(),
+        "Expected the shared Return to Editor footer to remain outside the card",
+      );
+      const progress = page.getByRole("progressbar", { name: "Manuscript word goal" });
+      const values = await progress.evaluate((element) => {
+        const bar = element as HTMLProgressElement;
+        return { value: bar.value, max: bar.max };
+      });
+      assert(
+        values.value === 40_000 && values.max === 90_000,
+        `Expected active manuscript progress to use the saved project goal: ${
+          JSON.stringify(values)
+        }`,
+      );
+      assert(
+        await page.getByText("50,000 words to go (44.4% complete).").isVisible(),
+        "Expected the remaining manuscript word count to be displayed",
+      );
+      assert(await page.getByText("Last 30 days").isVisible());
+      assert(await page.locator(".history li").count() === 30);
+      const streaks = await page.locator(".streaks dd").allTextContents();
+      assert(streaks[0] === "3 days", `Expected a three-day writing streak, got ${streaks[0]}`);
+      assert(streaks[1] === "2 days", `Expected a two-day goal streak, got ${streaks[1]}`);
+      assert(
+        await page.getByText(/At your average of 1,050 words per day over 4 tracked days/)
+          .isVisible(),
+        "Expected the completion estimate to use the available 30-day calendar history",
+      );
+
+      await page.goto(new URL("/", page.url()).toString());
+      const updatedGoals = page.getByTestId("manuscript-goals-link");
+      await updatedGoals.waitFor();
+      const updatedProgress = await updatedGoals.getByRole("progressbar", {
+        name: "Manuscript word-goal progress",
+      }).evaluate((element) => {
+        const bar = element as HTMLProgressElement;
+        return { value: bar.value, max: bar.max };
+      });
+      assert(
+        updatedProgress.value === 40_000 && updatedProgress.max === 90_000,
+        "Expected the Goals button to use the updated project goal after returning to the editor",
+      );
+    },
+    { projectSettingsAvailable: true, fakeLoadedProject: true, dailyHistory: history },
+  );
+});
+
+browserTest("browser: project settings and goal explain when no project is open", async () => {
+  await withEditorPage(async (page) => {
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("menuitem", { name: "Project Settings" }).click();
+    await page.locator("[data-project-required]").waitFor();
+    assert(
+      await page.getByText("Open a project to configure its word goals.").isVisible(),
+    );
+
+    await page.goto(new URL("/goal", page.url()).toString());
+    await page.locator("[data-project-required]").waitFor();
+    assert(
+      await page.getByText("Open a project to view its manuscript word-goal progress.").isVisible(),
+    );
   });
 });
 
@@ -1207,8 +1429,8 @@ browserTest("browser: hamburger menu toggles toolbar and reports its state", asy
     );
     assert(
       await menuItem.evaluate((item) => item.previousElementSibling?.textContent?.trim()) ===
-        "Settings",
-      "Expected toolbar toggle directly below Settings",
+        "Project Settings",
+      "Expected toolbar toggle directly below Project Settings",
     );
     await menuItem.click();
     assert(await toolbar.count() === 0, "Expected toolbar to hide");
@@ -1564,7 +1786,7 @@ browserTest(
           (await Deno.readTextFile(`${directory}/Outline.md`)).includes("Act IV - Resolution"),
           "Expected the replaced outline template to autosave before switching modes",
         );
-      }, true);
+      }, { useDesktopStatus: true });
     } finally {
       if (previousActivePath) await setActivePath(previousActivePath);
       else if (previousSavedPath) await setActivePath(previousSavedPath);
