@@ -1144,6 +1144,12 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
 
       await page.goto(new URL("/goal", page.url()).toString());
       await page.getByText("Browser Test Manuscript").waitFor();
+      assert(
+        await page.locator(".goal .title").evaluate((title) =>
+          getComputedStyle(title).textTransform === "capitalize"
+        ),
+        "Expected the manuscript title on the Goals page to be capitalized",
+      );
       const editGoalLink = page.getByRole("link", { name: "Edit", exact: true });
       assert(await editGoalLink.isVisible(), "Expected an inline Edit link beside the goal count");
       assert(

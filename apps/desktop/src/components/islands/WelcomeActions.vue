@@ -35,18 +35,9 @@ async function openExistingProject(): Promise<void> {
       Create New Project
     </Button>
   </div>
-  <ProjectCreateDialog
-    :open="createProjectOpen"
-    @close="createProjectOpen = false"
-    @created="navigateToEditor"
-  />
+  <ProjectCreateDialog :open="createProjectOpen" @close="createProjectOpen = false" @created="navigateToEditor" />
   <div class="footer">
-    <a
-      href="/"
-      class="returnLink"
-      title="Return to Editor (Ctrl+Shift+E)"
-      @click="setSkipWelcome()"
-    >
+    <a href="/" class="returnLink" title="Return to Editor (Ctrl+Shift+E)" @click="setSkipWelcome()">
       ← Return to Editor
     </a>
   </div>

@@ -87,6 +87,9 @@ Deno.test("renders project settings and manuscript goal pages with shared editor
   const goalPage = await goalResponse.text();
   assert(goalPage.includes("Manuscript Goal"));
   assert(goalPage.includes("ProjectGoal."));
+  assert(goalPage.includes('data-testid="local-storage-notice"'));
+  assert(goalPage.includes("stored locally on this device"));
+  assert(goalPage.includes("using cloud storage"));
   assert(goalPage.includes('data-testid="layout-return-to-editor"'));
 });
 

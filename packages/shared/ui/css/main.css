@@ -243,18 +243,26 @@
   border: 1px solid var(--border);
   border-inline-start: 0.25rem solid var(--accent);
   border-radius: var(--radius-control);
+  color: var(--text);
   padding: var(--space-4);
 }
 
 :where(.alert--success) {
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
   border-inline-start-color: var(--success);
 }
 
+:where(.alert--info) {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
 :where(.alert--warning) {
+  background: color-mix(in srgb, var(--warning) 12%, var(--surface));
   border-inline-start-color: var(--warning);
 }
 
-:where(.alert--danger) {
+:where(.alert--danger, .alert--error) {
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
   border-inline-start-color: var(--danger);
 }
 

@@ -28,7 +28,7 @@ onUnmounted(() => clearTimeout(timer));
 <template>
   <div
     v-if="open"
-    :class="['alert', 'toast', variant !== 'info' && `alert--${variant}`]"
+    :class="['alert', 'toast', `alert--${variant}`]"
     :role="variant === 'danger' ? 'alert' : 'status'"
     :aria-live="variant === 'danger' ? 'assertive' : 'polite'"
   >
