@@ -837,6 +837,39 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
   });
 });
 
+browserTest("browser: daily writing progress completes with a goal celebration", async () => {
+  await withEditorPage(async (page) => {
+    await page.evaluate(() => {
+      localStorage.setItem("writasaurus-settings-daily-word-goal", "2");
+    });
+    await page.reload();
+    await page.waitForSelector('[data-ready="true"]');
+
+    const progress = page.getByRole("progressbar", { name: "Daily writing goal" });
+    await page.locator("#editor").fill("one two");
+    await page.waitForSelector(".fireworks");
+
+    const values = await progress.evaluate((element) => {
+      const bar = element as HTMLProgressElement;
+      return { value: bar.value, max: bar.max };
+    });
+    assert(values.value === 2 && values.max === 2, "Expected the daily goal progress to be full");
+    assert(
+      await page.locator(".fireworks .spark").count() === 9,
+      "Expected a firework burst when the daily goal is reached",
+    );
+    assert(
+      (await page.locator(".goalNotice").textContent())?.trim() === "Daily goal reached!",
+      "Expected a visible goal-reached message",
+    );
+    assert(
+      (await page.locator(".screenReaderOnly").textContent())?.trim() ===
+        "Daily writing goal reached!",
+      "Expected an announcement when the daily goal is reached",
+    );
+  });
+});
+
 browserTest("browser: editor header and footer are compact and equally sized", async () => {
   await withEditorPage(async (page) => {
     const measurements = await page.evaluate(() => {
