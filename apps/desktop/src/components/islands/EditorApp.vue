@@ -12,6 +12,8 @@ import { focusEditor, redo, undo } from "../../lib/editor/surface.ts";
 import { save, toggleFullscreen } from "../../lib/editor/commands.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import { checkSavedLicense, licenseConfiguration } from "../../lib/license.ts";
+import { getFontPreference, loadAppSettings } from "../../lib/app-settings-client.ts";
+import { applyFontPreference } from "../../../../../packages/shared/settings.ts";
 import { getProjectShortcutAction } from "../../lib/shortcuts.ts";
 import type { Manuscript } from "../../lib/editor/types.ts";
 import { editorHistory } from "../../lib/editor/history.ts";
@@ -59,34 +61,7 @@ let licenseRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupListeners: (() => void) | undefined;
 
 onMounted(() => {
-    if (!licenseTestBypass) {
-        void checkSavedLicense(licensePublicKey, licenseApiUrl).then((valid) => {
-            licensed.value = valid;
-            ready.value = true;
-            if (valid) {
-                void restoreDesktopEditor();
-                licenseRefreshTimer = setInterval(() => {
-                    void checkSavedLicense(licensePublicKey, licenseApiUrl).then((stillValid) => {
-                        licensed.value = stillValid;
-                    }).catch((error: unknown) => {
-                        console.warn(
-                            "Could not refresh the Writasaurus license.",
-                            error,
-                        );
-                    });
-                }, 24 * 60 * 60 * 1000);
-            }
-        }).catch((error: unknown) => {
-            licenseCheckError.value = error instanceof Error
-                ? error.message
-                : "Could not verify the saved license.";
-            ready.value = true;
-        });
-    } else {
-        licensed.value = true;
-        ready.value = true;
-        void restoreDesktopEditor();
-    }
+    void initializeEditor();
     const onKeyDown = (event: KeyboardEvent) => {
         const modifier = event.ctrlKey || event.metaKey;
         const key = event.key.toLowerCase();
@@ -149,6 +124,32 @@ onMounted(() => {
         document.removeEventListener("keydown", onKeyDown);
     };
 });
+
+async function initializeEditor(): Promise<void> {
+    try {
+        await loadAppSettings();
+        applyFontPreference(getFontPreference());
+        const valid = licenseTestBypass ||
+            await checkSavedLicense(licensePublicKey, licenseApiUrl);
+        licensed.value = valid;
+        ready.value = true;
+        if (!valid) return;
+        void restoreDesktopEditor();
+        if (licenseTestBypass) return;
+        licenseRefreshTimer = setInterval(() => {
+            void checkSavedLicense(licensePublicKey, licenseApiUrl).then((stillValid) => {
+                licensed.value = stillValid;
+            }).catch((error: unknown) => {
+                console.warn("Could not refresh the Writasaurus license.", error);
+            });
+        }, 24 * 60 * 60 * 1000);
+    } catch (error) {
+        licenseCheckError.value = error instanceof Error
+            ? error.message
+            : "Could not initialize Writasaurus.";
+        ready.value = true;
+    }
+}
 
 async function restoreDesktopEditor(): Promise<void> {
     const opened = await restoreEditor();

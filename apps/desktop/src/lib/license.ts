@@ -2,13 +2,12 @@ import {
   fingerprintForMachineId,
   verifyLicenseToken,
 } from "../../../../packages/shared/license.ts";
-
-interface LicenseResponse {
-  token: string;
-  expiresAt: number;
-}
-
-const TOKEN_STORAGE_KEY = "writasaurus-license-token";
+import {
+  clearSavedLicenseToken,
+  getSavedLicenseToken,
+  LicenseStorageError,
+  saveLicenseToken,
+} from "./app-settings-client.ts";
 
 export function licenseConfiguration(): {
   publicKey: string;
@@ -36,12 +35,8 @@ async function deviceHash(): Promise<string> {
   return await fingerprintForMachineId(result.installationId);
 }
 
-function storedToken(): string | null {
-  return localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-function storeToken(response: LicenseResponse): void {
-  localStorage.setItem(TOKEN_STORAGE_KEY, response.token);
+async function storedToken(): Promise<string | null> {
+  return await getSavedLicenseToken();
 }
 
 async function requestToken(
@@ -59,7 +54,7 @@ async function requestToken(
   });
   if (!response.ok) {
     if (endpoint === "refresh" && response.status === 403) {
-      localStorage.removeItem(TOKEN_STORAGE_KEY);
+      await clearSavedLicenseToken();
       return false;
     }
     if (response.status < 500) {
@@ -78,18 +73,18 @@ async function requestToken(
   if (!verified || verified.exp !== result.expiresAt) {
     throw new Error("The license server returned an invalid signed token.");
   }
-  storeToken({ token: result.token, expiresAt: result.expiresAt });
+  await saveLicenseToken(result.token);
   return true;
 }
 
 export async function checkSavedLicense(publicKey: string, apiUrl: string): Promise<boolean> {
   if (!publicKey || !apiUrl) return false;
-  const token = storedToken();
+  const token = await storedToken();
   if (!token) return false;
   const hash = await deviceHash();
   const verified = await verifyLicenseToken(token, publicKey, hash);
   if (!verified) {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    await clearSavedLicenseToken();
     return false;
   }
   try {
@@ -104,6 +99,7 @@ export async function checkSavedLicense(publicKey: string, apiUrl: string): Prom
       hash,
     );
   } catch (error) {
+    if (error instanceof LicenseStorageError) throw error;
     console.warn(
       `License refresh could not reach the server; using its unexpired offline token: ${
         error instanceof Error ? error.message : error

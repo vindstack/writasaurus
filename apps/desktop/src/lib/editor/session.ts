@@ -3,7 +3,8 @@ import { editorHistory } from "./history.ts";
 import { activeChapterIndex, hasUnsavedChanges, manuscript, replaceManuscript } from "./state.ts";
 import { restoreLocal, shouldSkipWelcome } from "./storage.ts";
 import { isEpubFilename } from "../epub.ts";
-import { applyFontPreference, getFontPreference } from "../../../../../packages/shared/settings.ts";
+import { applyFontPreference } from "../../../../../packages/shared/settings.ts";
+import { getFontPreference } from "../app-settings-client.ts";
 
 /** Loads the desktop file the native shell already has open, if there is one. */
 async function restoreDesktopFile(): Promise<boolean> {

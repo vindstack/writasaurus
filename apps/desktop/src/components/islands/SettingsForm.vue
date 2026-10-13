@@ -4,19 +4,24 @@ import Button from "../../../../../packages/shared/ui/components/Button.vue";
 import {
   applyFontPreference,
   type FontOption,
+} from "../../../../../packages/shared/settings.ts";
+import {
+  appSettingsError,
   getDailyWordGoalPreference,
   getFontPreference,
   getWordsPerPagePreference,
+  loadAppSettings,
   saveDailyWordGoalPreference,
   saveFontPreference,
   saveWordsPerPagePreference,
-} from "../../../../../packages/shared/settings.ts";
+} from "../../lib/app-settings-client.ts";
 import { usePageEffects } from "../../composables/usePageEffects.ts";
 
 const font = ref<string>("alegreya");
 const wordsPerPage = ref("300");
 const dailyGoal = ref("1500");
 const status = ref("");
+const error = ref("");
 let timeout: ReturnType<typeof setTimeout> | undefined;
 
 function parsePositive(value: string): number | null {
@@ -26,6 +31,8 @@ function parsePositive(value: string): number | null {
 
 function showStatus(message: string): void {
   status.value = message;
+  error.value = "";
+  appSettingsError.value = "";
   clearTimeout(timeout);
   timeout = setTimeout(() => {
     status.value = "";
@@ -35,36 +42,46 @@ function showStatus(message: string): void {
 function onNumberInput(
   field: typeof wordsPerPage,
   event: Event,
-  save: (value: number) => void,
+  save: (value: number) => Promise<void>,
 ): void {
   field.value = (event.currentTarget as HTMLInputElement).value;
   const value = parsePositive(field.value);
-  if (value !== null) save(value);
+  if (value !== null) {
+    void save(value).catch((reason: unknown) => {
+      error.value = reason instanceof Error ? reason.message : "Could not save this setting.";
+    });
+  }
 }
 
 function onNumberChange(
   field: typeof wordsPerPage,
   event: Event,
-  save: (value: number) => void,
+  save: (value: number) => Promise<void>,
   read: () => number,
   message: string,
 ): void {
   const value = parsePositive((event.currentTarget as HTMLInputElement).value);
   if (value !== null) {
-    save(value);
-    showStatus(message);
+    void save(value).then(() => showStatus(message)).catch((reason: unknown) => {
+      error.value = reason instanceof Error ? reason.message : "Could not save this setting.";
+    });
   } else {
     field.value = String(read());
   }
 }
 
 usePageEffects();
-onMounted(() => {
-  const saved = getFontPreference();
-  font.value = saved;
-  applyFontPreference(saved);
-  wordsPerPage.value = String(getWordsPerPagePreference());
-  dailyGoal.value = String(getDailyWordGoalPreference());
+onMounted(async () => {
+  try {
+    await loadAppSettings();
+    const saved = getFontPreference();
+    font.value = saved;
+    applyFontPreference(saved);
+    wordsPerPage.value = String(getWordsPerPagePreference());
+    dailyGoal.value = String(getDailyWordGoalPreference());
+  } catch (reason) {
+    error.value = reason instanceof Error ? reason.message : "Could not load Writasaurus settings.";
+  }
 });
 onUnmounted(() => clearTimeout(timeout));
 </script>
@@ -82,11 +99,15 @@ onUnmounted(() => clearTimeout(timeout));
         id="font-select"
         class="select"
         v-model="font"
-        @change="(event) => {
+        @change="async (event) => {
           const selected = (event.currentTarget as HTMLSelectElement).value as FontOption;
-          saveFontPreference(selected);
-          applyFontPreference(selected);
-          showStatus('Font preference saved.');
+          try {
+            await saveFontPreference(selected);
+            applyFontPreference(selected);
+            showStatus('Font preference saved.');
+          } catch (reason) {
+            error = reason instanceof Error ? reason.message : 'Could not save the font preference.';
+          }
         }"
       >
         <optgroup label="Serif">
@@ -170,6 +191,7 @@ onUnmounted(() => clearTimeout(timeout));
       />
     </div>
 
+    <div v-if="error" class="error" role="alert">{{ error }}</div>
     <div class="status" id="settings-status" aria-live="polite">{{ status }}</div>
 
     <div class="actions">
@@ -300,6 +322,10 @@ onUnmounted(() => clearTimeout(timeout));
   color: var(--muted);
   font-size: 0.85rem;
   min-height: 1.25rem;
+}
+
+.error {
+  color: var(--danger);
 }
 
 .actions {

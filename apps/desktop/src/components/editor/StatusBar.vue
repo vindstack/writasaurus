@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
 import {
+  appSettingsError,
+  ensureDailyWritingProgress,
   getDailyWordGoalPreference,
   getDailyWrittenWords,
   getWordsPerPagePreference,
-} from "../../../../../packages/shared/settings.ts";
+} from "../../lib/app-settings-client.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
 import {
   activeChapter,
@@ -22,19 +24,31 @@ const totalState = useSignalValue(totalWords);
 const manuscriptState = useSignalValue(manuscript);
 const modeState = useSignalValue(editorMode);
 const outlineState = useSignalValue(outlineContent);
-const wordsPerPage = getWordsPerPagePreference();
-const dailyWordGoal = getDailyWordGoalPreference();
-const dailyWords = computed(() => {
+const wordsPerPage = computed(() => getWordsPerPagePreference());
+const dailyWordGoal = computed(() => getDailyWordGoalPreference());
+const manuscriptId = computed(() => {
   const current = manuscriptState.value;
-  const manuscriptId = String(current.frontmatter.createdAt ?? "").trim() || current.filename;
-  return getDailyWrittenWords(manuscriptId, totalState.value);
+  return String(current.frontmatter.writasaurusId ?? "").trim() || current.filename;
 });
-const dailyProgress = computed(() => Math.min(dailyWords.value, dailyWordGoal));
+const dailyWords = computed(() => {
+  return getDailyWrittenWords(manuscriptId.value, totalState.value);
+});
+const dailyProgress = computed(() => Math.min(dailyWords.value, dailyWordGoal.value));
 const celebration = ref(false);
 let celebrationTimer: ReturnType<typeof setTimeout> | undefined;
 
+watch(
+  [manuscriptId, () => totalState.value],
+  ([id, total]) => {
+    void ensureDailyWritingProgress(id, total).catch((error: unknown) => {
+      console.error("Could not update daily writing progress.", error);
+    });
+  },
+  { immediate: true },
+);
+
 watch(dailyWords, (words, previousWords) => {
-  if (previousWords < dailyWordGoal && words >= dailyWordGoal) {
+  if (previousWords < dailyWordGoal.value && words >= dailyWordGoal.value) {
     celebration.value = true;
     clearTimeout(celebrationTimer);
     celebrationTimer = setTimeout(() => {
@@ -48,7 +62,7 @@ onUnmounted(() => clearTimeout(celebrationTimer));
 const chapterStats = computed(() => {
   const chapter = chapterState.value;
   const words = chapter?.wordCount ?? 0;
-  const pages = (words / wordsPerPage).toFixed(0);
+  const pages = (words / wordsPerPage.value).toFixed(0);
   return {
     label: chapter?.title ?? "Chapter",
     words: words.toLocaleString(),
@@ -57,7 +71,7 @@ const chapterStats = computed(() => {
 });
 const totalStats = computed(() => {
   const words = totalState.value;
-  const pages = (words / wordsPerPage).toFixed(0);
+  const pages = (words / wordsPerPage.value).toFixed(0);
   return {
     words: words.toLocaleString(),
     pages,
@@ -89,6 +103,7 @@ const outlineWords = computed(() =>
         {{ celebration ? "Daily writing goal reached!" : "" }}
       </span>
     </div>
+    <p v-if="appSettingsError" class="settingsError" role="alert">{{ appSettingsError }}</p>
     <footer class="statusbar">
       <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
         title="Toggle chapters panel (Ctrl+B)" @click="sidebarOpen.value = !sidebarOpen.value">
@@ -127,6 +142,13 @@ const outlineWords = computed(() =>
 <style scoped>
 .footerStack {
   min-width: 0;
+}
+
+.settingsError {
+  color: var(--danger);
+  font-size: 0.75rem;
+  margin: 0.25rem 0;
+  padding-inline: 1rem;
 }
 
 .progressTrack {

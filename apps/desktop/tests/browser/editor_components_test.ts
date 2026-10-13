@@ -4,6 +4,7 @@ import { closeActiveFile, getActivePath, setActivePath } from "../../src/lib/edi
 import { loadLastFilePath } from "../../src/lib/desktop.ts";
 import { blankManuscript } from "../../src/lib/editor/data.ts";
 import { generateEpub } from "../../src/lib/epub.ts";
+import type { AppSettings } from "../../src/lib/app-settings-types.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -96,9 +97,66 @@ function editorTestHandler(
   projectLoaded = false,
 ): (request: Request) => Response | Promise<Response> {
   const app = createTestApp().fetch;
+  const settings: AppSettings = {
+    version: 1,
+    font: "alegreya",
+    wordsPerPage: 300,
+    dailyWordGoal: 1500,
+    dailyWritingProgress: { date: "", startingWords: {} },
+    writingAssistanceWords: [],
+    writingAssistanceIgnores: [],
+  };
+  let licenseToken: string | null = null;
+  const today = () => {
+    const now = new Date();
+    return [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+  };
   return (request) => {
-    if (new URL(request.url).pathname !== "/api/editor/status") return app(request);
-    if (!projectLoaded) return Response.json({ activeFile: null, activePath: null });
+    const path = new URL(request.url).pathname;
+    if (path === "/api/editor/settings" && request.method === "GET") {
+      return Response.json(settings);
+    }
+    if (path === "/api/editor/status" && !projectLoaded) {
+      return Response.json({ activeFile: null, activePath: null });
+    }
+    if (path === "/api/editor/settings" && request.method === "PATCH") {
+      return request.json().then((update) => {
+        Object.assign(settings, update);
+        return Response.json(settings);
+      });
+    }
+    if (path === "/api/editor/daily-progress" && request.method === "POST") {
+      return request.json().then((payload) => {
+        const date = today();
+        if (settings.dailyWritingProgress.date !== date) {
+          settings.dailyWritingProgress = { date, startingWords: {} };
+        }
+        const starting = settings.dailyWritingProgress.startingWords[payload.manuscriptId] ??
+          payload.totalWords;
+        settings.dailyWritingProgress.startingWords[payload.manuscriptId] = starting;
+        return Response.json({
+          progress: settings.dailyWritingProgress,
+          writtenWords: Math.max(payload.totalWords - starting, 0),
+        });
+      });
+    }
+    if (path === "/api/editor/license-token") {
+      if (request.method === "GET") return Response.json({ token: licenseToken });
+      if (request.method === "PUT") {
+        return request.json().then((payload) => {
+          licenseToken = payload.token;
+          return new Response(null, { status: 204 });
+        });
+      }
+      if (request.method === "DELETE") {
+        licenseToken = null;
+        return new Response(null, { status: 204 });
+      }
+    }
     return app(request);
   };
 }
@@ -117,7 +175,10 @@ async function withEditorPage(
 
   try {
     await page.addInitScript(() => {
-      sessionStorage.removeItem("writasaurus-manuscript-v1:state");
+      if (sessionStorage.getItem("__writasaurus-test-initialized") !== "true") {
+        sessionStorage.removeItem("writasaurus-manuscript-v1:state");
+        sessionStorage.setItem("__writasaurus-test-initialized", "true");
+      }
       sessionStorage.setItem("writasaurus-session:skip-welcome", "true");
     });
     await page.goto(`http://${address.hostname}:${address.port}/`);
@@ -839,8 +900,12 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
 
 browserTest("browser: daily writing progress completes with a goal celebration", async () => {
   await withEditorPage(async (page) => {
-    await page.evaluate(() => {
-      localStorage.setItem("writasaurus-settings-daily-word-goal", "2");
+    await page.evaluate(async () => {
+      await fetch("/api/editor/settings", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dailyWordGoal: 2 }),
+      });
     });
     await page.reload();
     await page.waitForSelector('[data-ready="true"]');
@@ -867,6 +932,71 @@ browserTest("browser: daily writing progress completes with a goal celebration",
         "Daily writing goal reached!",
       "Expected an announcement when the daily goal is reached",
     );
+
+    const manuscriptId = await page.evaluate(() => {
+      const saved = JSON.parse(
+        sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+      );
+      return saved?.manuscript?.frontmatter?.writasaurusId;
+    });
+    assert(typeof manuscriptId === "string", "Expected the manuscript to have a stable identity");
+
+    await page.goto(new URL("/settings", page.url()).toString());
+    await page.goto(new URL("/", page.url()).toString());
+    await page.waitForSelector('[data-ready="true"]');
+    await page.waitForFunction((expectedId) => {
+      const saved = JSON.parse(
+        sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+      );
+      return saved?.manuscript?.frontmatter?.writasaurusId === expectedId &&
+        saved.manuscript.chapters.reduce(
+            (total: number, chapter: { wordCount: number }) => total + chapter.wordCount,
+            0,
+          ) === 2;
+    }, manuscriptId);
+    await page.waitForFunction(() => {
+      const progress = document.querySelector(
+        '[aria-label="Daily writing goal"]',
+      ) as HTMLProgressElement | null;
+      return progress?.value === progress?.max;
+    });
+
+    const restoredProgress = await page.evaluate(async () => {
+      const bar = document.querySelector(
+        '[aria-label="Daily writing goal"]',
+      ) as HTMLProgressElement | null;
+      return { value: bar?.value, max: bar?.max };
+    });
+    assert(
+      restoredProgress.value === 2 && restoredProgress.max === 2,
+      `Expected daily progress to remain complete after leaving and returning to the editor: ${
+        JSON.stringify(restoredProgress)
+      }`,
+    );
+  });
+});
+
+browserTest("browser: app preferences persist through the settings API", async () => {
+  await withEditorPage(async (page) => {
+    await page.goto(new URL("/settings", page.url()).toString());
+    const font = page.locator("#font-select");
+    await font.selectOption("georgia");
+    await page.waitForFunction(() =>
+      document.querySelector("#settings-status")?.textContent?.includes("Font preference saved.")
+    );
+
+    const dailyGoal = page.locator("#daily-word-goal-input");
+    await dailyGoal.fill("2400");
+    await dailyGoal.dispatchEvent("change");
+    await page.waitForFunction(() =>
+      document.querySelector("#settings-status")?.textContent?.includes(
+        "Daily writing goal saved.",
+      )
+    );
+    await page.reload();
+
+    assert(await page.locator("#font-select").inputValue() === "georgia");
+    assert(await page.locator("#daily-word-goal-input").inputValue() === "2400");
   });
 });
 

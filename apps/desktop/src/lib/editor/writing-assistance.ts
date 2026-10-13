@@ -6,7 +6,7 @@ import {
   getWritingAssistanceWords,
   saveWritingAssistanceIgnores,
   saveWritingAssistanceWords,
-} from "../../../../../packages/shared/settings.ts";
+} from "../app-settings-client.ts";
 import { normalizeEditorBlocks } from "./normalize.ts";
 import { getEditor } from "./surface.ts";
 import {
@@ -276,12 +276,12 @@ export function replaceWarning(warning: WritingWarning): void {
 
 export async function addToDictionary(warning: WritingWarning): Promise<void> {
   const words = [...getWritingAssistanceWords(), warning.problem];
-  saveWritingAssistanceWords(words);
+  await saveWritingAssistanceWords(words);
   await linter?.importWords(words);
   scheduleAnalysis();
 }
 
-export function ignoreWarning(warning: WritingWarning): void {
-  saveWritingAssistanceIgnores([...getWritingAssistanceIgnores(), warningKey(warning)]);
+export async function ignoreWarning(warning: WritingWarning): Promise<void> {
+  await saveWritingAssistanceIgnores([...getWritingAssistanceIgnores(), warningKey(warning)]);
   scheduleAnalysis();
 }

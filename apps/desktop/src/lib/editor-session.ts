@@ -275,9 +275,14 @@ export async function createDraft(
     filename,
     frontmatter: {
       ...source.frontmatter,
+      writasaurusId: crypto.randomUUID(),
       updatedAt: new Date().toISOString(),
     },
   };
+
+  if (mode === "copy") {
+    next.frontmatter = { ...next.frontmatter, writasaurusId: crypto.randomUUID() };
+  }
 
   await Deno.writeFile(draftPath(directory, filename), await generateEpub(next), {
     createNew: true,

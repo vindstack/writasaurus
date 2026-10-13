@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
+import { appSettingsError } from "../../lib/app-settings-client.ts";
 import {
   addToDictionary,
   assistanceActiveIndex,
@@ -64,6 +65,7 @@ onUnmounted(() => stopFocusWatch?.());
       <span v-if="status === 'loading'" class="spinner" aria-hidden="true" />
       {{ statusText() }}
     </p>
+    <p v-if="appSettingsError" class="settingsError" role="alert">{{ appSettingsError }}</p>
     <ol v-if="open && warnings.length > 0" class="list" ref="list">
       <li
         v-for="(warning, index) in warnings.slice(0, MAX_VISIBLE)"
@@ -141,6 +143,11 @@ onUnmounted(() => stopFocusWatch?.());
 }
 
 .status {
+  margin: 0;
+}
+
+.settingsError {
+  color: var(--danger);
   margin: 0;
 }
 

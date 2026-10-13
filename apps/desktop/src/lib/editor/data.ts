@@ -18,6 +18,7 @@ export function blankManuscript(title = "Untitled Manuscript"): Manuscript {
     frontmatter: {
       title,
       author: "",
+      writasaurusId: crypto.randomUUID(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -57,6 +58,7 @@ export function parseManuscript(source: string, filename: string): Manuscript {
   let frontmatter: Record<string, string | number> = {
     title: filename.replace(/\.[^.]+$/, "").replace(/[-_]/g, " "),
     author: "",
+    writasaurusId: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
   };
   let body = source;

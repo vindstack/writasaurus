@@ -118,7 +118,7 @@ export async function chooseDirectory(action: "open" | "new"): Promise<string | 
   }
 }
 
-function appStateDir(): string | null {
+export function applicationDataDirectory(): string | null {
   const home = Deno.env.get("HOME");
   if (Deno.build.os === "linux") {
     const base = Deno.env.get("XDG_DATA_HOME") || (home ? `${home}/.local/share` : null);
@@ -178,7 +178,7 @@ export async function loadOrCreateInstallationId(): Promise<string> {
       }`,
     );
   }
-  const dir = appStateDir();
+  const dir = applicationDataDirectory();
   if (!dir) throw new Error("Could not locate the Writasaurus application data directory.");
   const path = `${dir}/installation-id`;
   try {
@@ -204,7 +204,7 @@ export async function loadOrCreateInstallationId(): Promise<string> {
 }
 
 function lastFilePath(): string | null {
-  const dir = appStateDir();
+  const dir = applicationDataDirectory();
   return dir ? `${dir}/last-file.json` : null;
 }
 
@@ -223,7 +223,7 @@ export async function saveLastFilePath(path: string): Promise<void> {
   try {
     const statePath = lastFilePath();
     if (!statePath) return;
-    const dir = appStateDir();
+    const dir = applicationDataDirectory();
     if (dir) await Deno.mkdir(dir, { recursive: true });
     await Deno.writeTextFile(statePath, JSON.stringify({ path }));
   } catch (error) {

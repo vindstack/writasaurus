@@ -447,7 +447,8 @@ function sectionType(chapter: Chapter): SectionType {
 
 export async function generateEpub(manuscript: Manuscript): Promise<Uint8Array> {
   const encoder = new TextEncoder();
-  const uuid = crypto.randomUUID();
+  const savedId = String(manuscript.frontmatter.writasaurusId ?? "");
+  const stableId = /^[0-9a-f-]{36}$/i.test(savedId) ? savedId : crypto.randomUUID();
   const modifiedIso = new Date().toISOString().replace(/\.\d{3}Z$/, "Z");
   const title = String(manuscript.frontmatter.title || "Untitled Manuscript");
   const author = String(manuscript.frontmatter.author || "");
@@ -538,7 +539,7 @@ ${navItems}
   const tocNcx = `<?xml version="1.0" encoding="utf-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
-    <meta name="dtb:uid" content="urn:uuid:${uuid}"/>
+    <meta name="dtb:uid" content="urn:uuid:${stableId}"/>
     <meta name="dtb:depth" content="1"/>
     <meta name="dtb:totalPageCount" content="0"/>
     <meta name="dtb:maxPageNumber" content="0"/>
@@ -607,7 +608,7 @@ ${ncxNavPoints}
   const contentOpf = `<?xml version="1.0" encoding="utf-8"?>
 <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="pub-id">
   <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
-    <dc:identifier id="pub-id">urn:uuid:${uuid}</dc:identifier>
+    <dc:identifier id="pub-id">urn:uuid:${stableId}</dc:identifier>
     <dc:title>${escapeXml(title)}</dc:title>
     <dc:language>en</dc:language>
     ${author ? `<dc:creator>${escapeXml(author)}</dc:creator>` : ""}
@@ -655,8 +656,11 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
 
   const titleMatch = opfText.match(/<dc:title[^>]*>([\s\S]*?)<\/dc:title>/i);
   const authorMatch = opfText.match(/<dc:creator[^>]*>([\s\S]*?)<\/dc:creator>/i);
+  const identifierMatch = opfText.match(/<dc:identifier[^>]*>([\s\S]*?)<\/dc:identifier>/i);
   const title = titleMatch ? unescapeXml(titleMatch[1].trim()) : filename.replace(/\.[^.]+$/, "");
   const author = authorMatch ? unescapeXml(authorMatch[1].trim()) : "";
+  const stableId = identifierMatch?.[1].trim().match(/^urn:uuid:([0-9a-f-]{36})$/i)?.[1] ??
+    crypto.randomUUID();
 
   const manifest = new Map<string, string>();
   const itemRegex = /<item\b([^>]+)\/?>/gi;
@@ -727,6 +731,7 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
     frontmatter: {
       title,
       author,
+      writasaurusId: stableId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },

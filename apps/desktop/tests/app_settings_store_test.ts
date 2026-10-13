@@ -1,0 +1,97 @@
+import {
+  clearLicenseToken,
+  getAppSettings,
+  getDailyWrittenWords,
+  getLicenseToken,
+  setLicenseToken,
+  updateAppSettings,
+} from "../src/lib/app-settings-store.ts";
+
+function assert(condition: unknown, message = "Assertion failed"): asserts condition {
+  if (!condition) throw new Error(message);
+}
+
+async function withTempSettings<T>(test: (directory: string) => Promise<T>): Promise<T> {
+  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-settings-" });
+  try {
+    return await test(directory);
+  } finally {
+    await Deno.remove(directory, { recursive: true });
+  }
+}
+
+Deno.test("app settings: defaults, updates, writing progress, and license token persist", async () => {
+  await withTempSettings(async (directory) => {
+    const defaults = await getAppSettings(directory);
+    assert(defaults.version === 1);
+    assert(defaults.font === "alegreya");
+    assert(defaults.wordsPerPage === 300);
+    assert(defaults.dailyWordGoal === 1500);
+    assert(defaults.writingAssistanceWords.length === 0);
+    assert(defaults.writingAssistanceIgnores.length === 0);
+    assert(!("licenseToken" in defaults), "Expected the public settings API to omit the token");
+
+    const updated = await updateAppSettings({
+      font: "georgia",
+      wordsPerPage: 420,
+      dailyWordGoal: 2400,
+      writingAssistanceWords: ["Writasaurus", "Writasaurus"],
+      writingAssistanceIgnores: ["grammar:example"],
+    }, directory);
+    assert(updated.font === "georgia");
+    assert(updated.wordsPerPage === 420);
+    assert(updated.dailyWordGoal === 2400);
+    assert(updated.writingAssistanceWords.length === 1);
+    assert(updated.writingAssistanceIgnores[0] === "grammar:example");
+
+    assert((await getDailyWrittenWords("manuscript-1", 10, directory)).writtenWords === 0);
+    assert((await getDailyWrittenWords("manuscript-1", 15, directory)).writtenWords === 5);
+    assert((await getDailyWrittenWords("manuscript-1", 8, directory)).writtenWords === 0);
+
+    await setLicenseToken("signed-license-token", directory);
+    assert(await getLicenseToken(directory) === "signed-license-token");
+    assert((await getAppSettings(directory)).font === "georgia");
+    await clearLicenseToken(directory);
+    assert(await getLicenseToken(directory) === null);
+
+    if (Deno.build.os !== "windows") {
+      const directoryMode = (await Deno.stat(directory)).mode! & 0o777;
+      const fileMode = (await Deno.stat(`${directory}/settings.json`)).mode! & 0o777;
+      assert(
+        directoryMode === 0o700,
+        `Expected private directory permissions, got ${directoryMode}`,
+      );
+      assert(fileMode === 0o600, `Expected private settings permissions, got ${fileMode}`);
+    }
+  });
+});
+
+Deno.test("app settings: rejects invalid updates and malformed persisted data", async () => {
+  await withTempSettings(async (directory) => {
+    let invalidUpdateRejected = false;
+    try {
+      await updateAppSettings({ dailyWordGoal: 0 }, directory);
+    } catch (error) {
+      invalidUpdateRejected = error instanceof TypeError;
+    }
+    assert(invalidUpdateRejected, "Expected an invalid setting update to be rejected");
+
+    let unknownUpdateRejected = false;
+    try {
+      await updateAppSettings({ licenseToken: "not-a-preference" }, directory);
+    } catch (error) {
+      unknownUpdateRejected = error instanceof TypeError;
+    }
+    assert(unknownUpdateRejected, "Expected private fields to be rejected by preference updates");
+
+    await Deno.writeTextFile(`${directory}/settings.json`, "{invalid");
+    let malformedFileRejected = false;
+    try {
+      await getAppSettings(directory);
+    } catch (error) {
+      malformedFileRejected = error instanceof Error &&
+        error.message.includes("invalid JSON");
+    }
+    assert(malformedFileRejected, "Expected malformed settings JSON to surface as an error");
+  });
+});
