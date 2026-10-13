@@ -1,5 +1,7 @@
 import { createTestApp } from "./helpers.ts";
-import { firstProjectEpub } from "../src/lib/editor-session.ts";
+import { projectEpubPath } from "../src/lib/editor-session.ts";
+import { blankManuscript } from "../src/lib/editor/data.ts";
+import { generateEpub } from "../src/lib/epub.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -15,14 +17,35 @@ function createDesktopApp() {
   return createTestApp();
 }
 
-Deno.test("project: selects the first EPUB filename in sorted order", () => {
-  const filename = firstProjectEpub([
-    { name: "z-last.epub", isFile: true },
-    { name: "folder.epub", isFile: false },
-    { name: "notes.txt", isFile: true },
-    { name: "a-first.EPUB", isFile: true },
-  ]);
-  assertEquals(filename, "a-first.EPUB");
+Deno.test("project: ignores legacy EPUBs without migrating them", async () => {
+  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-drafts-" });
+  try {
+    const epub = await generateEpub(blankManuscript("Legacy Book"));
+    await Deno.writeFile(`${directory}/legacy-book.epub`, epub);
+    assertEquals(await projectEpubPath(directory), null);
+    assertEquals(
+      await Deno.readTextFile(`${directory}/settings.json`),
+      '{\n  "drafts": []\n}\n',
+    );
+    assertEquals(await Deno.stat(`${directory}/legacy-book.epub`).then(() => true), true);
+  } finally {
+    await Deno.remove(directory, { recursive: true });
+  }
+});
+
+Deno.test("project: settings track numbered drafts and select the latest tracked draft", async () => {
+  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-drafts-" });
+  try {
+    const epub = await generateEpub(blankManuscript("Drafted Book"));
+    await Deno.writeFile(`${directory}/draft_1.epub`, epub);
+    await Deno.writeFile(`${directory}/draft_3.epub`, epub);
+    assertEquals(await projectEpubPath(directory), `${directory}/draft_3.epub`);
+
+    await Deno.writeFile(`${directory}/draft_5.epub`, epub);
+    assertEquals(await projectEpubPath(directory), `${directory}/draft_3.epub`);
+  } finally {
+    await Deno.remove(directory, { recursive: true });
+  }
 });
 
 Deno.test("project: opening a project returns 204 if no folder is chosen", async () => {

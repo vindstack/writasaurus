@@ -14,7 +14,7 @@ async function run(args: string[], description: string): Promise<void> {
 Deno.env.set("PUBLIC_LICENSE_TEST_BYPASS", "true");
 await run(["task", "build"], "Building desktop app with the test license bypass");
 await run(
-  ["test", "--allow-read", "--allow-env", "tests/*_test.ts"],
+  ["test", "--allow-read", "--allow-write=/tmp", "--allow-env", "tests/*_test.ts"],
   "Running desktop unit tests",
 );
 await run(

@@ -10,9 +10,10 @@ separate applications in one Deno workspace.
   server APIs.
 - `packages/shared/` contains release, licensing-token, and private R2 utilities.
 
-In the Desktop editor, the Project menu switches between the EPUB manuscript and a Markdown outline
-saved as `Outline.md` beside the project manuscript. Outline mode includes replaceable templates and
-autosaves changes to the project folder.
+Desktop project folders store manuscript versions as `draft_1.epub`, `draft_2.epub`, and so on;
+`settings.json` keeps their numbered draft list. The editor opens the latest draft by default and
+can create a blank draft or copy any earlier one. A Markdown outline is saved as `Outline.md` beside
+the drafts. Outline mode includes replaceable templates and autosaves changes to the project folder.
 
 Outline template guidance is informed by the
 [three-act structure](https://en.wikipedia.org/wiki/Three-act_structure),

@@ -381,7 +381,25 @@ browserTest("browser: Add opens a menu and selecting a type adds it in reading o
     const items = page.locator("[data-drag-item]");
     const initialSections = await items.count();
     assert(await add.count() === 1, "Expected a single Add button");
-    assert(await sidebar.locator("select").count() === 0, "Expected no separate type selector");
+    assert(
+      await sidebar.locator(".draft-form select").count() === 1,
+      "Expected the draft source selector to be contained in the creation dialog",
+    );
+    const draftSelector = sidebar.locator("[data-draft-selector]");
+    assert(
+      (await draftSelector.innerText()).includes("Draft 1"),
+      "Expected Draft 1 to be selected",
+    );
+    await draftSelector.click();
+    await page.getByRole("menuitem", { name: "Create new draft…" }).click();
+    const draftDialog = page.getByRole("dialog", { name: "Create New Draft" });
+    assert(await draftDialog.isVisible(), "Expected creating a draft to open a dialog");
+    assert(
+      await draftDialog.getByRole("radio", { name: "Copy a previous draft" }).isChecked(),
+      "Expected copying a previous draft to be the default",
+    );
+    assert(await draftDialog.getByRole("radio", { name: "Start from scratch" }).isVisible());
+    await draftDialog.getByRole("button", { name: "Cancel" }).click();
     assert(
       await sidebar.getByRole("button", { name: "Type", exact: true }).count() === 0,
       "Expected no separate Type button",

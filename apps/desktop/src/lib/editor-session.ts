@@ -60,9 +60,14 @@ export async function editorStatus() {
   const activePath = state.activePath;
   if (activePath) {
     try {
-      const bytes = await Deno.readFile(activePath);
-      const manuscript = await parseEpub(bytes, basename(activePath));
-      return { activeFile: basename(activePath), activePath, manuscript };
+      const directory = projectDirectory(activePath);
+      const drafts = directory ? await projectDrafts(directory) : [];
+      const latest = latestDraft(drafts);
+      const path = latest && directory ? draftPath(directory, latest.filename) : activePath;
+      if (path !== activePath) await setActivePath(path);
+      const bytes = await Deno.readFile(path);
+      const manuscript = await parseEpub(bytes, basename(path));
+      return { activeFile: basename(path), activePath: path, manuscript };
     } catch (error) {
       console.warn("Could not read the active file.", error);
       state.activePath = null;
@@ -110,13 +115,26 @@ export async function writeOutline(content: string): Promise<void> {
   await Deno.writeTextFile(activeOutlinePath(), content);
 }
 
-export function firstProjectEpub(
-  entries: Array<{ name: string; isFile: boolean }>,
-): string | null {
-  return entries
-    .filter((entry) => entry.isFile && isEpubFilename(entry.name))
-    .map((entry) => entry.name)
-    .sort()[0] ?? null;
+export interface DraftSummary {
+  number: number;
+  filename: string;
+}
+
+interface ProjectSettings {
+  drafts: DraftSummary[];
+}
+
+const PROJECT_SETTINGS_FILENAME = "settings.json";
+
+function draftNumber(filename: string): number | null {
+  const match = filename.match(/^draft_(\d+)\.epub$/i);
+  if (!match) return null;
+  const number = Number(match[1]);
+  return Number.isSafeInteger(number) && number > 0 ? number : null;
+}
+
+function draftPath(directory: string, filename: string): string {
+  return projectFilePath(directory, filename);
 }
 
 function projectFilePath(projectPath: string, filename: string): string {
@@ -125,11 +143,161 @@ function projectFilePath(projectPath: string, filename: string): string {
   return `${trimmedPath}${separator}${filename}`;
 }
 
+function projectDirectory(path: string): string | null {
+  const separator = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return separator < 0 ? null : path.slice(0, separator) || path[separator] || "";
+}
+
+async function numberedDrafts(directory: string): Promise<DraftSummary[]> {
+  const drafts: DraftSummary[] = [];
+  for await (const entry of Deno.readDir(directory)) {
+    if (!entry.isFile) continue;
+    const number = draftNumber(entry.name);
+    if (number !== null) drafts.push({ number, filename: entry.name });
+  }
+  return drafts.sort((left, right) => left.number - right.number);
+}
+
+function parseProjectSettings(source: string): ProjectSettings {
+  const parsed: unknown = JSON.parse(source);
+  if (
+    !parsed || typeof parsed !== "object" || !("drafts" in parsed) ||
+    !Array.isArray(parsed.drafts)
+  ) {
+    throw new Error("The project settings file is invalid.");
+  }
+  const drafts: DraftSummary[] = [];
+  const numbers = new Set<number>();
+  for (const item of parsed.drafts) {
+    if (
+      !item || typeof item !== "object" || !("number" in item) ||
+      !Number.isSafeInteger(item.number) || item.number < 1 ||
+      !("filename" in item) || typeof item.filename !== "string" ||
+      draftNumber(item.filename) !== item.number || numbers.has(item.number)
+    ) {
+      throw new Error("The project settings file contains an invalid draft entry.");
+    }
+    numbers.add(item.number);
+    drafts.push({ number: item.number, filename: item.filename });
+  }
+  return { drafts: drafts.sort((left, right) => left.number - right.number) };
+}
+
+async function saveProjectSettings(directory: string, settings: ProjectSettings): Promise<void> {
+  await Deno.writeTextFile(
+    draftPath(directory, PROJECT_SETTINGS_FILENAME),
+    `${JSON.stringify(settings, null, 2)}\n`,
+  );
+}
+
+async function projectDrafts(directory: string): Promise<DraftSummary[]> {
+  const path = draftPath(directory, PROJECT_SETTINGS_FILENAME);
+  try {
+    return parseProjectSettings(await Deno.readTextFile(path)).drafts;
+  } catch (error) {
+    if (!(error instanceof Deno.errors.NotFound)) throw error;
+  }
+
+  const drafts = await numberedDrafts(directory);
+  await saveProjectSettings(directory, { drafts });
+  return drafts;
+}
+
+function latestDraft(drafts: DraftSummary[]): DraftSummary | null {
+  return drafts.reduce<DraftSummary | null>(
+    (latest, draft) => !latest || draft.number > latest.number ? draft : latest,
+    null,
+  );
+}
+
+export async function listDrafts(): Promise<{ drafts: DraftSummary[]; activeDraft: number }> {
+  const activePath = state.activePath;
+  if (!activePath) return { drafts: [], activeDraft: 1 };
+  const directory = projectDirectory(activePath);
+  if (directory === null) {
+    return { drafts: [{ number: 1, filename: basename(activePath) }], activeDraft: 1 };
+  }
+  const drafts = await projectDrafts(directory);
+  if (drafts.length) {
+    const activeNumber = draftNumber(basename(activePath));
+    return {
+      drafts,
+      activeDraft: activeNumber && drafts.some((draft) => draft.number === activeNumber)
+        ? activeNumber
+        : latestDraft(drafts)!.number,
+    };
+  }
+  throw new Error("The project does not have a draft.");
+}
+
+export async function selectDraft(number: number): Promise<Manuscript> {
+  if (!Number.isSafeInteger(number) || number < 1) throw new Error("Invalid draft number.");
+  const activePath = state.activePath;
+  if (!activePath) throw new Error("Open a project before selecting a draft.");
+  const directory = projectDirectory(activePath);
+  if (directory === null) throw new Error("The active manuscript has no project directory.");
+
+  const drafts = await projectDrafts(directory);
+  const filename = drafts.find((draft) => draft.number === number)?.filename;
+  if (!filename) throw new Error(`Draft ${number} was not found.`);
+
+  const path = draftPath(directory, filename);
+  const manuscript = await parseEpub(await Deno.readFile(path), filename);
+  await setActivePath(path);
+  return manuscript;
+}
+
+export async function createDraft(
+  mode: "blank" | "copy",
+  sourceDraft: number,
+): Promise<{ manuscript: Manuscript; drafts: DraftSummary[]; activeDraft: number }> {
+  const activePath = state.activePath;
+  if (!activePath) throw new Error("Open a project before creating a draft.");
+  const directory = projectDirectory(activePath);
+  if (directory === null) throw new Error("The active manuscript has no project directory.");
+
+  let drafts = await projectDrafts(directory);
+  if (!drafts.length) throw new Error("The project does not have a draft to copy.");
+
+  const latestNumber = latestDraft(drafts)!.number;
+  const number = latestNumber + 1;
+  if (!Number.isSafeInteger(number)) throw new Error("No more draft numbers are available.");
+
+  const sourceFilename = drafts.find((draft) => draft.number === sourceDraft)?.filename;
+  if (mode === "copy" && !sourceFilename) throw new Error(`Draft ${sourceDraft} was not found.`);
+  const sourcePath = mode === "copy" && sourceFilename
+    ? draftPath(directory, sourceFilename)
+    : activePath;
+  const source = await parseEpub(await Deno.readFile(sourcePath), basename(sourcePath));
+  const filename = `draft_${number}.epub`;
+  const next: Manuscript = mode === "copy" ? { ...source, filename } : {
+    ...blankManuscript(String(source.frontmatter.title ?? "Untitled Manuscript")),
+    filename,
+    frontmatter: {
+      ...source.frontmatter,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+
+  await Deno.writeFile(draftPath(directory, filename), await generateEpub(next), {
+    createNew: true,
+  });
+  drafts = [...drafts, { number, filename }];
+  try {
+    await saveProjectSettings(directory, { drafts });
+  } catch (error) {
+    await Deno.remove(draftPath(directory, filename));
+    throw error;
+  }
+  const path = draftPath(directory, filename);
+  await setActivePath(path);
+  return { manuscript: next, drafts, activeDraft: number };
+}
+
 export async function projectEpubPath(projectPath: string): Promise<string | null> {
-  const entries = [];
-  for await (const entry of Deno.readDir(projectPath)) entries.push(entry);
-  const filename = firstProjectEpub(entries);
-  return filename ? projectFilePath(projectPath, filename) : null;
+  const drafts = await projectDrafts(projectPath);
+  const latest = latestDraft(drafts);
+  return latest ? draftPath(projectPath, latest.filename) : null;
 }
 
 export async function openProject(projectPath: string): Promise<Manuscript | null> {
@@ -149,9 +317,10 @@ export async function createProjectEpub(projectPath = pendingProjectPath): Promi
   if (!projectPath) throw new Error("No project folder is waiting for an EPUB.");
 
   const projectName = basename(projectPath) || "Untitled Manuscript";
-  const manuscript = blankManuscript(projectName);
+  const manuscript = { ...blankManuscript(projectName), filename: "draft_1.epub" };
   const epubPath = projectFilePath(projectPath, epubFilename(manuscript));
   await Deno.writeFile(epubPath, await generateEpub(manuscript), { createNew: true });
+  await saveProjectSettings(projectPath, { drafts: [{ number: 1, filename: "draft_1.epub" }] });
   await setActivePath(epubPath);
   pendingProjectPath = null;
   return manuscript;
@@ -169,11 +338,12 @@ export async function createProject(
   }
 
   const projectPath = projectFilePath(pendingProjectParentPath, name);
-  const manuscript = blankManuscript(name);
+  const manuscript = { ...blankManuscript(name), filename: "draft_1.epub" };
   const epubPath = projectFilePath(projectPath, epubFilename(manuscript));
   const epub = await generateEpub(manuscript);
   await Deno.mkdir(projectPath);
   await Deno.writeFile(epubPath, epub, { createNew: true });
+  await saveProjectSettings(projectPath, { drafts: [{ number: 1, filename: "draft_1.epub" }] });
   await setActivePath(epubPath);
   pendingProjectPath = null;
   pendingProjectParentPath = null;
