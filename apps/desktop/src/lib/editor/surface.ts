@@ -53,6 +53,39 @@ export function executeEditorCommand(command: string, value?: string): boolean {
   return (document as unknown as LegacyEditorDocument).execCommand(command, false, value);
 }
 
+/** Replaces an editor range as one undoable edit and keeps the document state in sync. */
+export function replaceRangeInEditor(range: Range, replacement: string): boolean {
+  if (
+    !surface ||
+    !surface.editor.contains(range.startContainer) ||
+    !surface.editor.contains(range.endContainer)
+  ) return false;
+
+  const { editor, title } = surface;
+  const titleValue = title?.value ?? "";
+  cancelHistoryCapture();
+  editorHistory.commit(editor.innerHTML, titleValue);
+
+  range.deleteContents();
+  let inserted: Text | undefined;
+  if (replacement) {
+    inserted = document.createTextNode(replacement);
+    range.insertNode(inserted);
+  }
+  if (inserted) range.setStartAfter(inserted);
+  range.collapse(true);
+  normalizeEditorBlocks(editor);
+
+  const selection = document.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  editorHistory.commit(editor.innerHTML, titleValue);
+  if (editorMode.peek() === "outline") markOutlineChanged(editor);
+  else markChanged(editor);
+  scheduleHistoryCapture();
+  return true;
+}
+
 /** Runs a formatting command against the editor and records the change. */
 export function runCommand(command: string, value?: string): void {
   if (!surface) return;

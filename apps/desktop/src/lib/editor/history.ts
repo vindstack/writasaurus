@@ -100,6 +100,18 @@ export class EditorHistory {
     }
   }
 
+  commit(content: string, title: string): void {
+    if (this.current?.content === content && this.current.title === title) return;
+    if (this.current) this.past.push(this.current);
+    this.current = { content, title };
+    this.lastTokens = tokenizeForDiff(content);
+    this.future = [];
+
+    if (this.past.length > MAX_HISTORY) {
+      this.past.shift();
+    }
+  }
+
   undo(): HistoryEntry | null {
     if (this.past.length === 0) return null;
     if (this.current) {

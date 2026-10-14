@@ -20,6 +20,7 @@ import {
 import { useSignalValue } from "../vue-signals.ts";
 import { markdownToHtml } from "../../lib/utilties/markdown-utilities.ts";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
+import EditorContextMenu from "./EditorContextMenu.vue";
 
 const props = defineProps<{ mode: "manuscript" | "outline" }>();
 const chapterState = useSignalValue(activeChapter);
@@ -127,6 +128,7 @@ onBeforeUnmount(() => {
         <kbd class="chapterShortcut" aria-hidden="true">Ctrl+Shift+N</kbd>
       </Button>
     </div>
+    <EditorContextMenu />
   </div>
 </template>
 

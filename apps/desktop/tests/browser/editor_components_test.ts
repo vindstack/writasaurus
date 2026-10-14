@@ -73,6 +73,47 @@ async function openSidebar(page: Page): Promise<void> {
   }
 }
 
+async function selectEditorText(page: Page, text: string): Promise<void> {
+  await page.locator("#editor").evaluate((editor, selectedText) => {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode() as Text | null;
+    while (node) {
+      const start = node.data.indexOf(selectedText);
+      if (start >= 0) {
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, start + selectedText.length);
+        const selection = document.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        return;
+      }
+      node = walker.nextNode() as Text | null;
+    }
+    throw new Error(`Could not find "${selectedText}" in the editor.`);
+  }, text);
+}
+
+async function rightClickEditorText(page: Page, text: string): Promise<void> {
+  const point = await page.locator("#editor").evaluate((editor, clickedText) => {
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode() as Text | null;
+    while (node) {
+      const start = node.data.indexOf(clickedText);
+      if (start >= 0) {
+        const range = document.createRange();
+        range.setStart(node, start + Math.floor(clickedText.length / 2));
+        range.setEnd(node, start + Math.floor(clickedText.length / 2) + 1);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }
+      node = walker.nextNode() as Text | null;
+    }
+    throw new Error(`Could not locate "${clickedText}" in the editor.`);
+  }, text);
+  await page.mouse.click(point.x, point.y, { button: "right" });
+}
+
 const CHAPTER_STATS = '[data-stat="chapter"]';
 const TOTAL_STATS = '[data-stat="total"]';
 const PANEL = '[data-testid="assistance-panel"]';
@@ -357,6 +398,112 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     assert(
       chapterTitle === `Chapter ${initialChapters + 1}`,
       `Unexpected new chapter title: ${chapterTitle}`,
+    );
+  });
+});
+
+browserTest("browser: editor thesaurus works offline and replacement can be undone", async () => {
+  await withEditorPage(async (page) => {
+    const requests: string[] = [];
+    page.on("request", (request) => requests.push(new URL(request.url()).pathname));
+    const editor = page.locator("#editor");
+    await editor.evaluate((element) => {
+      element.innerHTML = "<p>A hap<strong>py</strong> writer.</p>";
+      element.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await rightClickEditorText(page, "py");
+
+    const menu = page.getByRole("menu", { name: "Editor text actions" });
+    assert(await menu.isVisible(), "Expected the editor context menu");
+    assert(
+      await menu.getByRole("menuitem", { name: "Cut" }).isEnabled(),
+      "Expected Cut to be enabled for a clicked word",
+    );
+    await menu.getByRole("menuitem", { name: "Thesaurus" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Synonyms for happy" });
+    await dialog.waitFor({ state: "visible" });
+    await page.waitForFunction(() =>
+      document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null
+    );
+    assert(
+      requests.includes("/data/oewn-2025-synonyms.json"),
+      "Expected synonym lookup to use the bundled local WordNet data",
+    );
+
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    assert(
+      (await editor.innerText()) === "A happy writer.",
+      "Canceling thesaurus lookup must not change the editor",
+    );
+
+    await rightClickEditorText(page, "py");
+    await page.getByRole("menuitem", { name: "Thesaurus" }).click();
+    const reopenedDialog = page.getByRole("dialog", { name: "Synonyms for happy" });
+    await reopenedDialog.waitFor({ state: "visible" });
+    await page.waitForFunction(() =>
+      document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null
+    );
+    await reopenedDialog.locator('[data-synonym="glad"]').first().click();
+    await page.waitForFunction(() =>
+      document.querySelector("#editor")?.textContent === "A glad writer."
+    );
+
+    await page.keyboard.press("Control+z");
+    await page.waitForFunction(() =>
+      document.querySelector("#editor")?.textContent === "A happy writer."
+    );
+    await page.keyboard.press("Control+y");
+    await page.waitForFunction(() =>
+      document.querySelector("#editor")?.textContent === "A glad writer."
+    );
+  });
+});
+
+browserTest("browser: editor context menu supports clipboard actions and select all", async () => {
+  await withEditorPage(async (page) => {
+    await page.evaluate(() => {
+      let clipboardText = "";
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          readText: async () => clipboardText,
+          writeText: async (text: string) => clipboardText = text,
+        },
+      });
+      Object.defineProperty(window, "__testClipboardText", {
+        configurable: true,
+        get: () => clipboardText,
+      });
+    });
+
+    const editor = page.locator("#editor");
+    await editor.fill("copy this");
+    await selectEditorText(page, "copy");
+    await rightClickEditorText(page, "copy");
+    await page.getByRole("menuitem", { name: "Copy" }).click();
+    const copiedText = await page.evaluate(() =>
+      (window as Window & { __testClipboardText?: string }).__testClipboardText
+    );
+    assert(copiedText === "copy", `Expected "copy" on the clipboard, got "${copiedText}"`);
+
+    await selectEditorText(page, "copy");
+    await rightClickEditorText(page, "copy");
+    await page.getByRole("menuitem", { name: "Cut" }).click();
+    await page.waitForFunction(() => document.querySelector("#editor")?.textContent === " this");
+
+    await rightClickEditorText(page, "this");
+    await page.getByRole("menuitem", { name: "Paste" }).click();
+    await page.waitForFunction(() =>
+      document.querySelector("#editor")?.textContent?.includes("copy")
+    );
+
+    await rightClickEditorText(page, "copy");
+    await page.getByRole("menuitem", { name: "Select all" }).click();
+    const selectedText = await page.evaluate(() => document.getSelection()?.toString());
+    assert(
+      selectedText === await editor.innerText(),
+      `Expected Select all to select editor text, got "${selectedText}"`,
     );
   });
 });
