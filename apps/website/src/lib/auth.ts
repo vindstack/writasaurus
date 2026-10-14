@@ -1,4 +1,7 @@
 import { getWebsiteStore } from "./donation-store.ts";
+import { normalizedEmail } from "./normalized-email.ts";
+
+export { normalizedEmail } from "./normalized-email.ts";
 
 const SESSION_COOKIE = "wr_session";
 const encoder = new TextEncoder();
@@ -32,10 +35,6 @@ export async function hashAuthCode(email: string, code: string): Promise<string>
   );
   const digest = await crypto.subtle.sign("HMAC", key, encoder.encode(`${email}:${code}`));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-export function normalizedEmail(value: string): string {
-  return value.trim().toLowerCase();
 }
 
 function secureCookie(): string {

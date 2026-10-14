@@ -1,0 +1,354 @@
+---
+interface Props {
+  sent: boolean;
+}
+
+const { sent } = Astro.props;
+---
+
+<div class="signIn" data-sign-in>
+  <div class="signInStep" data-email-step hidden={sent}>
+    <header class="signInIntro">
+      <p class="muted">Your private writing space</p>
+      <h1>Sign in</h1>
+      <p>Enter your email and we'll send you a sign-in code. No password to remember.</p>
+    </header>
+    <form action="/api/auth/request" method="post" data-request-form>
+      <div class="signInField">
+        <label for="email">Email address</label>
+        <input
+          id="email"
+          name="email"
+          type="email"
+          autocomplete="email"
+          required
+          maxlength="254"
+          aria-describedby="email-hint sign-in-error"
+        />
+        <small id="email-hint">Use the email you want to manage your account with.</small>
+      </div>
+      <button class="button--primary button--block" type="submit" data-send-code>
+        Email me a sign-in code
+      </button>
+    </form>
+    <p class="muted">Manage your account and email preferences. No donation is required.</p>
+  </div>
+
+  <div class="signInStep" data-code-step hidden={!sent}>
+    <header class="signInIntro">
+      <p class="muted">One more step</p>
+      <h1>Check your email</h1>
+      <p>
+        Enter the 8-digit code
+        <span data-code-destination>from your sign-in email</span>.
+      </p>
+    </header>
+    <form action="/api/auth/verify" method="post" data-verify-form>
+      <div class="signInField" data-confirm-email>
+        <label for="verify-email">Confirm your email address</label>
+        <input
+          id="verify-email"
+          name="email"
+          type="email"
+          autocomplete="email"
+          required
+          maxlength="254"
+          aria-describedby="sign-in-error"
+        />
+      </div>
+      <div class="signInField">
+        <label for="code">8-digit sign-in code</label>
+        <input
+          class="signInCode"
+          id="code"
+          name="code"
+          type="text"
+          inputmode="numeric"
+          autocomplete="one-time-code"
+          pattern="[0-9]{8}"
+          required
+          maxlength="8"
+          aria-describedby="code-hint sign-in-error"
+        />
+        <small id="code-hint">Your code expires in 10 minutes. Use the most recent code.</small>
+      </div>
+      <button class="button--primary button--block" type="submit" data-verify-code>Sign in</button>
+    </form>
+    <div class="signInHelp">
+      <p class="muted">Didn't get the email? Check your spam folder, or request another code.</p>
+      <div class="signInActions" data-enhanced-actions hidden>
+        <button type="button" data-resend-code>Resend code</button>
+        <button class="button--quiet" type="button" data-change-email>Change email</button>
+      </div>
+      <a href="/account" data-native-back>Use a different email or request a new code</a>
+    </div>
+  </div>
+
+  <p id="sign-in-error" class="signInError" role="alert" aria-atomic="true"></p>
+  <p class="muted" role="status" aria-atomic="true" data-sign-in-status>
+    {sent ? "If the address is valid, a sign-in code is on its way." : ""}
+  </p>
+</div>
+
+<script>
+  import { normalizedEmail } from "../lib/normalized-email.ts";
+
+  const root = document.querySelector<HTMLElement>("[data-sign-in]");
+  if (root) {
+    function element<T extends Element>(selector: string): T {
+      const found = root?.querySelector<T>(selector);
+      if (!found) throw new Error(`Missing sign-in element: ${selector}`);
+      return found;
+    }
+
+    const emailStep = element<HTMLElement>("[data-email-step]");
+    const codeStep = element<HTMLElement>("[data-code-step]");
+    const requestForm = element<HTMLFormElement>("[data-request-form]");
+    const verifyForm = element<HTMLFormElement>("[data-verify-form]");
+    const email = element<HTMLInputElement>("#email");
+    const verifyEmail = element<HTMLInputElement>("#verify-email");
+    const code = element<HTMLInputElement>("#code");
+    const sendButton = element<HTMLButtonElement>("[data-send-code]");
+    const verifyButton = element<HTMLButtonElement>("[data-verify-code]");
+    const resendButton = element<HTMLButtonElement>("[data-resend-code]");
+    const changeButton = element<HTMLButtonElement>("[data-change-email]");
+    const error = element<HTMLElement>("#sign-in-error");
+    const status = element<HTMLElement>("[data-sign-in-status]");
+    const destination = element<HTMLElement>("[data-code-destination]");
+    const confirmEmail = element<HTMLElement>("[data-confirm-email]");
+    let busy = false;
+    let resendAt = 0;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    function clearError(): void {
+      error.textContent = "";
+      for (const input of [email, verifyEmail, code]) input.removeAttribute("aria-invalid");
+    }
+
+    function showError(message: string, field?: "email" | "code"): void {
+      error.textContent = message;
+      if (field) {
+        const input = field === "code" ? code : emailStep.hidden ? verifyEmail : email;
+        if (input === verifyEmail) confirmEmail.hidden = false;
+        input.setAttribute("aria-invalid", "true");
+        input.focus();
+      }
+    }
+
+    function updateResend(): void {
+      const seconds = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000));
+      resendButton.disabled = busy || seconds > 0;
+      resendButton.textContent = busy
+        ? "Please wait..."
+        : seconds > 0
+        ? `Resend code in ${seconds}s`
+        : "Resend code";
+      if (seconds === 0 && timer !== undefined) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    }
+
+    function setBusy(value: boolean, action?: "send" | "verify"): void {
+      busy = value;
+      sendButton.disabled = value;
+      verifyButton.disabled = value;
+      changeButton.disabled = value;
+      for (const input of [email, verifyEmail, code]) input.readOnly = value;
+      requestForm.setAttribute("aria-busy", String(value && action === "send"));
+      verifyForm.setAttribute("aria-busy", String(value && emailStep.hidden));
+      sendButton.textContent = value && action === "send"
+        ? "Sending code..."
+        : "Email me a sign-in code";
+      verifyButton.textContent = value && action === "verify" ? "Signing in..." : "Sign in";
+      updateResend();
+    }
+
+    async function submit(
+      form: HTMLFormElement,
+      body: FormData,
+    ): Promise<Record<string, unknown> | null> {
+      let response: Response;
+      try {
+        response = await fetch(form.action, {
+          method: "POST",
+          headers: { accept: "application/json" },
+          body,
+        });
+      } catch (cause) {
+        if (!(cause instanceof TypeError)) throw cause;
+        showError("Couldn't connect. Check your connection and try again.");
+        return null;
+      }
+      if (!response.headers.get("content-type")?.includes("application/json")) {
+        showError("Sign-in is temporarily unavailable. Please try again.");
+        return null;
+      }
+      let result: unknown;
+      try {
+        result = await response.json();
+      } catch (cause) {
+        if (!(cause instanceof SyntaxError)) throw cause;
+        showError("Couldn't read the sign-in response. Please try again.");
+        return null;
+      }
+      if (!result || typeof result !== "object" || Array.isArray(result)) {
+        showError("Couldn't read the sign-in response. Please try again.");
+        return null;
+      }
+      if (!response.ok) {
+        const message = "error" in result && typeof result.error === "string"
+          ? result.error
+          : "Sign-in is temporarily unavailable. Please try again.";
+        const field = "field" in result && (result.field === "email" || result.field === "code")
+          ? result.field
+          : undefined;
+        showError(message, field);
+        return null;
+      }
+      return Object.fromEntries(Object.entries(result));
+    }
+
+    async function sendCode(resend: boolean): Promise<void> {
+      if (busy || (resend && Date.now() < resendAt)) return;
+      const input = resend ? verifyEmail : email;
+      input.value = normalizedEmail(input.value);
+      if (!input.reportValidity()) return;
+      clearError();
+      status.textContent = "";
+      setBusy(true, "send");
+      try {
+        const body = new FormData();
+        body.set("email", input.value);
+        const result = await submit(requestForm, body);
+        if (!result) return;
+        if (result.sent !== true || typeof result.email !== "string") {
+          showError("Couldn't confirm that the code was sent. Please try again.");
+          return;
+        }
+        email.value = result.email;
+        verifyEmail.value = result.email;
+        confirmEmail.hidden = true;
+        destination.textContent = `sent to ${result.email}`;
+        emailStep.hidden = true;
+        codeStep.hidden = false;
+        code.value = "";
+        resendAt = Date.now() + 30_000;
+        if (timer !== undefined) clearInterval(timer);
+        timer = setInterval(updateResend, 1000);
+        status.textContent = resend
+          ? "A new code has been sent. Use this code instead of the previous one."
+          : "Your sign-in code has been sent.";
+        code.focus();
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    requestForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      void sendCode(false);
+    });
+
+    verifyForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (busy) return;
+      clearError();
+      status.textContent = "";
+      verifyEmail.value = normalizedEmail(verifyEmail.value);
+      setBusy(true, "verify");
+      try {
+        const result = await submit(verifyForm, new FormData(verifyForm));
+        if (!result) return;
+        if (result.verified !== true) {
+          showError("Couldn't confirm sign-in. Please try again.");
+          return;
+        }
+        location.assign("/account");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    code.addEventListener("paste", (event) => {
+      const pasted = event.clipboardData?.getData("text").replace(/\s/g, "");
+      if (pasted && /^[0-9]{8}$/.test(pasted)) {
+        event.preventDefault();
+        code.value = pasted;
+        clearError();
+      }
+    });
+
+    resendButton.addEventListener("click", () => void sendCode(true));
+    changeButton.addEventListener("click", () => {
+      if (busy) return;
+      clearError();
+      status.textContent = "";
+      email.value = verifyEmail.value;
+      code.value = "";
+      emailStep.hidden = false;
+      codeStep.hidden = true;
+      email.focus();
+    });
+    window.addEventListener("pagehide", () => {
+      if (timer !== undefined) clearInterval(timer);
+      timer = undefined;
+    });
+    window.addEventListener("pageshow", () => {
+      updateResend();
+      if (Date.now() < resendAt && timer === undefined) {
+        timer = setInterval(updateResend, 1000);
+      }
+    });
+
+    element<HTMLElement>("[data-enhanced-actions]").hidden = false;
+    element<HTMLElement>("[data-native-back]").hidden = true;
+  }
+</script>
+
+<style>
+  .signIn,
+  .signInStep,
+  .signInIntro,
+  .signInHelp {
+    display: grid;
+    gap: var(--space-5);
+  }
+
+  .signInIntro,
+  .signInField {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .signInIntro p + p {
+    margin-block-start: 0;
+  }
+
+  .signInCode {
+    font-family: var(--font-mono);
+    font-size: clamp(1.25rem, 5vw, 1.75rem);
+    letter-spacing: 0.3em;
+    text-align: center;
+  }
+
+  [data-code-destination] {
+    overflow-wrap: anywhere;
+  }
+
+  .signInActions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .signInError {
+    color: var(--danger);
+  }
+
+  .signInError:empty,
+  [data-sign-in-status]:empty,
+  .signIn [hidden] {
+    display: none;
+  }
+</style>

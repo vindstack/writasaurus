@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SitePage from "../components/SitePage.astro";
+import SignInForm from "../components/SignInForm.astro";
 import { getSession } from "../lib/auth.ts";
 import { getWebsiteStore } from "../lib/donation-store.ts";
 
@@ -15,9 +16,9 @@ const marketingOptIn = session
 
 <BaseLayout title={session ? "Your Writasaurus account" : "Sign in to Writasaurus"}>
   <SitePage>
-    <h1>{session ? "Your account" : "Sign in"}</h1>
     {session
       ? <>
+        <h1>Your account</h1>
         <p>Signed in as <strong>{session.email}</strong>.</p>
         {preferencesUpdated && <p role="status">Your email preference has been saved.</p>}
         <section aria-labelledby="donations-heading">
@@ -50,28 +51,6 @@ const marketingOptIn = session
         </section>
         <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
       </>
-      : <>
-        <p>Sign in to manage your account and email preferences. No donation is required.</p>
-        {sent && <p role="status">If the address is valid, a sign-in code is on its way.</p>}
-        <form action="/api/auth/request" method="post">
-          <label for="email">Email address</label>
-          <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
-          <button type="submit">Email me a sign-in code</button>
-        </form>
-        {sent && <form action="/api/auth/verify" method="post">
-          <label for="verify-email">Email address</label>
-          <input
-            id="verify-email"
-            name="email"
-            type="email"
-            autocomplete="email"
-            required
-            maxlength="254"
-          />
-          <label for="code">8-digit sign-in code</label>
-          <input id="code" name="code" inputmode="numeric" pattern="[0-9]{8}" required maxlength="8" />
-          <button type="submit">Sign in</button>
-        </form>}
-      </>}
+      : <SignInForm sent={sent} />}
   </SitePage>
 </BaseLayout>
