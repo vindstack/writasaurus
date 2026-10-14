@@ -39,7 +39,7 @@ const { sent } = Astro.props;
       <p class="muted">One more step</p>
       <h1>Check your email</h1>
       <p>
-        Enter the 8-digit code
+        Enter the 8-digit code{" "}
         <span data-code-destination>from your sign-in email</span>.
       </p>
     </header>
@@ -188,7 +188,7 @@ const { sent } = Astro.props;
       try {
         result = await response.json();
       } catch (cause) {
-        if (!(cause instanceof SyntaxError)) throw cause;
+        if (!(cause instanceof SyntaxError) && !(cause instanceof TypeError)) throw cause;
         showError("Couldn't read the sign-in response. Please try again.");
         return null;
       }
@@ -271,6 +271,7 @@ const { sent } = Astro.props;
     });
 
     code.addEventListener("paste", (event) => {
+      if (busy) return;
       const pasted = event.clipboardData?.getData("text").replace(/\s/g, "");
       if (pasted && /^[0-9]{8}$/.test(pasted)) {
         event.preventDefault();

@@ -1,4 +1,5 @@
 import type { Page } from "playwright";
+import { launchBrowser } from "../../../../packages/shared/test/browser.ts";
 import { createTestApp } from "../helpers.ts";
 import { closeActiveFile, getActivePath, setActivePath } from "../../src/lib/editor-session.ts";
 import { loadLastFilePath } from "../../src/lib/desktop.ts";
@@ -8,62 +9,6 @@ import type { AppSettings } from "../../src/lib/app-settings-types.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
-}
-
-async function launchBrowser() {
-  const nodeFs = await import("node:fs");
-  const existsSync = nodeFs.default.existsSync;
-  nodeFs.default.existsSync = (path) => {
-    if (
-      path === "/proc/sys/fs/binfmt_misc/WSLInterop" ||
-      path === "/run/WSL"
-    ) return false;
-    return existsSync(path);
-  };
-  let chromium: typeof import("playwright").chromium;
-  try {
-    ({ chromium } = await import("playwright"));
-  } finally {
-    nodeFs.default.existsSync = existsSync;
-  }
-  const customPath = Deno.env.get("PLAYWRIGHT_CHROME_PATH");
-  if (customPath) {
-    return await chromium.launch({
-      executablePath: customPath,
-      headless: true,
-      args: ["--no-sandbox"],
-    });
-  }
-
-  // Look for system-installed Chromium/Chrome/Brave binaries if the default Playwright cache doesn't exist
-  const candidates = [
-    "/snap/bin/chromium",
-    "/usr/bin/google-chrome",
-    "/usr/bin/chromium-browser",
-    "/usr/bin/chromium",
-    "/usr/bin/brave-browser",
-  ];
-
-  for (const candidate of candidates) {
-    try {
-      const stat = await Deno.stat(candidate);
-      if (stat.isFile || stat.isSymlink) {
-        return await chromium.launch({
-          executablePath: candidate,
-          headless: true,
-          args: ["--no-sandbox"],
-        });
-      }
-    } catch {
-      // not available, continue
-    }
-  }
-
-  // Fall back to Playwright's default resolution
-  return await chromium.launch({
-    executablePath: chromium.executablePath(),
-    headless: true,
-  });
 }
 
 async function openSidebar(page: Page): Promise<void> {

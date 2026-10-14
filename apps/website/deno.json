@@ -10,7 +10,7 @@
     "build": "astro build",
     "dev": "astro dev --host 127.0.0.1 --port 8000",
     "start": "deno run --allow-env --allow-net --allow-read --allow-write=.data dist/server/entry.mjs",
-    "test": "astro build --config astro.config.test.ts && deno test --allow-read --allow-env --allow-write=.data tests/*_test.ts",
+    "test": "astro build --config astro.config.test.ts && deno test --allow-read --allow-env --allow-write=.data,/tmp --allow-net=127.0.0.1 --allow-run --allow-sys=homedir,osRelease tests/*_test.ts",
     "check": "deno check tests/*_test.ts src/pages/api/**/*.ts && astro check"
   }
 }

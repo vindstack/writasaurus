@@ -1,5 +1,7 @@
 import { MemoryWebsiteStore, setWebsiteStoreForTests } from "../src/lib/donation-store.ts";
-import { request } from "./helpers.ts";
+import { POST as requestCode } from "../src/pages/api/auth/request.ts";
+import { POST as verifyCode } from "../src/pages/api/auth/verify.ts";
+import { removeTestFile, request } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -16,7 +18,13 @@ class AuthTestStore extends MemoryWebsiteStore {
 async function withAuth(
   test: (store: AuthTestStore, logFile: string) => Promise<void>,
 ): Promise<void> {
-  const names = ["SESSION_SECRET", "EMAIL_LOG_FILE", "DENO_DEPLOYMENT_ID", "PUBLIC_SITE_URL"];
+  const names = [
+    "SESSION_SECRET",
+    "EMAIL_LOG_FILE",
+    "DENO_DEPLOYMENT_ID",
+    "PUBLIC_SITE_URL",
+    "RESEND_API_KEY",
+  ];
   const original = new Map(names.map((name) => [name, Deno.env.get(name)]));
   const logFile = `.data/auth-test-${crypto.randomUUID()}.jsonl`;
   const store = new AuthTestStore();
@@ -33,23 +41,27 @@ async function withAuth(
       if (value === undefined) Deno.env.delete(name);
       else Deno.env.set(name, value);
     }
-    try {
-      await Deno.remove(logFile);
-    } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
-    }
+    await removeTestFile(logFile);
   }
 }
 
-function authRequest(path: "request" | "verify", values: Record<string, string>, json = true) {
-  return request(`/api/auth/${path}`, {
+function authRequest(
+  path: "request" | "verify",
+  values: Record<string, string>,
+  json = true,
+  throughApp = false,
+) {
+  const init: RequestInit = {
     method: "POST",
     headers: {
       origin: "http://localhost",
       ...(json ? { accept: "application/json" } : {}),
     },
     body: new URLSearchParams(values),
-  });
+  };
+  if (throughApp) return request(`/api/auth/${path}`, init);
+  const handler = path === "request" ? requestCode : verifyCode;
+  return handler({ request: new Request(`http://localhost/api/auth/${path}`, init) });
 }
 
 async function latestCode(logFile: string): Promise<string> {
@@ -71,8 +83,8 @@ Deno.test("account renders an Astro email-first flow and native code-entry fallb
     assert(page.includes('pattern="[0-9]{8}"'));
     assert(page.includes('role="alert"'));
     assert(!page.includes("astro-island"), "Sign-in should not hydrate Vue.");
-    assert(/data-email-step[^>]*hidden/.test(page) === sent);
-    assert(/data-code-step[^>]*hidden/.test(page) === !sent);
+    assert(/<div\b[^>]*\bdata-email-step\b[^>]*\bhidden\b/.test(page) === sent);
+    assert(/<div\b[^>]*\bdata-code-step\b[^>]*\bhidden\b/.test(page) === !sent);
     assert(page.includes("Confirm your email address"));
     const nonce = response.headers.get("content-security-policy")?.match(/'nonce-([^']+)'/)?.[1];
     assert(nonce);
@@ -115,7 +127,7 @@ Deno.test("enhanced auth validates input and preserves native response contracts
 
 Deno.test("enhanced sign-in creates a session and codes are single-use", async () => {
   await withAuth(async (_store, logFile) => {
-    const sent = await authRequest("request", { email: " Writer@Example.com " });
+    const sent = await authRequest("request", { email: " Writer@Example.com " }, true, true);
     assert(sent.status === 200);
     assert(sent.headers.get("cache-control") === "no-store");
     const result = await sent.json();
@@ -123,7 +135,7 @@ Deno.test("enhanced sign-in creates a session and codes are single-use", async (
     assert(result.email === "writer@example.com");
     assert(!("code" in result));
     const code = await latestCode(logFile);
-    const verified = await authRequest("verify", { email: "writer@example.com", code });
+    const verified = await authRequest("verify", { email: "writer@example.com", code }, true, true);
     assert(verified.status === 200);
     assert(verified.headers.get("cache-control") === "no-store");
     assert((await verified.json()).verified === true);
@@ -138,7 +150,7 @@ Deno.test("enhanced sign-in creates a session and codes are single-use", async (
     assert(page.includes("Donation receipts"));
     assert(!page.includes("data-sign-in"));
 
-    const reused = await authRequest("verify", { email: "writer@example.com", code });
+    const reused = await authRequest("verify", { email: "writer@example.com", code }, true, true);
     assert(reused.status === 400);
     assert(!reused.headers.has("set-cookie"));
     assert((await reused.json()).field === "code");
@@ -149,11 +161,10 @@ Deno.test("verification errors retain attempt and expiry rules; resends replace 
   await withAuth(async (store, logFile) => {
     await authRequest("request", { email: "writer@example.com" });
     const firstCode = await latestCode(logFile);
-    const firstHash = [...store.codes.values()][0].hash;
     await authRequest("request", { email: "writer@example.com" });
     const latest = await latestCode(logFile);
     const active = [...store.codes.values()][0];
-    assert(active.hash !== firstHash || latest === firstCode);
+    assert(store.codes.size === 1);
     const wrongCode = latest === "00000000" ? "11111111" : "00000000";
     if (latest !== firstCode) {
       const replaced = await authRequest("verify", {
@@ -195,5 +206,20 @@ Deno.test("enhanced issuance reports refusal without claiming delivery", async (
 
     const native = await authRequest("request", { email: "writer@example.com" }, false);
     assert(native.status === 303);
+  });
+});
+
+Deno.test("email delivery failures propagate instead of reporting a code was sent", async () => {
+  await withAuth(async () => {
+    Deno.env.set("DENO_DEPLOYMENT_ID", "auth-delivery-test");
+    Deno.env.set("RESEND_API_KEY", "");
+    let failed = false;
+    try {
+      await authRequest("request", { email: "writer@example.com" });
+    } catch (error) {
+      assert(error instanceof Error && error.message === "Resend email is not configured.");
+      failed = true;
+    }
+    assert(failed, "A delivery failure must not return a success response.");
   });
 });
