@@ -1,51 +1,91 @@
-import { generateLicenseKey } from "../src/lib/license-crypto.ts";
 import {
+  isDownloadPlatform,
   isValidEmail,
-  isValidLicenseKey,
-  normalizeLicenseKey,
+  parseDonationAmount,
+  processStripeEvent,
+  startDonationCheckout,
 } from "../src/lib/payment-service.ts";
-import { isAllowedDesktopOrigin, licenseCorsHeaders } from "../src/lib/license-cors.ts";
+import { MemoryWebsiteStore, setWebsiteStoreForTests } from "../src/lib/donation-store.ts";
 import { verifyStripeWebhook } from "../src/lib/stripe.ts";
-import { signLicenseToken } from "../src/lib/license-crypto.ts";
-import { MemoryLicenseStore, setLicenseStoreForTests } from "../src/lib/store.ts";
-import { verifyLicenseToken } from "../../../packages/shared/license.ts";
 import { request } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test("payment: validates generated license keys and normalized input", () => {
-  const key = generateLicenseKey();
-  assert(isValidLicenseKey(key));
-  assert(isValidLicenseKey(key.toLowerCase().replace("-", " ")));
-  assert(normalizeLicenseKey(key) === key.replace("-", ""));
-  assert(!isValidLicenseKey("WRIT-not-a-key"));
-});
-
-Deno.test("payment: validates purchaser email addresses", () => {
+Deno.test("donation input is validated and normalized to cents", () => {
+  assert(parseDonationAmount("none", "") === 0);
+  assert(parseDonationAmount("10", "") === 1000);
+  assert(parseDonationAmount("25", "") === 2500);
+  assert(parseDonationAmount("custom", "12.3") === 1230);
+  assert(parseDonationAmount("custom", "12.30") === 1230);
+  assert(parseDonationAmount("custom", "1000000") === 100_000_000);
+  assert(isDownloadPlatform("linux"));
+  assert(!isDownloadPlatform("android"));
   assert(isValidEmail("writer@example.com"));
   assert(isValidEmail(" writer@example.com "));
   assert(!isValidEmail("writer"));
-  assert(!isValidEmail(`${"a".repeat(250)}@example.com`));
+
+  for (const amount of ["", "0.49", "1.234", "1e3", "-5", "nope"]) {
+    let rejected = false;
+    try {
+      parseDonationAmount("custom", amount);
+    } catch (error) {
+      rejected = error instanceof TypeError;
+    }
+    assert(rejected, `Expected ${amount} to be rejected.`);
+  }
 });
 
-Deno.test("payment: allows only local desktop origins for activation CORS", () => {
-  const local = new Request("https://licenses.example/api/license/activate", {
-    headers: { origin: "http://127.0.0.1:8000" },
-  });
-  const hostile = new Request("https://licenses.example/api/license/activate", {
-    headers: { origin: "https://evil.example" },
-  });
-  assert(isAllowedDesktopOrigin(local));
-  assert(!isAllowedDesktopOrigin(hostile));
-  assert(
-    licenseCorsHeaders(local).get("access-control-allow-origin") === "http://127.0.0.1:8000",
-  );
-  assert(licenseCorsHeaders(hostile).get("access-control-allow-origin") === null);
+Deno.test("Stripe Checkout receives the selected one-time donation amount", async () => {
+  const original = {
+    secretKey: Deno.env.get("STRIPE_SECRET_KEY"),
+    siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
+    deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
+  };
+  const originalFetch = globalThis.fetch;
+  Deno.env.set("STRIPE_SECRET_KEY", "sk_test_writasaurus");
+  Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
+  Deno.env.set("DENO_DEPLOYMENT_ID", "test-deployment");
+  let checkoutParams: URLSearchParams | undefined;
+  globalThis.fetch = (input, init) => {
+    if (String(input) === "https://api.stripe.com/v1/checkout/sessions") {
+      checkoutParams = new URLSearchParams(String(init?.body));
+      return Promise.resolve(
+        Response.json({ id: "cs_test_session", url: "https://checkout.stripe.com/c/pay/test" }),
+      );
+    }
+    return originalFetch(input, init);
+  };
+  try {
+    const result = await startDonationCheckout("donor@example.com", 2500, "macos");
+    assert(!result.mock);
+    assert(result.url === "https://checkout.stripe.com/c/pay/test");
+    assert(checkoutParams?.get("mode") === "payment");
+    assert(checkoutParams?.get("customer_email") === "donor@example.com");
+    assert(checkoutParams?.get("line_items[0][price_data][currency]") === "usd");
+    assert(checkoutParams?.get("line_items[0][price_data][unit_amount]") === "2500");
+    assert(checkoutParams?.get("metadata[donation]") === "true");
+    assert(checkoutParams?.get("metadata[amountCents]") === "2500");
+    assert(checkoutParams?.get("metadata[platform]") === "macos");
+    assert(checkoutParams?.get("success_url")?.includes("/donation/success"));
+    assert(checkoutParams?.get("cancel_url") === "https://writasaurus.test/download?cancelled=1");
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (
+      const [name, value] of Object.entries({
+        STRIPE_SECRET_KEY: original.secretKey,
+        PUBLIC_SITE_URL: original.siteUrl,
+        DENO_DEPLOYMENT_ID: original.deploymentId,
+      })
+    ) {
+      if (value === undefined) Deno.env.delete(name);
+      else Deno.env.set(name, value);
+    }
+  }
 });
 
-Deno.test("payment: verifies Stripe webhook signatures and timestamp freshness", async () => {
+Deno.test("Stripe webhook signatures are verified and expire", async () => {
   const secret = "test_webhook_secret";
   const body = JSON.stringify({
     id: "evt_test",
@@ -80,76 +120,17 @@ Deno.test("payment: verifies Stripe webhook signatures and timestamp freshness",
   assert(rejected, "Expected stale Stripe webhook signatures to be rejected.");
 });
 
-Deno.test("payment: signs tokens accepted only by the matching desktop public key", async () => {
-  const keys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
-  if (!("privateKey" in keys)) throw new Error("Ed25519 key generation failed.");
-  const privateBytes = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keys.privateKey));
-  const publicBytes = new Uint8Array(await crypto.subtle.exportKey("raw", keys.publicKey));
-  const encode = (bytes: Uint8Array) => {
-    let binary = "";
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-  };
-  const deviceHash = "a".repeat(64);
-  const expiresAt = Math.floor(Date.now() / 1000) + 60;
-  const token = await signLicenseToken({
-    licenseId: "56a5c673-1f8c-4a13-b08a-9585cd7e69fe",
-    deviceHash,
-    exp: expiresAt,
-  }, encode(privateBytes));
-  const verified = await verifyLicenseToken(token, encode(publicBytes), deviceHash);
-  assert(verified?.exp === expiresAt);
-  assert(await verifyLicenseToken(token, encode(publicBytes), "b".repeat(64)) === null);
-});
-
-Deno.test("payment: mock checkout reveals a key and enables post-purchase downloads", async () => {
+Deno.test("free downloads and optional donations share normal accounts", async () => {
   const original = {
     provider: Deno.env.get("PAYMENT_PROVIDER"),
     deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
-    encryptionKey: Deno.env.get("LICENSE_ENCRYPTION_KEY"),
-    signingPrivateKey: Deno.env.get("LICENSE_SIGNING_PRIVATE_KEY"),
     siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
     emailLogFile: Deno.env.get("EMAIL_LOG_FILE"),
     sessionSecret: Deno.env.get("SESSION_SECRET"),
-    r2AccountId: Deno.env.get("WRITASAURUS_R2_ACCOUNT_ID"),
-    r2AccessKeyId: Deno.env.get("WRITASAURUS_R2_ACCESS_KEY_ID"),
-    r2SecretAccessKey: Deno.env.get("WRITASAURUS_R2_SECRET_ACCESS_KEY"),
-    r2Bucket: Deno.env.get("WRITASAURUS_R2_BUCKET"),
   };
-  let binary = "";
-  for (const byte of crypto.getRandomValues(new Uint8Array(32))) {
-    binary += String.fromCharCode(byte);
-  }
-  const encryptionKey = btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-  const generatedSigningKeys = await crypto.subtle.generateKey("Ed25519", true, ["sign", "verify"]);
-  if (!("privateKey" in generatedSigningKeys)) {
-    throw new Error("Could not generate test signing keys.");
-  }
-  const signingPrivateKey = new Uint8Array(
-    await crypto.subtle.exportKey("pkcs8", generatedSigningKeys.privateKey),
-  );
-  const signingPublicKey = new Uint8Array(
-    await crypto.subtle.exportKey("raw", generatedSigningKeys.publicKey),
-  );
-  const encode = (bytes: Uint8Array) => {
-    let value = "";
-    for (const byte of bytes) value += String.fromCharCode(byte);
-    return btoa(value).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-  };
-  Deno.env.set("PAYMENT_PROVIDER", "mock");
-  Deno.env.delete("DENO_DEPLOYMENT_ID");
-  Deno.env.set("LICENSE_ENCRYPTION_KEY", encryptionKey);
-  Deno.env.set("LICENSE_SIGNING_PRIVATE_KEY", encode(signingPrivateKey));
-  Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
-  const emailLogFile = `.data/test-emails-${crypto.randomUUID()}.jsonl`;
-  Deno.env.set("EMAIL_LOG_FILE", emailLogFile);
-  Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
-  Deno.env.set("WRITASAURUS_R2_ACCOUNT_ID", "test-account");
-  Deno.env.set("WRITASAURUS_R2_ACCESS_KEY_ID", "test-access-key");
-  Deno.env.set("WRITASAURUS_R2_SECRET_ACCESS_KEY", "test-secret-key");
-  Deno.env.set("WRITASAURUS_R2_BUCKET", "test-bucket");
-  setLicenseStoreForTests(new MemoryLicenseStore());
   const originalFetch = globalThis.fetch;
+  const store = new MemoryWebsiteStore();
+  const emailLogFile = `.data/test-emails-${crypto.randomUUID()}.jsonl`;
   const release = {
     version: "1.2.3",
     releasedAt: "2026-10-10T00:00:00.000Z",
@@ -186,144 +167,157 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
       sha256: "d".repeat(64),
     },
   };
-  globalThis.fetch = (input, init) => {
-    if (String(input) === "https://api.resend.com/emails") {
-      return Promise.reject(new Error("Development emails must not call Resend."));
-    }
+  Deno.env.set("PAYMENT_PROVIDER", "mock");
+  Deno.env.delete("DENO_DEPLOYMENT_ID");
+  Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
+  Deno.env.set("EMAIL_LOG_FILE", emailLogFile);
+  Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
+  setWebsiteStoreForTests(store);
+  globalThis.fetch = (input) => {
     if (String(input) === "https://writasaurus.test/latest.json") {
       return Promise.resolve(Response.json(release));
     }
-    return originalFetch(input, init);
+    if (String(input) === "https://api.resend.com/emails") {
+      return Promise.reject(new Error("Development emails must not call Resend."));
+    }
+    return originalFetch(input);
   };
 
   try {
-    const form = new FormData();
-    form.set("email", "writer@example.com");
-    const checkout = await request("/api/checkout", {
+    const freeForm = new FormData();
+    freeForm.set("platform", "linux");
+    freeForm.set("donation", "none");
+    const freeDownload = await request("/api/download", {
       method: "POST",
       headers: { origin: "http://localhost" },
-      body: form,
+      body: freeForm,
+    });
+    assert(freeDownload.status === 303);
+    assert(
+      freeDownload.headers.get("location") ===
+        "https://downloads.example/releases/v1.2.3/Writasaurus.AppImage",
+    );
+
+    const noEmailForm = new FormData();
+    noEmailForm.set("platform", "windows");
+    noEmailForm.set("donation", "10");
+    const noEmail = await request("/api/download", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: noEmailForm,
+    });
+    assert(noEmail.status === 400);
+
+    const donationForm = new FormData();
+    donationForm.set("platform", "windows");
+    donationForm.set("email", "writer@example.com");
+    donationForm.set("marketingEmails", "yes");
+    donationForm.set("donation", "10");
+    const checkout = await request("/api/download", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: donationForm,
     });
     assert(checkout.status === 303);
     const successUrl = checkout.headers.get("location");
-    assert(successUrl);
-    assert(successUrl.includes("/checkout/success?session_id=mock_"));
+    assert(successUrl && new URL(successUrl, "http://localhost").pathname === "/donation/success");
+    assert(
+      new URL(successUrl, "http://localhost").searchParams.get("session_id")?.startsWith("mock_"),
+    );
     const success = await request(successUrl);
     assert(success.status === 200);
-    const firstPage = await success.text();
-    const key = firstPage.match(/<code>(WRIT-[A-F0-9]{48})<\/code>/)?.[1];
-    assert(key, "Expected the mock purchase key on the first success page.");
-    const purchaseEmail = JSON.parse((await Deno.readTextFile(emailLogFile)).trim()) as {
-      text: string;
-    };
-    assert(purchaseEmail.text.includes(key), "Expected the purchase email to be written locally.");
-    assert(firstPage.includes("Download Writasaurus"));
-    for (const platform of ["linux", "macos", "windows"]) {
-      assert(
-        firstPage.includes(`value="${platform}"`),
-        `Expected the post-purchase page to offer ${platform}.`,
-      );
-    }
-    const purchaseCookie = (success.headers.get("set-cookie") ?? "").split(";", 1)[0];
-    assert(purchaseCookie.startsWith("wr_purchase="));
-    for (
-      const [platform, fileName] of Object.entries({
-        linux: "Writasaurus.AppImage",
-        macos: "Writasaurus-macos.tar.gz",
-        windows: "Writasaurus.msi",
-      })
-    ) {
-      const downloadForm = new FormData();
-      downloadForm.set("platform", platform);
-      const download = await request("/api/download", {
-        method: "POST",
-        headers: { cookie: purchaseCookie, origin: "http://localhost" },
-        body: downloadForm,
-      });
-      assert(download.status === 303, `Expected immediate ${platform} download to redirect.`);
-      const downloadUrl = new URL(download.headers.get("location") ?? "");
-      assert(downloadUrl.pathname.endsWith(encodeURIComponent(fileName)));
-      assert(downloadUrl.searchParams.has("X-Amz-Signature"));
-    }
+    const successPage = await success.text();
+    assert(successPage.includes("Your one-time donation of $10.00 USD is confirmed."));
+    assert(successPage.includes("Download Writasaurus"));
 
-    const authRequestForm = new FormData();
-    authRequestForm.set("email", "writer@example.com");
     const authRequest = await request("/api/auth/request", {
       method: "POST",
       headers: { origin: "http://localhost" },
-      body: authRequestForm,
+      body: new URLSearchParams({ email: "writer@example.com" }),
     });
     assert(authRequest.status === 303);
-    const loggedEmails = (await Deno.readTextFile(emailLogFile)).trim().split("\n").map((
-      line,
-    ) => JSON.parse(line) as { text: string });
-    const passcode = loggedEmails.at(-1)?.text.match(/account is (\d{8})/)?.[1];
-    assert(passcode, "Expected a sign-in code to be emailed after purchase.");
-    const authVerifyForm = new FormData();
-    authVerifyForm.set("email", "writer@example.com");
-    authVerifyForm.set("code", passcode);
-    const authVerify = await request("/api/auth/verify", {
+    const emailMessages = (await Deno.readTextFile(emailLogFile)).trim().split("\n").map(
+      (line) => JSON.parse(line) as { text: string },
+    );
+    const passcode = emailMessages.at(-1)?.text.match(/code is (\d{8})/)?.[1];
+    assert(passcode, "Expected a passwordless sign-in code.");
+
+    const verify = await request("/api/auth/verify", {
       method: "POST",
       headers: { origin: "http://localhost" },
-      body: authVerifyForm,
+      body: new URLSearchParams({ email: "writer@example.com", code: passcode }),
     });
-    assert(authVerify.status === 303);
-    const sessionCookie = (authVerify.headers.get("set-cookie") ?? "").split(";", 1)[0];
-    assert(sessionCookie.startsWith("wr_session="));
+    assert(verify.status === 303);
+    const sessionCookie = (verify.headers.get("set-cookie") ?? "").split(";", 1)[0];
     const account = await request("/account", { headers: { cookie: sessionCookie } });
     assert(account.status === 200);
     const accountPage = await account.text();
-    for (const platform of ["linux", "macos", "windows"]) {
-      assert(
-        accountPage.includes(`value="${platform}"`),
-        `Expected the post-purchase account to offer a ${platform} download.`,
-      );
-    }
+    assert(accountPage.includes("Donation receipts"));
+    assert(accountPage.includes("10.00 USD"));
+    assert(accountPage.includes('name="marketingEmails" value="yes" checked'));
+    assert(!accountPage.includes("Download history"));
+    assert(accountPage.includes("Passcode emails needed to sign in are always sent"));
 
-    const artifactNames = {
-      linux: "Writasaurus.AppImage",
-      macos: "Writasaurus-macos.tar.gz",
-      windows: "Writasaurus.msi",
-    } as const;
-    for (const [platform, fileName] of Object.entries(artifactNames)) {
-      const downloadForm = new FormData();
-      downloadForm.set("platform", platform);
-      const download = await request("/api/download", {
-        method: "POST",
-        headers: { cookie: sessionCookie, origin: "http://localhost" },
-        body: downloadForm,
-      });
-      assert(download.status === 303, `Expected ${platform} download to redirect.`);
-      const downloadUrl = new URL(download.headers.get("location") ?? "");
-      assert(downloadUrl.pathname.endsWith(encodeURIComponent(fileName)));
-      assert(downloadUrl.searchParams.has("X-Amz-Signature"));
-    }
-
-    const deviceHash = "a".repeat(64);
-    const activation = await request("/api/license/activate", {
+    const preference = await request("/api/account/preferences", {
       method: "POST",
-      headers: {
-        origin: "http://127.0.0.1:8001",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ key, deviceHash }),
+      headers: { cookie: sessionCookie, origin: "http://localhost" },
+      body: new URLSearchParams(),
     });
-    if (activation.status !== 200) {
-      throw new Error(await activation.text());
-    }
-    const activated = await activation.json();
-    assert(
-      await verifyLicenseToken(activated.token, encode(signingPublicKey), deviceHash),
-      "Desktop public key should verify the activation token.",
-    );
+    assert(preference.status === 303);
+    const updatedAccount = await request("/account", { headers: { cookie: sessionCookie } });
+    assert(!(await updatedAccount.text()).includes('name="marketingEmails" value="yes" checked'));
 
-    const repeated = await request(successUrl);
-    const repeatedPage = await repeated.text();
-    assert(!repeatedPage.includes(`<code>${key}</code>`));
-    assert(repeatedPage.includes("already been revealed"));
+    const unpaidEmail = "free-writer@example.com";
+    const unpaidDownload = await request("/api/download", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: new URLSearchParams({
+        platform: "linux",
+        donation: "none",
+        email: unpaidEmail,
+      }),
+    });
+    assert(unpaidDownload.status === 303);
+
+    const unpaidSignIn = await request("/api/auth/request", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: new URLSearchParams({ email: unpaidEmail }),
+    });
+    assert(unpaidSignIn.status === 303);
+    const unpaidMessage = JSON.parse(
+      (await Deno.readTextFile(emailLogFile)).trim().split("\n").at(-1)!,
+    ) as { to: string; text: string };
+    assert(unpaidMessage.to === unpaidEmail);
+    const unpaidCode = unpaidMessage.text.match(/code is (\d{8})/)?.[1];
+    assert(unpaidCode, "Expected a passcode despite no donation or marketing opt-in.");
+    const unpaidVerify = await request("/api/auth/verify", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: new URLSearchParams({ email: unpaidEmail, code: unpaidCode }),
+    });
+    assert(unpaidVerify.status === 303);
+    const unpaidCookie = (unpaidVerify.headers.get("set-cookie") ?? "").split(";", 1)[0];
+    assert(unpaidCookie.startsWith("wr_session="));
+    const unpaidAccount = await request("/account", { headers: { cookie: unpaidCookie } });
+    assert(unpaidAccount.status === 200);
+    const unpaidPage = await unpaidAccount.text();
+    assert(unpaidPage.includes("Your account"));
+    assert(unpaidPage.includes(unpaidEmail));
+    assert(unpaidPage.includes("No donations are associated with this email yet."));
+    assert(!unpaidPage.includes("Donor account"));
+    assert(!unpaidPage.includes('name="marketingEmails" value="yes" checked'));
+    const unpaidPreference = await request("/api/account/preferences", {
+      method: "POST",
+      headers: { cookie: unpaidCookie, origin: "http://localhost" },
+      body: new URLSearchParams({ marketingEmails: "yes" }),
+    });
+    assert(unpaidPreference.status === 303);
+    const optedInAccount = await request("/account", { headers: { cookie: unpaidCookie } });
+    assert((await optedInAccount.text()).includes('name="marketingEmails" value="yes" checked'));
   } finally {
     globalThis.fetch = originalFetch;
-    setLicenseStoreForTests(undefined);
+    setWebsiteStoreForTests(undefined);
     try {
       await Deno.remove(emailLogFile);
     } catch (error) {
@@ -333,19 +327,68 @@ Deno.test("payment: mock checkout reveals a key and enables post-purchase downlo
       const [name, value] of Object.entries({
         PAYMENT_PROVIDER: original.provider,
         DENO_DEPLOYMENT_ID: original.deploymentId,
-        LICENSE_ENCRYPTION_KEY: original.encryptionKey,
-        LICENSE_SIGNING_PRIVATE_KEY: original.signingPrivateKey,
         PUBLIC_SITE_URL: original.siteUrl,
         EMAIL_LOG_FILE: original.emailLogFile,
         SESSION_SECRET: original.sessionSecret,
-        WRITASAURUS_R2_ACCOUNT_ID: original.r2AccountId,
-        WRITASAURUS_R2_ACCESS_KEY_ID: original.r2AccessKeyId,
-        WRITASAURUS_R2_SECRET_ACCESS_KEY: original.r2SecretAccessKey,
-        WRITASAURUS_R2_BUCKET: original.r2Bucket,
       })
     ) {
       if (value === undefined) Deno.env.delete(name);
       else Deno.env.set(name, value);
     }
+  }
+});
+
+Deno.test("Stripe donation events are idempotent and update receipt status", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
+  Deno.env.set("STRIPE_SECRET_KEY", "sk_test_writasaurus");
+  const store = new MemoryWebsiteStore();
+  setWebsiteStoreForTests(store);
+  globalThis.fetch = (input) => {
+    if (String(input).startsWith("https://api.stripe.com/v1/payment_intents/")) {
+      return Promise.resolve(
+        Response.json({ latest_charge: { receipt_url: "https://stripe.example/receipt" } }),
+      );
+    }
+    return originalFetch(input);
+  };
+  const event: Parameters<typeof processStripeEvent>[0] = {
+    id: "evt_donation",
+    type: "checkout.session.completed",
+    data: {
+      object: {
+        id: "cs_live_donation",
+        payment_status: "paid",
+        amount_total: 2500,
+        currency: "usd",
+        payment_intent: "pi_donation",
+        created: Math.floor(Date.now() / 1000),
+        customer_email: "donor@example.com",
+        metadata: {
+          donation: "true",
+          email: "donor@example.com",
+          amountCents: "2500",
+          platform: "macos",
+        },
+      },
+    },
+  };
+  try {
+    await processStripeEvent(event);
+    await processStripeEvent(event);
+    const donation = await store.getDonationBySession("cs_live_donation");
+    assert(donation?.amountTotal === 2500);
+    assert(donation.receiptUrl === "https://stripe.example/receipt");
+    await processStripeEvent({
+      id: "evt_refund",
+      type: "charge.refunded",
+      data: { object: { payment_intent: "pi_donation" } },
+    });
+    assert((await store.getDonationBySession("cs_live_donation"))?.status === "refunded");
+  } finally {
+    globalThis.fetch = originalFetch;
+    setWebsiteStoreForTests(undefined);
+    if (originalSecretKey === undefined) Deno.env.delete("STRIPE_SECRET_KEY");
+    else Deno.env.set("STRIPE_SECRET_KEY", originalSecretKey);
   }
 });

@@ -20,14 +20,6 @@ function isSameOriginRequest(request: Request): boolean {
   }
 }
 
-function isDesktopLicenseRequest(request: Request): boolean {
-  const pathname = new URL(request.url).pathname;
-  return /^\/api\/license\/(?:activate|refresh)$/.test(pathname) &&
-    /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(
-      request.headers.get("origin") ?? "",
-    );
-}
-
 function contentSecurityPolicy(nonce: string): string {
   const dev = import.meta.env.DEV;
   return [
@@ -69,7 +61,6 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const nonce = makeNonce();
   context.locals.cspNonce = nonce;
   const response = !SAFE_METHODS.has(context.request.method) &&
-      !isDesktopLicenseRequest(context.request) &&
       !isSameOriginRequest(context.request)
     ? new Response("Forbidden", { status: 403 })
     : await next();

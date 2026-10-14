@@ -25,16 +25,13 @@ function isSameOriginRequest(request: Request): boolean {
 
 function contentSecurityPolicy(nonce: string): string {
   const dev = import.meta.env.DEV;
-  const licenseApiOrigin = import.meta.env.PUBLIC_LICENSE_API_URL
-    ? new URL(import.meta.env.PUBLIC_LICENSE_API_URL).origin
-    : "";
   return [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
     `style-src 'self' ${dev ? "'unsafe-inline' " : ""}https://fonts.googleapis.com`,
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data:",
-    `connect-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com ${licenseApiOrigin}${
+    `connect-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com${
       dev ? " ws: wss:" : ""
     }`,
     "media-src 'self' data: blob:",

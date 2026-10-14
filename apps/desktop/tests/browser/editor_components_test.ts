@@ -165,7 +165,6 @@ function editorTestHandler(
   let dailyWordGoal = 1_500;
   let dailyWritingProgress = { date: "", startingWords: {} as Record<string, number> };
   const dailyWritingHistory = [...dailyHistory];
-  let licenseToken: string | null = null;
   const today = () => {
     const now = new Date();
     return [
@@ -237,19 +236,6 @@ function editorTestHandler(
           history: dailyWritingHistory,
         });
       });
-    }
-    if (path === "/api/editor/license-token") {
-      if (request.method === "GET") return Response.json({ token: licenseToken });
-      if (request.method === "PUT") {
-        return request.json().then((payload) => {
-          licenseToken = payload.token;
-          return new Response(null, { status: 204 });
-        });
-      }
-      if (request.method === "DELETE") {
-        licenseToken = null;
-        return new Response(null, { status: 204 });
-      }
     }
     return app(request);
   };

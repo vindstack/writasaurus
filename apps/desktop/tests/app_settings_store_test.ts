@@ -1,9 +1,6 @@
 import {
-  clearLicenseToken,
   getAppSettings,
   getLegacyDailySettings,
-  getLicenseToken,
-  setLicenseToken,
   updateAppSettings,
 } from "../src/lib/app-settings-store.ts";
 
@@ -43,11 +40,7 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
     assert(updated.writingAssistanceWords.length === 1);
     assert(updated.writingAssistanceIgnores[0] === "grammar:example");
 
-    await setLicenseToken("signed-license-token", directory);
-    assert(await getLicenseToken(directory) === "signed-license-token");
     assert((await getAppSettings(directory)).font === "georgia");
-    await clearLicenseToken(directory);
-    assert(await getLicenseToken(directory) === null);
     const persisted = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
     assert(!("dailyWordGoal" in persisted));
     assert(!("dailyWritingProgress" in persisted));
@@ -79,7 +72,7 @@ Deno.test("app settings: exposes legacy daily settings for project migration", a
         },
         writingAssistanceWords: [],
         writingAssistanceIgnores: [],
-        licenseToken: null,
+        licenseToken: "legacy-signed-token",
       }),
     );
     const legacy = await getLegacyDailySettings(directory);
@@ -87,6 +80,8 @@ Deno.test("app settings: exposes legacy daily settings for project migration", a
     assert(legacy.dailyWritingProgress.startingWords["manuscript-1"] === 125);
     const settings = await getAppSettings(directory);
     assert(!("dailyWordGoal" in settings));
+    const persisted = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    assert(!("licenseToken" in persisted), "Expected legacy license tokens to be removed");
   });
 });
 
@@ -102,7 +97,7 @@ Deno.test("app settings: rejects invalid updates and malformed persisted data", 
 
     let unknownUpdateRejected = false;
     try {
-      await updateAppSettings({ licenseToken: "not-a-preference" }, directory);
+      await updateAppSettings({ unknownSetting: "not-a-preference" }, directory);
     } catch (error) {
       unknownUpdateRejected = error instanceof TypeError;
     }

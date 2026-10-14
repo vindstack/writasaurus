@@ -1,20 +1,14 @@
-import { getPurchaseSession, getSession } from "../../lib/auth.ts";
-import { getLicenseStore } from "../../lib/store.ts";
+import { getWebsiteStore } from "../../lib/donation-store.ts";
+import { normalizedEmail } from "../../lib/auth.ts";
+import {
+  isDownloadPlatform,
+  isValidEmail,
+  parseDonationAmount,
+  startDonationCheckout,
+} from "../../lib/payment-service.ts";
 import { isReleaseManifest } from "../../../../../packages/shared/releases.ts";
-import { presignR2GetUrl, type R2Credentials } from "../../../../../packages/shared/r2.ts";
 
 export const prerender = false;
-
-function r2Credentials(): R2Credentials {
-  const accountId = Deno.env.get("WRITASAURUS_R2_ACCOUNT_ID")?.trim();
-  const accessKeyId = Deno.env.get("WRITASAURUS_R2_ACCESS_KEY_ID")?.trim();
-  const secretAccessKey = Deno.env.get("WRITASAURUS_R2_SECRET_ACCESS_KEY")?.trim();
-  const bucket = Deno.env.get("WRITASAURUS_R2_BUCKET")?.trim();
-  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
-    throw new Error("Private release storage is not configured.");
-  }
-  return { accountId, accessKeyId, secretAccessKey, bucket };
-}
 
 async function currentRelease(): Promise<unknown> {
   const site = Deno.env.get("PUBLIC_SITE_URL")?.trim();
@@ -27,42 +21,58 @@ async function currentRelease(): Promise<unknown> {
   return await response.json();
 }
 
+async function download(platform: "linux" | "macos" | "windows"): Promise<Response> {
+  const manifest = await currentRelease();
+  if (!isReleaseManifest(manifest)) throw new Error("Release metadata is invalid.");
+  return Response.redirect(manifest.artifacts[platform].downloadUrl, 303);
+}
+
 export async function POST(context: { request: Request }): Promise<Response> {
-  const session = await getSession(context.request);
-  const form = await context.request.formData();
-  const platform = form.get("platform");
-  if (platform !== "linux" && platform !== "macos" && platform !== "windows") {
-    return new Response("Invalid platform.", { status: 400 });
-  }
-  const store = getLicenseStore();
-  const purchaseSession = session?.role === "customer" ? null : await getPurchaseSession(
-    context.request,
-  );
-  if (session?.role !== "customer" && !purchaseSession) {
-    return new Response("Unauthorized.", { status: 401 });
-  }
-  let activePurchase = false;
-  if (session?.role === "customer") {
-    activePurchase = (await store.getPurchasesByEmail(session.email)).some(
-      (purchase) => purchase.status === "paid" && purchase.licenseStatus === "active",
-    );
-  } else if (purchaseSession) {
-    const purchase = await store.getPurchaseBySession(purchaseSession);
-    activePurchase = purchase?.status === "paid" && purchase.licenseStatus === "active";
-  }
-  if (!activePurchase) {
-    return new Response("An active purchase is required to download Writasaurus.", { status: 403 });
-  }
+  let platform: "linux" | "macos" | "windows";
+  let email: string;
+  let amountCents: number;
+  let marketingOptIn: boolean;
   try {
-    const manifest = await currentRelease();
-    if (!isReleaseManifest(manifest)) throw new Error("Release metadata is invalid.");
-    const artifact = manifest.artifacts[platform];
-    const url = await presignR2GetUrl(r2Credentials(), artifact.objectKey, 600);
-    return Response.redirect(url, 303);
+    const form = await context.request.formData();
+    const selectedPlatform = form.get("platform");
+    const selectedEmail = form.get("email");
+    if (!isDownloadPlatform(selectedPlatform)) {
+      return new Response("Choose a valid download platform.", { status: 400 });
+    }
+    if (selectedEmail !== null && typeof selectedEmail !== "string") {
+      return new Response("Enter a valid email address.", { status: 400 });
+    }
+    email = typeof selectedEmail === "string" ? normalizedEmail(selectedEmail) : "";
+    if (email && !isValidEmail(email)) {
+      return new Response("Enter a valid email address.", { status: 400 });
+    }
+    amountCents = parseDonationAmount(
+      form.get("donation") ?? "none",
+      form.get("customAmount"),
+    );
+    if (amountCents > 0 && !email) {
+      return new Response("Enter an email address to make a donation.", { status: 400 });
+    }
+    platform = selectedPlatform;
+    marketingOptIn = form.get("marketingEmails") === "yes";
+  } catch (error) {
+    if (error instanceof TypeError) {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
+
+  try {
+    if (email) await getWebsiteStore().setMarketingPreference(email, marketingOptIn);
+    if (amountCents === 0) return await download(platform);
+    const checkout = await startDonationCheckout(email, amountCents, platform);
+    return Response.redirect(new URL(checkout.url, context.request.url), 303);
   } catch (error) {
     console.error(
-      `Download link could not be created: ${error instanceof Error ? error.message : error}`,
+      `Download or donation flow failed: ${error instanceof Error ? error.message : error}`,
     );
-    return new Response("The download is temporarily unavailable.", { status: 503 });
+    return new Response("The download or donation service is temporarily unavailable.", {
+      status: 503,
+    });
   }
 }

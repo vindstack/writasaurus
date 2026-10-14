@@ -15,20 +15,19 @@
 </form>
 
 <script>
+  import { detectDownloadPlatform } from "../lib/download-platform.ts";
+
   const platformLabels: Record<string, string> = {
     linux: "Linux",
     macos: "macOS",
     windows: "Windows",
   };
 
-  const platform = navigator.platform.toLowerCase();
-  const detectedPlatform = platform.includes("mac")
-    ? "macos"
-    : platform.includes("win")
-    ? "windows"
-    : platform.includes("linux") || platform.includes("x11")
-    ? "linux"
-    : "";
+  const detectedPlatform = detectDownloadPlatform(
+    navigator.platform,
+    navigator.userAgent,
+    navigator.maxTouchPoints,
+  );
 
   for (const form of document.querySelectorAll<HTMLFormElement>(".downloadForm")) {
     const selector = form.querySelector<HTMLSelectElement>("[data-download-platform]");
@@ -36,11 +35,12 @@
     if (!selector || !button) continue;
 
     function updateButton(): void {
+      if (!selector || !button) return;
       const label = platformLabels[selector.value];
       button.textContent = label ? `Download for ${label}` : "Download Writasaurus";
     }
 
-    selector.value = detectedPlatform;
+    if (!selector.value) selector.value = detectedPlatform;
     updateButton();
     selector.addEventListener("change", updateButton);
   }

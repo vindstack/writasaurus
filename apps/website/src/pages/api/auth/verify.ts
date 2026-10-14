@@ -1,5 +1,5 @@
 import { createSessionCookie, hashAuthCode, normalizedEmail } from "../../../lib/auth.ts";
-import { getLicenseStore } from "../../../lib/store.ts";
+import { getWebsiteStore } from "../../../lib/donation-store.ts";
 import { isValidEmail } from "../../../lib/payment-service.ts";
 
 export const prerender = false;
@@ -13,12 +13,8 @@ export async function POST(context: { request: Request }): Promise<Response> {
   if (!isValidEmail(email) || !/^\d{8}$/.test(code)) {
     return new Response("Enter the email address and 8-digit code.", { status: 400 });
   }
-  const store = getLicenseStore();
-  const valid = await store.verifyAuthCode(
-    email,
-    "customer",
-    await hashAuthCode(email, "customer", code),
-  );
+  const store = getWebsiteStore();
+  const valid = await store.verifyAuthCode(email, await hashAuthCode(email, code));
   if (!valid) {
     return new Response("That code is invalid or expired. Request a new code and try again.", {
       status: 400,
@@ -28,7 +24,7 @@ export async function POST(context: { request: Request }): Promise<Response> {
     status: 303,
     headers: {
       location: "/account",
-      "set-cookie": await createSessionCookie(email, "customer"),
+      "set-cookie": await createSessionCookie(email),
     },
   });
 }

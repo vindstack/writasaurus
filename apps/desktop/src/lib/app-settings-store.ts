@@ -9,12 +9,7 @@ import {
 import { applicationDataDirectory } from "./desktop.ts";
 import type { AppSettings, AppSettingsUpdate } from "./app-settings-types.ts";
 
-interface StoredAppSettings extends AppSettings {
-  licenseToken: string | null;
-}
-
 const SETTINGS_FILE = "settings.json";
-const LICENSE_TOKEN_MAX_LENGTH = 16_384;
 const VALID_FONTS = new Set(FONT_OPTIONS.map((option) => option.id));
 let writes = Promise.resolve();
 
@@ -29,14 +24,13 @@ function settingsPath(directory?: string): string {
   return `${directory.replace(/[\\/]+$/, "")}${separator}${SETTINGS_FILE}`;
 }
 
-function defaultSettings(): StoredAppSettings {
+function defaultSettings(): AppSettings {
   return {
     version: 1,
     font: DEFAULT_FONT,
     wordsPerPage: DEFAULT_WORDS_PER_PAGE,
     writingAssistanceWords: [],
     writingAssistanceIgnores: [],
-    licenseToken: null,
   };
 }
 
@@ -57,15 +51,12 @@ function isStringList(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
 }
 
-function parseSettings(value: unknown): StoredAppSettings {
+function parseSettings(value: unknown): AppSettings {
   if (
     !isRecord(value) || value.version !== 1 || typeof value.font !== "string" ||
     !VALID_FONTS.has(value.font as FontOption) || !isWordCount(value.wordsPerPage) ||
     !isStringList(value.writingAssistanceWords) ||
-    !isStringList(value.writingAssistanceIgnores) ||
-    !(value.licenseToken === null ||
-      typeof value.licenseToken === "string" &&
-        value.licenseToken.length <= LICENSE_TOKEN_MAX_LENGTH)
+    !isStringList(value.writingAssistanceIgnores)
   ) {
     throw new Error("The Writasaurus settings file is invalid.");
   }
@@ -75,13 +66,17 @@ function parseSettings(value: unknown): StoredAppSettings {
     wordsPerPage: value.wordsPerPage,
     writingAssistanceWords: [...value.writingAssistanceWords],
     writingAssistanceIgnores: [...value.writingAssistanceIgnores],
-    licenseToken: value.licenseToken,
   };
 }
 
-async function readStoredSettings(directory?: string): Promise<StoredAppSettings> {
+async function readStoredSettings(directory?: string): Promise<AppSettings> {
   try {
-    return parseSettings(JSON.parse(await Deno.readTextFile(settingsPath(directory))));
+    const stored: unknown = JSON.parse(await Deno.readTextFile(settingsPath(directory)));
+    const settings = parseSettings(stored);
+    if (isRecord(stored) && "licenseToken" in stored) {
+      await writeStoredSettings(settings, directory);
+    }
+    return settings;
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) return defaultSettings();
     if (error instanceof SyntaxError) {
@@ -92,7 +87,7 @@ async function readStoredSettings(directory?: string): Promise<StoredAppSettings
 }
 
 async function writeStoredSettings(
-  settings: StoredAppSettings,
+  settings: AppSettings,
   baseDirectory?: string,
 ): Promise<void> {
   const directory = requireDirectory(baseDirectory);
@@ -157,8 +152,7 @@ function validateSettingsUpdate(value: unknown): AppSettingsUpdate {
 }
 
 export async function getAppSettings(directory?: string): Promise<AppSettings> {
-  const { licenseToken: _licenseToken, ...settings } = await readStoredSettings(directory);
-  return settings;
+  return await readStoredSettings(directory);
 }
 
 export async function updateAppSettings(value: unknown, directory?: string): Promise<AppSettings> {
@@ -167,8 +161,7 @@ export async function updateAppSettings(value: unknown, directory?: string): Pro
     const current = await readStoredSettings(directory);
     const next = parseSettings({ ...current, ...update });
     await writeStoredSettings(next, directory);
-    const { licenseToken: _licenseToken, ...publicSettings } = next;
-    return publicSettings;
+    return next;
   });
 }
 
@@ -220,25 +213,4 @@ export async function getLegacyDailySettings(directory?: string): Promise<Legacy
       }
       : { date: "", startingWords: {} },
   };
-}
-
-export async function getLicenseToken(directory?: string): Promise<string | null> {
-  return (await readStoredSettings(directory)).licenseToken;
-}
-
-export async function setLicenseToken(token: unknown, directory?: string): Promise<void> {
-  if (typeof token !== "string" || token.length === 0 || token.length > LICENSE_TOKEN_MAX_LENGTH) {
-    throw new TypeError("Invalid license token.");
-  }
-  await serializeWrite(async () => {
-    const current = await readStoredSettings(directory);
-    await writeStoredSettings({ ...current, licenseToken: token }, directory);
-  });
-}
-
-export async function clearLicenseToken(directory?: string): Promise<void> {
-  await serializeWrite(async () => {
-    const current = await readStoredSettings(directory);
-    await writeStoredSettings({ ...current, licenseToken: null }, directory);
-  });
 }

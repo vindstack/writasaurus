@@ -11,7 +11,6 @@ import { restoreEditor } from "../../lib/editor/session.ts";
 import { focusEditor, redo, undo } from "../../lib/editor/surface.ts";
 import { save, toggleFullscreen } from "../../lib/editor/commands.ts";
 import { toggleAssistance } from "../../lib/editor/assistance-state.ts";
-import { checkSavedLicense, licenseConfiguration } from "../../lib/license.ts";
 import { getFontPreference, loadAppSettings } from "../../lib/app-settings-client.ts";
 import { applyFontPreference } from "../../../../../packages/shared/settings.ts";
 import { getProjectShortcutAction } from "../../lib/shortcuts.ts";
@@ -38,26 +37,18 @@ import Sidebar from "../editor/Sidebar.vue";
 import WritingArea from "../editor/WritingArea.vue";
 import AssistancePanel from "../editor/AssistancePanel.vue";
 import StatusBar from "../editor/StatusBar.vue";
-import LicenseGate from "./LicenseGate.vue";
 import ProjectCreateDialog from "./ProjectCreateDialog.vue";
 import { useSignalValue } from "../vue-signals.ts";
 
 const AUTOSAVE_DEBOUNCE_MS = 1_000;
-const {
-    publicKey: licensePublicKey,
-    apiUrl: licenseApiUrl,
-    testBypass: licenseTestBypass,
-} = licenseConfiguration();
 const ready = ref(false);
-const licensed = ref(false);
-const licenseCheckError = ref("");
+const initializationError = ref("");
 const toolbarVisible = ref(true);
 const createProjectOpen = ref(false);
 const modeState = useSignalValue(editorMode);
 let disposed = false;
 let stopPersistence: (() => void) | undefined;
 let autosaveTimer: ReturnType<typeof setTimeout> | undefined;
-let licenseRefreshTimer: ReturnType<typeof setInterval> | undefined;
 let cleanupListeners: (() => void) | undefined;
 
 onMounted(() => {
@@ -129,24 +120,12 @@ async function initializeEditor(): Promise<void> {
     try {
         await loadAppSettings();
         applyFontPreference(getFontPreference());
-        const valid = licenseTestBypass ||
-            await checkSavedLicense(licensePublicKey, licenseApiUrl);
-        licensed.value = valid;
-        ready.value = true;
-        if (!valid) return;
-        void restoreDesktopEditor();
-        if (licenseTestBypass) return;
-        licenseRefreshTimer = setInterval(() => {
-            void checkSavedLicense(licensePublicKey, licenseApiUrl).then((stillValid) => {
-                licensed.value = stillValid;
-            }).catch((error: unknown) => {
-                console.warn("Could not refresh the Writasaurus license.", error);
-            });
-        }, 24 * 60 * 60 * 1000);
+        await restoreDesktopEditor();
     } catch (error) {
-        licenseCheckError.value = error instanceof Error
+        initializationError.value = error instanceof Error
             ? error.message
             : "Could not initialize Writasaurus.";
+    } finally {
         ready.value = true;
     }
 }
@@ -190,21 +169,8 @@ onUnmounted(() => {
     disposed = true;
     stopPersistence?.();
     clearTimeout(autosaveTimer);
-    clearInterval(licenseRefreshTimer);
     cleanupListeners?.();
 });
-
-function onLicenseActivated(): void {
-    licensed.value = true;
-    void restoreDesktopEditor();
-    licenseRefreshTimer = setInterval(() => {
-        void checkSavedLicense(licensePublicKey, licenseApiUrl).then((stillValid) => {
-            licensed.value = stillValid;
-        }).catch((error: unknown) => {
-            console.warn("Could not refresh the Writasaurus license.", error);
-        });
-    }, 24 * 60 * 60 * 1000);
-}
 
 function useCreatedProject(created: Manuscript): void {
     editorMode.value = "manuscript";
@@ -256,17 +222,12 @@ async function showManuscript(): Promise<boolean> {
 </script>
 
 <template>
-    <p v-if="licenseCheckError && !licensed" role="alert">
-        {{ licenseCheckError }} You may retry by restarting Writasaurus.
+    <p v-if="initializationError" role="alert">
+        {{ initializationError }} You may retry by restarting Writasaurus.
     </p>
-    <LicenseGate
-        v-else-if="ready && !licensed"
-        :public-key="licensePublicKey"
-        :api-url="licenseApiUrl"
-        @activated="onLicenseActivated"
-    />
+    <p v-else-if="!ready" role="status">Loading Writasaurus...</p>
     <div
-        v-else-if="licensed"
+        v-else
         :class="['app', !toolbarVisible && 'toolbarHidden']"
         :data-ready="String(ready)"
     >

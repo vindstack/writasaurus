@@ -5,7 +5,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
 <main class="page">
     <header class="header">
         <BrandMark href="/" />
-        <a class="headerLink" href="/account">Already purchased? Sign in</a>
+        <a class="headerLink" href="/account">Sign in</a>
     </header>
 
     <section class="hero" aria-labelledby="hero-title">
@@ -19,18 +19,15 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
                 Keep your drafts organized, your momentum steady, and your
                 manuscript right where it belongs: with you.
             </p>
-            <div class="purchaseActions">
+            <div class="downloadActions">
                 <a
-                    class="button button--primary purchaseButton"
-                    href="/checkout"
+                    class="button button--primary"
+                    href="/download"
                 >
-                    Get Writasaurus — $59.99 USD
+                    Download for free
                 </a>
-                <p class="licenseNote">
-                    One-time purchase. Personal license for up to two devices.{
-                        " "
-                    }
-                    <a href="/agreement">Terms apply.</a>
+                <p class="downloadNote">
+                    Optional donations support Writasaurus development.
                 </p>
             </div>
         </div>
@@ -157,7 +154,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         max-width: 35rem;
     }
 
-    .purchaseActions {
+    .downloadActions {
         align-items: flex-start;
         display: flex;
         flex-direction: column;
@@ -165,23 +162,11 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         margin-top: 1.25rem;
     }
 
-    .purchaseLink {
-        color: var(--accent-strong);
-        font-size: 0.9rem;
-        font-weight: 600;
-        text-underline-offset: 0.18em;
-    }
-
-    .licenseNote {
+    .downloadNote {
         color: var(--muted);
         font-size: 0.82rem;
         line-height: 1.4;
         max-width: 35rem;
-    }
-
-    .licenseNote a {
-        color: var(--accent-strong);
-        text-underline-offset: 0.18em;
     }
 
     .art {
@@ -346,12 +331,12 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
             margin: 0.85rem 0;
         }
 
-        .purchaseActions {
+        .downloadActions {
             gap: 0.65rem;
             margin-top: 1rem;
         }
 
-        .licenseNote {
+        .downloadNote {
             font-size: 0.78rem;
             line-height: 1.35;
         }

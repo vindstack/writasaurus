@@ -1,0 +1,44 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import SitePage from "../../components/SitePage.astro";
+import DownloadForm from "../../components/DownloadForm.astro";
+import { confirmDonationSession } from "../../lib/payment-service.ts";
+
+const sessionId = Astro.url.searchParams.get("session_id") ?? "";
+let donationAmount: number | null = null;
+
+if (
+  sessionId &&
+  (/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId) ||
+    Deno.env.get("PAYMENT_PROVIDER") === "mock" && sessionId.startsWith("mock_"))
+) {
+  try {
+    const result = await confirmDonationSession(sessionId);
+    donationAmount = result.donation.amountTotal;
+  } catch (error) {
+    console.error(
+      `Could not confirm donation: ${error instanceof Error ? error.message : error}`,
+    );
+  }
+}
+
+Astro.response.headers.set("cache-control", "no-store");
+Astro.response.headers.set("referrer-policy", "no-referrer");
+---
+
+<BaseLayout title="Writasaurus donation">
+  <SitePage>
+    <h1>{donationAmount === null ? "Thanks for supporting Writasaurus" : "Thank you"}</h1>
+    {donationAmount === null
+      ? <p role="status">
+        We couldn't confirm the donation here. Your free download is still available below.
+      </p>
+      : <p role="status">
+        Your one-time donation of ${(donationAmount / 100).toFixed(2)} USD is confirmed.
+      </p>}
+    <h2>Download Writasaurus</h2>
+    <p>The desktop app is free. Choose your platform to download the latest version.</p>
+    <DownloadForm />
+    <p><a href="/account">Your account</a></p>
+  </SitePage>
+</BaseLayout>

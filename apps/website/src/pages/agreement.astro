@@ -3,83 +3,50 @@ import BaseLayout from "../layouts/BaseLayout.astro";
 import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
 ---
 
-<BaseLayout title="Writasaurus License Agreement">
+<BaseLayout title="Writasaurus terms">
   <main class="page">
     <header class="header">
       <BrandMark href="/" />
-      <div class="headerActions">
-        <a class="headerLink" href="/">Back to home</a>
-      </div>
+      <a class="headerLink" href="/">Back to home</a>
     </header>
 
     <article class="terms">
       <p class="eyebrow">Writasaurus</p>
-      <h2>Writasaurus License Agreement</h2>
-      <p class="updated">Paid license, account, and application use</p>
+      <h1>Terms and donations</h1>
+      <p class="updated">Free desktop downloads and optional support</p>
+
+      <h2>Free downloads and your work</h2>
       <p>
-        This agreement is between you and Vindstack LLC, the provider of Writasaurus. Writasaurus
-        is a trademark of Vindstack LLC.
+        Writasaurus is available as a free desktop download. No purchase, license key, account, or
+        internet connection is required to use the downloaded application. You retain ownership of
+        the writing and EPUBs you create with Writasaurus.
       </p>
 
-      <h3>1. Purchase and personal-use license</h3>
+      <h2>Optional donations</h2>
       <p>
-        A one-time purchase grants you a personal, non-transferable license to use Writasaurus on
-        up to two devices that you control. The application is licensed, not sold, and this agreement
-        does not transfer ownership of Writasaurus or its included materials to you.
+        Donations are voluntary, one-time USD payments processed by Stripe. A donation does not
+        purchase a license, change access to Writasaurus, or unlock features. An email address is
+        required to make a donation so it can be associated with your account and receipt.
       </p>
 
-      <h3>2. License key, activation, and downloads</h3>
+      <h2>Accounts and email</h2>
       <p>
-        A license key is associated with the email address used for purchase. Keep your key private.
-        Activation requires an internet connection and is limited to two devices. The application
-        stores a signed, device-bound license token and periodically contacts our license service to
-        renew it. A token may allow up to 30 days of offline use; after that, an internet connection
-        is needed to continue using the application. Download links require signing in to the
-        purchaser account and expire.
+        Anyone who provides an email can access an account, whether or not they donate.
+        Passwordless sign-in codes are sent when requested and are necessary to access your account.
+        The account preference controls optional marketing emails only; passcode emails are separate.
+        You can change the marketing-email preference in your account.
       </p>
 
-      <h3>3. Restrictions and revocation</h3>
+      <h2>Payment and privacy</h2>
       <p>
-        You may not copy, modify, distribute, sublicense, sell, rent, or otherwise share or make
-        Writasaurus or copies of the application available to others. These restrictions apply only
-        to the application and its included materials, not to manuscripts or EPUBs you create.
-        We may revoke a license for a refund, payment dispute, or material violation of this
-        agreement. The application checks revocation when its signed token is renewed; a previously
-        issued token can remain usable offline until it expires, for up to 30 days.
-      </p>
-
-      <h3>4. Refunds</h3>
-      <p>
-        You may request a full refund during the first seven days after purchase through your
-        account. Approved refunds are submitted to the payment processor and revoke the associated
-        license. Any mandatory rights or remedies under applicable law remain available.
-      </p>
-
-      <h3>5. Your manuscripts and EPUBs</h3>
-      <p>
-        You retain ownership of the writing and EPUBs you create with Writasaurus. Writasaurus
-        claims no ownership of your work. You may keep, use, and distribute your manuscripts and
-        EPUBs, subject to any rights belonging to other people in material you include.
-      </p>
-
-      <h3>6. Account and data</h3>
-      <p>
-        We use your purchase email to issue and recover your license key, provide passwordless
-        account access, display purchase details, manage refunds, and make eligible downloads
-        available. Payment details are handled by Stripe; we do not store full card numbers. License
-        activation records include a one-way device identifier and activation timestamps. Your
-        manuscripts are stored locally and are not uploaded to our account or license services.
-      </p>
-
-      <h3>7. The application</h3>
-      <p>
-        Writasaurus is provided as available, without promises that it will always be uninterrupted
-        or error-free. Nothing in this agreement limits rights or remedies that applicable law does
-        not allow to be limited.
+        Stripe processes payment details. Writasaurus stores donation details needed to show donor
+        receipts and maintain account preferences. Manuscripts remain on your device and are not
+        uploaded to your account.
       </p>
 
       <p class="draft">
-        This is a plain-language product-license draft and has not been reviewed by a lawyer.
+        These terms describe the current product and donation flow and should be reviewed for
+        applicable legal and privacy requirements.
       </p>
       <a class="back" href="/">Back to Writasaurus</a>
     </article>
@@ -114,12 +81,6 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
   max-width: 74rem;
 }
 
-.headerActions {
-  align-items: center;
-  display: flex;
-  gap: 1.25rem;
-}
-
 .headerLink,
 .footer a {
   color: var(--muted);
@@ -131,19 +92,6 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
   color: var(--muted);
   font-size: 0.85rem;
   margin-top: 1.5rem;
-}
-
-@media (max-width: 30rem) {
-  .page {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  .headerActions {
-    align-items: flex-end;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
 }
 
 .terms {
@@ -165,7 +113,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
   text-transform: uppercase;
 }
 
-.terms h2 {
+.terms h1 {
   color: var(--accent-strong);
   font-family: var(--font-display);
   font-size: clamp(2.3rem, 5vw, 3.8rem);
@@ -180,7 +128,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
   margin: 0.8rem 0 2.5rem;
 }
 
-.terms h3 {
+.terms h2 {
   color: var(--accent-strong);
   font-family: var(--font-display);
   font-size: 1.35rem;
@@ -206,11 +154,6 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
   color: var(--accent-strong);
   font-weight: 700;
   text-underline-offset: 0.18em;
-}
-
-.back:focus-visible {
-  outline: 3px solid var(--focus-ring);
-  outline-offset: 3px;
 }
 
 @media (max-width: 48rem) {

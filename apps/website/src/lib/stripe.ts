@@ -2,12 +2,14 @@ export interface StripeCheckoutSession {
   id: string;
   url?: string | null;
   payment_status?: string;
+  created?: number;
   customer_details?: { email?: string | null } | null;
   customer_email?: string | null;
   amount_total?: number | null;
   currency?: string | null;
   payment_intent?: string | { id: string } | null;
   payment_method_types?: string[];
+  metadata?: Record<string, string>;
 }
 
 export interface StripeEvent {
@@ -58,8 +60,11 @@ async function stripeRequest<T>(
   return payload as T;
 }
 
-export async function createStripeCheckoutSession(email: string): Promise<StripeCheckoutSession> {
-  const priceId = requiredEnv("STRIPE_PRICE_ID");
+export async function createStripeCheckoutSession(
+  email: string,
+  amountCents: number,
+  platform: string,
+): Promise<StripeCheckoutSession> {
   const siteUrl = requiredEnv("PUBLIC_SITE_URL").replace(/\/+$/, "");
   const parsedSiteUrl = new URL(siteUrl);
   if (parsedSiteUrl.protocol !== "https:" || parsedSiteUrl.username || parsedSiteUrl.password) {
@@ -67,12 +72,24 @@ export async function createStripeCheckoutSession(email: string): Promise<Stripe
   }
   const params = new URLSearchParams();
   params.set("mode", "payment");
-  params.set("customer_creation", "always");
   params.set("customer_email", email);
-  params.set("line_items[0][price]", priceId);
+  params.set("line_items[0][price_data][currency]", "usd");
+  params.set("line_items[0][price_data][unit_amount]", String(amountCents));
+  params.set("line_items[0][price_data][product_data][name]", "Writasaurus donation");
   params.set("line_items[0][quantity]", "1");
-  params.set("success_url", `${siteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`);
-  params.set("cancel_url", `${siteUrl}/checkout?cancelled=1`);
+  params.set("success_url", `${siteUrl}/donation/success?session_id={CHECKOUT_SESSION_ID}`);
+  params.set("cancel_url", `${siteUrl}/download?cancelled=1`);
+  for (
+    const [key, value] of Object.entries({
+      donation: "true",
+      email,
+      amountCents: String(amountCents),
+      platform,
+    })
+  ) {
+    params.set(`metadata[${key}]`, value);
+    params.set(`payment_intent_data[metadata][${key}]`, value);
+  }
   params.set("allow_promotion_codes", "false");
   return await stripeRequest<StripeCheckoutSession>("checkout/sessions", "POST", params);
 }
@@ -94,15 +111,6 @@ export async function retrieveStripeReceiptUrl(paymentIntentId: string): Promise
   const charge = intent.latest_charge;
   const receiptUrl = typeof charge === "object" && charge !== null ? charge.receipt_url : null;
   return typeof receiptUrl === "string" && receiptUrl.startsWith("https://") ? receiptUrl : null;
-}
-
-export async function createStripeRefund(
-  paymentIntentId: string,
-  idempotencyKey: string,
-): Promise<{ id: string; status: string }> {
-  const params = new URLSearchParams();
-  params.set("payment_intent", paymentIntentId);
-  return await stripeRequest("refunds", "POST", params, idempotencyKey);
 }
 
 function toHex(bytes: Uint8Array): string {

@@ -8,13 +8,10 @@ import {
 import type { AppSettings, AppSettingsUpdate } from "./app-settings-types.ts";
 
 const SETTINGS_URL = "/api/editor/settings";
-const LICENSE_TOKEN_URL = "/api/editor/license-token";
 const VALID_FONTS = new Set(FONT_OPTIONS.map((option) => option.id));
 
 export const appSettings = shallowRef<AppSettings | null>(null);
 export const appSettingsError = ref("");
-
-export class LicenseStorageError extends Error {}
 
 let loadingSettings: Promise<AppSettings> | undefined;
 let settingsUpdates: Promise<unknown> = Promise.resolve();
@@ -123,43 +120,4 @@ export function saveWritingAssistanceWords(words: readonly string[]): Promise<vo
 
 export function saveWritingAssistanceIgnores(ignores: readonly string[]): Promise<void> {
   return updateAppSettings({ writingAssistanceIgnores: [...new Set(ignores)] });
-}
-
-async function licenseTokenRequest(
-  method: "GET" | "PUT" | "DELETE",
-  token?: string,
-): Promise<string | null> {
-  const response = await fetch(LICENSE_TOKEN_URL, {
-    method,
-    ...(method === "PUT"
-      ? { headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) }
-      : {}),
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    throw new LicenseStorageError(
-      (await response.text()).trim() || `Could not access the saved license (${response.status}).`,
-    );
-  }
-  if (method !== "GET") return null;
-  const result: unknown = await response.json();
-  if (
-    typeof result !== "object" || result === null ||
-    !("token" in result) || !(result.token === null || typeof result.token === "string")
-  ) {
-    throw new Error("The saved license response is invalid.");
-  }
-  return result.token;
-}
-
-export function getSavedLicenseToken(): Promise<string | null> {
-  return licenseTokenRequest("GET");
-}
-
-export async function saveLicenseToken(token: string): Promise<void> {
-  await licenseTokenRequest("PUT", token);
-}
-
-export async function clearSavedLicenseToken(): Promise<void> {
-  await licenseTokenRequest("DELETE");
 }

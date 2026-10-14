@@ -6,9 +6,8 @@ separate applications in one Deno workspace.
 ## Applications
 
 - `apps/desktop/` contains the editor, native launchers, and desktop tests.
-- `apps/website/` contains the marketing site, customer account, checkout, administration pages, and
-  server APIs.
-- `packages/shared/` contains release, licensing-token, and private R2 utilities.
+- `apps/website/` contains the marketing site, optional donation flow, accounts, and server APIs.
+- `packages/shared/` contains release, settings, UI, path, and private R2 utilities.
 
 Desktop project folders store manuscript versions as `draft_1.epub`, `draft_2.epub`, and so on;
 `settings.json` keeps their numbered draft list, project-specific manuscript and daily word goals,
@@ -40,36 +39,35 @@ deno task test                # build and run unit and Playwright tests
 deno task check               # format, lint, types, and tests
 ```
 
-To exercise checkout without Stripe, run the website with
-`PAYMENT_PROVIDER=mock deno task dev:website`. Mock purchases are available only outside Deno
-Deploy; local email messages are written to `apps/website/.data/emails.jsonl` instead of being sent
-through Resend. The log is ignored by Git and may contain sign-in codes and license keys. Mock
-purchases persist in memory for the life of the server process.
+To exercise donations without Stripe, run the website with
+`PAYMENT_PROVIDER=mock deno task dev:website`. Mock donations are available only outside Deno
+Deploy; local sign-in messages are written to `apps/website/.data/emails.jsonl` instead of being
+sent through Resend. The log is ignored by Git and may contain passcodes.
 
 ## Website deployment
 
-The website runs on Deno Deploy and requires PostgreSQL. Apply migrations before deployment:
+The website runs on Deno Deploy and requires PostgreSQL. To start a new database from the current
+schema, apply the initial migration:
 
 ```sh
 deno task db:migrate
 ```
 
+`deno task db:reset` is destructive: it drops the existing Writasaurus database tables and applies
+the current initial schema. Use it only when intentionally starting over with all database data
+deleted.
+
 Configure the website's environment/secret store with:
 
 - `DATABASE_URL`
-- `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, and `STRIPE_WEBHOOK_SECRET`
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
 - `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
-- `PUBLIC_SITE_URL` and `ADMIN_EMAIL`
-- `SESSION_SECRET`, `LICENSE_ENCRYPTION_KEY`, `LICENSE_SIGNING_PRIVATE_KEY`
-- `WRITASAURUS_R2_ACCOUNT_ID`, `WRITASAURUS_R2_ACCESS_KEY_ID`, `WRITASAURUS_R2_SECRET_ACCESS_KEY`,
-  and `WRITASAURUS_R2_BUCKET`
+- `PUBLIC_SITE_URL` and `SESSION_SECRET`
 
-Generate signing and encryption secrets locally with `deno task license:secrets`. Keep the private
-signing key, encryption key, session secret, Stripe credentials, and R2 credentials only in a secret
-manager; never commit them. Configure Stripe Checkout for one-time payment and create a webhook for
-`checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, and
-`charge.dispute.created`. Set the matching webhook signing secret in `STRIPE_WEBHOOK_SECRET`.
-Configure Resend with a verified sending domain.
+Configure Stripe Checkout for one-time payments and a webhook for `checkout.session.completed`,
+`checkout.session.async_payment_succeeded`, `charge.refunded`, and `charge.dispute.created`. Set its
+signing secret in `STRIPE_WEBHOOK_SECRET`. Configure Resend with a verified sending domain. Passcode
+emails are sent for passwordless account sign-in; marketing email preference does not suppress them.
 
 ### Local PostgreSQL
 
@@ -82,36 +80,28 @@ deno task db:migrate
 deno task dev:website
 ```
 
-The local database credentials in `.env.example` are only for development. The Compose service
-stores data in a persistent Docker volume; stop it with `deno task db:dev:down`. Use separate
-credentials and a separate database for staging or production.
+To discard local data and recreate the current schema, run `deno task db:reset`. The local database
+credentials in `.env.example` are only for development. The Compose service stores data in a
+persistent Docker volume; stop it with `deno task db:dev:down`. Use separate credentials and a
+separate database for staging or production.
 
-The website uses passwordless email codes for customer accounts and for the single configured
-administrator. The administrator can search purchases, revoke or restore eligible licenses, reset
-device activations, and inspect device activity. Refunds requested during the first seven days are
-submitted to Stripe; successful refunds revoke the license. A restored license cannot be one that
-has been refunded or disputed.
+## Free desktop downloads and donations
 
-## Desktop licensing
+The desktop app is free to download and use. The website's download flow asks for a platform and
+optionally an email address, then offers free, a one-time $10 or $25 USD donation, or a custom
+one-time USD amount. Custom amounts must meet Stripe's minimum; Writasaurus sets no additional upper
+cap. An email is required for a donation. Downloads do not require an account or payment.
 
-The desktop app requires a license key on first launch. A purchase supports two device activations.
-It stores a signed, device-bound token locally, refreshes it on launch while online, and can operate
-offline until the token expires after 30 days. Revocation therefore takes effect on the next online
-refresh or when the current offline token expires; no client-side licensing scheme can prevent a
-determined owner of a desktop computer from modifying their local copy.
+Anyone who provides an email has an account, whether or not they donate. Accounts use passwordless
+email codes to show any donation receipts and manage the marketing email preference. The marketing
+checkbox is checked by default; account holders can uncheck it. There is no download history.
+Passcode emails are necessary for sign-in and are not affected by the marketing preference.
 
-For desktop builds, provide the public build-time variables `PUBLIC_LICENSE_API_URL` and
-`PUBLIC_LICENSE_SIGNING_PUBLIC_KEY`. The public key must match the private Ed25519 key held by the
-website. These public values are embedded in the desktop build and are not secrets. Generate the
-signing pair and other application secrets with `deno task license:secrets`; copy
-`LICENSE_SIGNING_PRIVATE_KEY` to the website's secret configuration and
-`PUBLIC_LICENSE_SIGNING_PUBLIC_KEY` to the desktop build environment.
-
-## Public desktop downloads
+### Public desktop releases
 
 Create a Cloudflare R2 bucket for downloadable release artifacts and expose it through a public
 HTTPS custom domain. For local publishing, copy `.env.example` to `.env` and set the R2 account ID,
-access key ID, secret access key, bucket name, and the public base URL for that domain. Keep R2
+access key ID, secret access key, bucket name, and public base URL for that domain. Keep R2
 credentials local; they are only used by the release command. Build and publish an immutable
 semantic version:
 
@@ -127,15 +117,13 @@ with public artifact URLs. Review and deploy the website to publish the latest r
 `--dry-run` to build, validate, and preview the release metadata without reading R2 credentials or
 uploading. Existing immutable version paths cannot be republished.
 
-The marketing page reads `latest.json` and presents direct downloads for Linux, macOS, and Windows.
-The account's authenticated download endpoint remains available and checks for an active paid
-license before returning a short-lived signed R2 URL.
+The website reads the release manifest and redirects download requests directly to the public
+artifact URL. No purchase, account, or license check is involved.
 
 ## Data and security
 
-Manuscripts remain on the user's device. The website stores the purchase email, a hash of each
-license key, an encrypted copy for email recovery, activations, sign-in and refund state, and
-administrative audit events. Device identifiers are stored as one-way hashes. PostgreSQL backups,
-access, retention, tax handling, consumer disclosures, and final license terms must be reviewed
-before a paid launch. The plain-language agreement in the website is a product draft, not legal
-advice.
+Manuscripts remain on the user's device. The website stores donation amounts and processor IDs,
+donor email addresses, Stripe receipt URLs, passwordless sign-in state, and marketing email
+preferences. Payment details are handled by Stripe; the website does not store card numbers.
+PostgreSQL backups, access, retention, tax handling, marketing consent, and donation terms should be
+reviewed before launch. The website terms are a product draft, not legal advice.

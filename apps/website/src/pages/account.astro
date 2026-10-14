@@ -1,67 +1,77 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SitePage from "../components/SitePage.astro";
-import DownloadForm from "../components/DownloadForm.astro";
 import { getSession } from "../lib/auth.ts";
-import { getLicenseStore } from "../lib/store.ts";
+import { getWebsiteStore } from "../lib/donation-store.ts";
 
 const session = await getSession(Astro.request);
-if (session?.role === "admin") return Astro.redirect("/admin");
-const purchases = session?.role === "customer"
-  ? await getLicenseStore().getPurchasesByEmail(session.email)
-  : [];
 const sent = Astro.url.searchParams.get("sent") === "1";
-const status = Astro.url.searchParams.get("status");
+const preferencesUpdated = Astro.url.searchParams.get("preferences") === "updated";
+const donations = session ? await getWebsiteStore().getDonationsByEmail(session.email) : [];
+const marketingOptIn = session
+  ? (await getWebsiteStore().getMarketingPreference(session.email)) ?? true
+  : true;
 ---
 
-<BaseLayout title="Writasaurus account">
+<BaseLayout title={session ? "Your Writasaurus account" : "Sign in to Writasaurus"}>
   <SitePage>
-    <h1>Your account</h1>
-    {session?.role !== "customer"
+    <h1>{session ? "Your account" : "Sign in"}</h1>
+    {session
       ? <>
-        {sent && <p role="status">If that email has a purchase, a sign-in code is on its way.</p>}
+        <p>Signed in as <strong>{session.email}</strong>.</p>
+        {preferencesUpdated && <p role="status">Your email preference has been saved.</p>}
+        <section aria-labelledby="donations-heading">
+          <h2 id="donations-heading">Donation receipts</h2>
+          {donations.length
+            ? donations.map((donation) => <article>
+              <h3>{(donation.amountTotal / 100).toFixed(2)} {donation.currency.toUpperCase()}</h3>
+              <p>{donation.donatedAt.toLocaleDateString()} — {donation.status}</p>
+              {donation.receiptUrl && <p>
+                <a href={donation.receiptUrl} rel="noreferrer">View Stripe receipt</a>
+              </p>}
+            </article>)
+            : <p>No donations are associated with this email yet.</p>}
+        </section>
+        <section aria-labelledby="email-preference-heading">
+          <h2 id="email-preference-heading">Email preferences</h2>
+          <form action="/api/account/preferences" method="post">
+            <label>
+              <input
+                type="checkbox"
+                name="marketingEmails"
+                value="yes"
+                checked={marketingOptIn}
+              />
+              Send me optional marketing emails
+            </label>
+            <p>Passcode emails needed to sign in are always sent and are not affected by this setting.</p>
+            <button type="submit">Save preference</button>
+          </form>
+        </section>
+        <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
+      </>
+      : <>
+        <p>Sign in to manage your account and email preferences. No donation is required.</p>
+        {sent && <p role="status">If the address is valid, a sign-in code is on its way.</p>}
         <form action="/api/auth/request" method="post">
-          <label for="email">Purchase email address</label>
+          <label for="email">Email address</label>
           <input id="email" name="email" type="email" autocomplete="email" required maxlength="254" />
           <button type="submit">Email me a sign-in code</button>
         </form>
         {sent && <form action="/api/auth/verify" method="post">
           <label for="verify-email">Email address</label>
-          <input id="verify-email" name="email" type="email" autocomplete="email" required maxlength="254" />
+          <input
+            id="verify-email"
+            name="email"
+            type="email"
+            autocomplete="email"
+            required
+            maxlength="254"
+          />
           <label for="code">8-digit sign-in code</label>
           <input id="code" name="code" inputmode="numeric" pattern="[0-9]{8}" required maxlength="8" />
           <button type="submit">Sign in</button>
         </form>}
-      </>
-      : <>
-        <p>Signed in as <strong>{session.email}</strong>.</p>
-        {status === "key-sent" && <p role="status">Your license key has been emailed.</p>}
-        {status === "refund-pending" && <p role="status">Your refund request is processing.</p>}
-        {status === "refunded" && <p role="status">The refund has been issued and the license revoked.</p>}
-        {purchases.map((purchase) => {
-          const withinRefundWindow = Date.now() < purchase.purchasedAt.getTime() + 7 * 86_400_000;
-          return <section>
-            <h2>Purchase from {purchase.purchasedAt.toLocaleDateString()}</h2>
-            <p>{(purchase.amountTotal / 100).toFixed(2)} {purchase.currency.toUpperCase()} — {
-              purchase.status
-            }</p>
-            <p>License: {purchase.licenseStatus}; {purchase.maxDevices} devices allowed.</p>
-            {purchase.receiptUrl && <p><a href={purchase.receiptUrl} rel="noreferrer">View receipt</a></p>}
-            {purchase.licenseStatus === "active" && <>
-              <form action="/api/account/key" method="post">
-                <input type="hidden" name="purchaseId" value={purchase.id} />
-                <button type="submit">Email me my license key</button>
-              </form>
-              <DownloadForm />
-            </>}
-            {withinRefundWindow && purchase.status === "paid" && <form action="/api/account/refund" method="post">
-              <input type="hidden" name="purchaseId" value={purchase.id} />
-              <label><input type="checkbox" name="confirm" value="yes" required /> I understand this will refund the purchase and revoke this license.</label>
-              <button type="submit">Request a refund</button>
-            </form>}
-          </section>;
-        })}
-        <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
       </>}
   </SitePage>
 </BaseLayout>

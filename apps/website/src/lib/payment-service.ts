@@ -1,11 +1,4 @@
-import {
-  decryptLicenseKey,
-  encryptLicenseKey,
-  generateLicenseKey,
-  hashText,
-} from "./license-crypto.ts";
-import { sendPurchaseEmail } from "./email.ts";
-import { type FulfillmentInput, getLicenseStore, type PurchaseRecord } from "./store.ts";
+import { type DonationInput, type DonationRecord, getWebsiteStore } from "./donation-store.ts";
 import {
   createStripeCheckoutSession,
   retrieveStripeCheckoutSession,
@@ -14,20 +7,21 @@ import {
   type StripeEvent,
 } from "./stripe.ts";
 
-export const PURCHASE_PRICE_CENTS = 5999;
-export const PURCHASE_CURRENCY = "usd";
+export const STRIPE_MIN_DONATION_CENTS = 50;
+export const DONATION_CURRENCY = "usd";
+export const DOWNLOAD_PLATFORMS = ["linux", "macos", "windows"] as const;
+
+export type DownloadPlatform = typeof DOWNLOAD_PLATFORMS[number];
+export interface ConfirmedDonation {
+  donation: DonationRecord;
+  platform: DownloadPlatform;
+}
+
+const mockDonationPlatforms = new Map<string, DownloadPlatform>();
 
 export function isLocalMockEnabled(): boolean {
   return Deno.env.get("PAYMENT_PROVIDER") === "mock" &&
     Deno.env.get("DENO_DEPLOYMENT_ID") === undefined;
-}
-
-export function normalizeLicenseKey(value: string): string {
-  return value.trim().replaceAll(/[\s-]/g, "").toUpperCase();
-}
-
-export function isValidLicenseKey(value: string): boolean {
-  return /^WRIT[A-F0-9]{48}$/.test(normalizeLicenseKey(value));
 }
 
 export function isValidEmail(value: string): boolean {
@@ -35,150 +29,137 @@ export function isValidEmail(value: string): boolean {
   return email.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-async function createPurchase(
-  input: Omit<FulfillmentInput, "keyHash" | "encryptedKey" | "claimHash">,
-) {
-  const key = generateLicenseKey();
-  const keyHash = await hashText(normalizeLicenseKey(key));
-  const encryptedKey = await encryptLicenseKey(key);
-  const claimHash = await hashText(input.stripeSessionId);
-  const fulfilled = await getLicenseStore().fulfill({
-    ...input,
-    keyHash,
-    encryptedKey,
-    claimHash,
-  });
-  return { ...fulfilled, licenseKey: fulfilled.created ? key : null };
+export function isDownloadPlatform(value: unknown): value is DownloadPlatform {
+  return value === "linux" || value === "macos" || value === "windows";
 }
 
-export async function deliverPurchaseKey(
-  purchase: PurchaseRecord,
-  template = "purchase",
-): Promise<void> {
-  const store = getLicenseStore();
-  const shouldSend = await store.startEmailDelivery(
-    purchase.licenseId,
-    template,
-    purchase.email,
-  );
-  if (!shouldSend) {
-    if (!await store.emailWasSent(purchase.licenseId, template)) {
-      throw new Error("Purchase email is still pending or has not been delivered.");
-    }
-    return;
+export function parseDonationAmount(choice: unknown, customAmount: unknown): number {
+  if (choice === "none") return 0;
+  if (choice === "10") return 1000;
+  if (choice === "25") return 2500;
+  if (choice !== "custom" || typeof customAmount !== "string") {
+    throw new TypeError("Choose free, $10, $25, or a custom amount.");
   }
-  try {
-    const key = await decryptLicenseKey(purchase.encryptedKey);
-    await sendPurchaseEmail(purchase.email, key, purchase.amountTotal, purchase.currency);
-    await store.finishEmailDelivery(purchase.licenseId, template, "sent");
-  } catch (error) {
-    await store.finishEmailDelivery(purchase.licenseId, template, "failed", "delivery-failed");
-    throw error;
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(customAmount.trim());
+  if (!match) throw new TypeError("Enter a custom donation amount in USD.");
+  const cents = BigInt(match[1]) * 100n + BigInt((match[2] ?? "").padEnd(2, "0") || "0");
+  if (cents < BigInt(STRIPE_MIN_DONATION_CENTS)) {
+    throw new TypeError("Custom donations must meet Stripe's minimum of $0.50 USD.");
   }
+  if (cents > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new TypeError("The custom donation amount is too large to process.");
+  }
+  return Number(cents);
 }
 
-export async function createMockPurchase(email: string): Promise<string> {
-  if (!isLocalMockEnabled()) {
-    throw new Error("Mock payments are available only when explicitly enabled outside production.");
-  }
-  if (!isValidEmail(email)) throw new Error("Enter a valid email address.");
-  const sessionId = `mock_${crypto.randomUUID()}`;
-  const created = await createPurchase({
-    eventType: "mock.checkout.completed",
-    licenseId: crypto.randomUUID(),
-    purchaseId: crypto.randomUUID(),
-    email: email.trim().toLowerCase(),
-    stripeSessionId: sessionId,
-    paymentIntentId: `mock_pi_${crypto.randomUUID()}`,
-    amountTotal: PURCHASE_PRICE_CENTS,
-    currency: PURCHASE_CURRENCY,
-    receiptUrl: null,
-    purchasedAt: new Date(),
-  });
-  try {
-    await deliverPurchaseKey(created.purchase);
-  } catch (error) {
-    console.warn(
-      `Mock purchase email was not delivered: ${error instanceof Error ? error.message : error}`,
-    );
-  }
-  return sessionId;
+function paymentIntentId(session: StripeCheckoutSession): string | null {
+  return typeof session.payment_intent === "string"
+    ? session.payment_intent
+    : session.payment_intent?.id ?? null;
 }
 
-export async function startCheckout(email: string): Promise<{ url: string; mock: boolean }> {
-  if (!isValidEmail(email)) throw new Error("Enter a valid email address.");
+function sessionMetadata(session: StripeCheckoutSession): Record<string, string> {
+  return session.metadata ?? {};
+}
+
+function confirmedPlatform(session: StripeCheckoutSession): DownloadPlatform {
+  const platform = sessionMetadata(session).platform;
+  if (!isDownloadPlatform(platform)) throw new Error("Donation session has an invalid platform.");
+  return platform;
+}
+
+async function recordPaidSession(
+  session: StripeCheckoutSession,
+  eventId?: string,
+): Promise<ConfirmedDonation> {
+  const metadata = sessionMetadata(session);
+  if (metadata.donation !== "true") throw new Error("This is not a Writasaurus donation session.");
+  const email = metadata.email?.trim().toLowerCase();
+  const amountTotal = session.amount_total;
+  const expectedAmount = Number(metadata.amountCents);
+  const intentId = paymentIntentId(session);
+  if (
+    session.payment_status !== "paid" || session.currency !== DONATION_CURRENCY ||
+    !email || !isValidEmail(email) || !session.id || !intentId ||
+    typeof amountTotal !== "number" || !Number.isSafeInteger(amountTotal) ||
+    amountTotal !== expectedAmount ||
+    amountTotal < STRIPE_MIN_DONATION_CENTS
+  ) {
+    throw new Error("Paid donation session is missing valid donation details.");
+  }
+  const platform = confirmedPlatform(session);
+  const receiptUrl = session.id.startsWith("mock_")
+    ? null
+    : await retrieveStripeReceiptUrl(intentId);
+  const input: DonationInput = {
+    id: crypto.randomUUID(),
+    stripeSessionId: session.id,
+    paymentIntentId: intentId,
+    email,
+    amountTotal,
+    currency: DONATION_CURRENCY,
+    receiptUrl,
+    donatedAt: typeof session.created === "number" ? new Date(session.created * 1000) : new Date(),
+  };
+  const donation = await getWebsiteStore().recordDonation(input, eventId);
+  return { donation, platform };
+}
+
+export async function startDonationCheckout(
+  email: string,
+  amountCents: number,
+  platform: DownloadPlatform,
+): Promise<{ url: string; mock: boolean }> {
+  const normalized = email.trim().toLowerCase();
+  if (!isValidEmail(normalized)) throw new TypeError("Enter a valid email address to donate.");
+  if (!Number.isSafeInteger(amountCents) || amountCents < STRIPE_MIN_DONATION_CENTS) {
+    throw new TypeError("Choose a valid donation amount.");
+  }
   if (isLocalMockEnabled()) {
-    const sessionId = await createMockPurchase(email);
-    return { url: `/checkout/success?session_id=${encodeURIComponent(sessionId)}`, mock: true };
+    const sessionId = `mock_${crypto.randomUUID()}`;
+    mockDonationPlatforms.set(sessionId, platform);
+    await getWebsiteStore().recordDonation({
+      id: crypto.randomUUID(),
+      stripeSessionId: sessionId,
+      paymentIntentId: `mock_pi_${crypto.randomUUID()}`,
+      email: normalized,
+      amountTotal: amountCents,
+      currency: DONATION_CURRENCY,
+      receiptUrl: null,
+      donatedAt: new Date(),
+    });
+    return {
+      url: `/donation/success?session_id=${encodeURIComponent(sessionId)}`,
+      mock: true,
+    };
   }
-  const session = await createStripeCheckoutSession(email);
+  const session = await createStripeCheckoutSession(normalized, amountCents, platform);
   if (!session.url || !session.url.startsWith("https://checkout.stripe.com/")) {
     throw new Error("Stripe did not provide a valid Checkout URL.");
   }
   return { url: session.url, mock: false };
 }
 
-export async function confirmStripePurchase(sessionId: string): Promise<StripeCheckoutSession> {
-  if (sessionId.startsWith("mock_") && isLocalMockEnabled()) {
-    const purchase = await getLicenseStore().getPurchaseBySession(sessionId);
-    if (!purchase) throw new Error("Mock purchase was not found.");
-    return {
-      id: sessionId,
-      payment_status: "paid",
-      customer_email: purchase.email,
-      amount_total: purchase.amountTotal,
-      currency: purchase.currency,
-      payment_intent: purchase.paymentIntentId,
-    };
+export async function confirmDonationSession(sessionId: string): Promise<ConfirmedDonation> {
+  if (isLocalMockEnabled() && sessionId.startsWith("mock_")) {
+    const donation = await getWebsiteStore().getDonationBySession(sessionId);
+    const platform = mockDonationPlatforms.get(sessionId);
+    if (!donation || !platform) throw new Error("Mock donation session was not found.");
+    return { donation, platform };
   }
-  return await retrieveStripeCheckoutSession(sessionId);
-}
-
-export async function fulfillConfirmedStripePurchase(
-  session: StripeCheckoutSession,
-): Promise<PurchaseRecord> {
-  if (
-    session.payment_status !== "paid" ||
-    session.amount_total !== PURCHASE_PRICE_CENTS ||
-    session.currency !== PURCHASE_CURRENCY
-  ) throw new Error("The Stripe Checkout Session is not a completed $59.99 USD purchase.");
-  const email = session.customer_details?.email ?? session.customer_email;
-  const paymentIntentId = typeof session.payment_intent === "string"
-    ? session.payment_intent
-    : session.payment_intent?.id;
-  if (!email || !session.id || !paymentIntentId) {
-    throw new Error("Paid Checkout Session is missing required purchase details.");
-  }
-  const result = await createPurchase({
-    eventType: "checkout.success.confirmed",
-    licenseId: crypto.randomUUID(),
-    purchaseId: crypto.randomUUID(),
-    email: email.trim().toLowerCase(),
-    stripeSessionId: session.id,
-    paymentIntentId,
-    amountTotal: PURCHASE_PRICE_CENTS,
-    currency: PURCHASE_CURRENCY,
-    receiptUrl: session.id.startsWith("mock_")
-      ? null
-      : await retrieveStripeReceiptUrl(paymentIntentId),
-    purchasedAt: new Date(),
-  });
-  try {
-    await deliverPurchaseKey(result.purchase);
-  } catch (error) {
-    console.warn(
-      `Purchase email delivery failed: ${error instanceof Error ? error.message : error}`,
-    );
-  }
-  return result.purchase;
+  return await recordPaidSession(await retrieveStripeCheckoutSession(sessionId));
 }
 
 function asString(value: unknown): string | null {
   return typeof value === "string" && value ? value : null;
 }
 
-function sessionFromEvent(event: StripeEvent): Record<string, unknown> {
-  return event.data.object;
+function eventPaymentIntent(event: StripeEvent): string | null {
+  const value = event.data.object.payment_intent;
+  if (typeof value === "string") return value;
+  return typeof value === "object" && value !== null
+    ? asString((value as { id?: unknown }).id)
+    : null;
 }
 
 export async function processStripeEvent(event: StripeEvent): Promise<void> {
@@ -186,46 +167,19 @@ export async function processStripeEvent(event: StripeEvent): Promise<void> {
     event.type === "checkout.session.completed" ||
     event.type === "checkout.session.async_payment_succeeded"
   ) {
-    const session = sessionFromEvent(event);
-    if (session.payment_status !== "paid") return;
-    if (
-      session.amount_total !== PURCHASE_PRICE_CENTS ||
-      session.currency !== PURCHASE_CURRENCY
-    ) throw new Error("Checkout total did not match the configured $59.99 USD price.");
-    const details =
-      typeof session.customer_details === "object" && session.customer_details !== null
-        ? session.customer_details as { email?: unknown }
-        : null;
-    const email = asString(details?.email) ?? asString(session.customer_email);
-    const sessionId = asString(session.id);
-    const paymentIntentId = asString(session.payment_intent) ??
-      (typeof session.payment_intent === "object" && session.payment_intent !== null
-        ? asString((session.payment_intent as { id?: unknown }).id)
-        : null);
-    const created = typeof session.created === "number" ? session.created * 1000 : Date.now();
-    if (!email || !sessionId || !paymentIntentId) {
-      throw new Error("Paid Checkout Session is missing required purchase details.");
-    }
-    const result = await createPurchase({
-      eventId: event.id,
-      eventType: event.type,
-      licenseId: crypto.randomUUID(),
-      purchaseId: crypto.randomUUID(),
-      email: email.trim().toLowerCase(),
-      stripeSessionId: sessionId,
-      paymentIntentId,
-      amountTotal: PURCHASE_PRICE_CENTS,
-      currency: PURCHASE_CURRENCY,
-      receiptUrl: await retrieveStripeReceiptUrl(paymentIntentId),
-      purchasedAt: new Date(created),
-    });
-    await deliverPurchaseKey(result.purchase);
+    const session = event.data.object as unknown as StripeCheckoutSession;
+    if (sessionMetadata(session).donation !== "true" || session.payment_status !== "paid") return;
+    await recordPaidSession(session, event.id);
     return;
   }
   if (event.type === "charge.refunded" || event.type === "charge.dispute.created") {
-    const paymentIntentId = asString(event.data.object.payment_intent);
-    if (paymentIntentId) {
-      await getLicenseStore().applyStripeRefund(event.id, event.type, paymentIntentId);
+    const intentId = eventPaymentIntent(event);
+    if (intentId) {
+      await getWebsiteStore().setDonationStatus(
+        event.id,
+        intentId,
+        event.type === "charge.refunded" ? "refunded" : "disputed",
+      );
     }
   }
 }

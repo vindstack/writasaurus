@@ -1,0 +1,181 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SitePage from "../components/SitePage.astro";
+
+const cancelled = Astro.url.searchParams.get("cancelled") === "1";
+---
+
+<BaseLayout title="Download Writasaurus">
+  <SitePage>
+    <h1>Download Writasaurus</h1>
+    <p>
+      The desktop app is free. Donations are optional and help support
+      development.
+    </p>
+    {
+      cancelled && (
+        <p role="status">
+          Donation checkout was cancelled. You have not been charged.
+        </p>
+      )
+    }
+    <form action="/api/download" method="post" data-download-flow>
+      <p class="alert alert--info" id="email-help">
+        No email is needed for a free download. Add yours to create an account
+        and manage your email preferences. Donations require an email address
+        for your receipt.
+      </p>
+      <label for="email">Email address (optional, except for donations)</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        autocomplete="email"
+        maxlength="254"
+        aria-describedby="email-help"
+      />
+
+      <label class="marketingConsent">
+        <input type="checkbox" name="marketingEmails" value="yes" checked />
+        <span>
+          I'd like occasional emails about upcoming products, services, and
+          news.
+        </span>
+      </label>
+
+      <fieldset class="donationOptions" data-donation-options>
+        <legend>Optional one-time donation (USD)</legend>
+        <label>
+          <input type="radio" name="donation" value="10" checked />
+          <span>$10</span>
+        </label>
+        <label>
+          <input type="radio" name="donation" value="25" />
+          <span>$25</span>
+        </label>
+        <label>
+          <input type="radio" name="donation" value="custom" />
+          <span>Custom amount</span>
+        </label>
+        <label>
+          <input type="radio" name="donation" value="none" />
+          <span>Free — enjoy Writasaurus, no donation needed.</span>
+        </label>
+      </fieldset>
+      <label for="custom-amount" data-custom-label>Custom amount in USD</label>
+      <input
+        id="custom-amount"
+        name="customAmount"
+        type="number"
+        min="0.50"
+        step="0.01"
+        inputmode="decimal"
+        placeholder="0.50 or more"
+        data-custom-amount
+      />
+
+      <label for="platform">Download platform</label>
+      <div class="selectControl">
+        <select id="platform" name="platform" required>
+          <option value="" selected disabled>Choose a platform</option>
+          <option value="linux">Linux</option>
+          <option value="macos">macOS</option>
+          <option value="windows">Windows</option>
+        </select>
+      </div>
+      <button type="submit" class="button--primary" data-submit-button
+        >Continue to download</button
+      >
+    </form>
+  </SitePage>
+</BaseLayout>
+
+<script>
+  import { detectDownloadPlatform } from "../lib/download-platform.ts";
+
+  const flow = document.querySelector<HTMLFormElement>("[data-download-flow]");
+  const platform = flow?.querySelector<HTMLSelectElement>("#platform");
+  if (platform && !platform.value) {
+    platform.value = detectDownloadPlatform(
+      navigator.platform,
+      navigator.userAgent,
+      navigator.maxTouchPoints,
+    );
+  }
+  const donationOptions = flow?.querySelector<HTMLFieldSetElement>(
+    "[data-donation-options]",
+  );
+  const email = flow?.querySelector<HTMLInputElement>("#email");
+  const customAmount = flow?.querySelector<HTMLInputElement>(
+    "[data-custom-amount]",
+  );
+  const customLabel = flow?.querySelector<HTMLLabelElement>(
+    "[data-custom-label]",
+  );
+  const submit = flow?.querySelector<HTMLButtonElement>("[data-submit-button]");
+
+  function updateDonationFields(): void {
+    const donation = donationOptions?.querySelector<HTMLInputElement>(
+      'input[name="donation"]:checked',
+    );
+    if (!donation || !email || !customAmount || !customLabel || !submit) return;
+    const isDonation = donation.value !== "none";
+    const isCustom = donation.value === "custom";
+    email.required = isDonation;
+    customAmount.hidden = !isCustom;
+    customLabel.hidden = !isCustom;
+    customAmount.required = isCustom;
+    submit.textContent = isDonation
+      ? "Continue to secure donation"
+      : "Download Writasaurus";
+  }
+
+  donationOptions?.addEventListener("change", updateDonationFields);
+  updateDonationFields();
+</script>
+
+<style>
+  [data-custom-label][hidden] {
+    display: none;
+  }
+
+  .donationOptions {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .marketingConsent,
+  .donationOptions label {
+    align-items: baseline;
+    display: flex;
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .marketingConsent input,
+  .donationOptions input {
+    flex-shrink: 0;
+  }
+
+  .selectControl {
+    position: relative;
+  }
+
+  .selectControl select {
+    appearance: none;
+    padding-inline-end: 2.5rem;
+  }
+
+  .selectControl::after {
+    border-bottom: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    content: "";
+    height: 0.45rem;
+    inset-inline-end: 1rem;
+    pointer-events: none;
+    position: absolute;
+    top: 50%;
+    transform: translateY(-75%) rotate(45deg);
+    width: 0.45rem;
+  }
+</style>
