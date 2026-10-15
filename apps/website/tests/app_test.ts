@@ -18,6 +18,9 @@ Deno.test("website root presents free downloads and optional donations", async (
   assert(!page.includes("Donor account"));
   assert(!page.includes('id="editor"'));
   assert(!page.includes('component-url="/_astro/EditorApp.'));
+  assert(page.includes('src="/princess_and_the_goblin.png"'));
+  assert(page.includes('width="997" height="699"'));
+  assert(!page.includes("FIELD NOTES"));
 });
 
 Deno.test("download forms require explicit acceptance of the terms", async () => {
