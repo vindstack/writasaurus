@@ -8,6 +8,7 @@ import { htmlToMarkdown } from "../utilties/markdown-utilities.ts";
  * parts of the UI that depend on a value re-render when it changes.
  */
 export const manuscript = signal<Manuscript>(blankManuscript());
+export const manuscriptLoadVersion = signal(0);
 export const activeChapterIndex = signal(0);
 export const desktopFileLoaded = signal(false);
 export const hasUnsavedChanges = signal(false);
@@ -70,6 +71,7 @@ export function replaceManuscript(
 ): void {
   batch(() => {
     manuscript.value = next;
+    manuscriptLoadVersion.value++;
     activeChapterIndex.value = options.activeChapter ?? 0;
     if (options.desktopFileLoaded !== undefined) {
       desktopFileLoaded.value = options.desktopFileLoaded;

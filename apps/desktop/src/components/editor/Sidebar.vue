@@ -9,6 +9,7 @@ import {
   deleteChapter,
   hasUnsavedChanges,
   manuscript,
+  manuscriptLoadVersion,
   replaceManuscript,
   reorderChapter,
   selectChapter,
@@ -30,6 +31,7 @@ interface DraftSummary {
 }
 
 const manuscriptState = useSignalValue(manuscript);
+const loadVersion = useSignalValue(manuscriptLoadVersion);
 const activeIndex = useSignalValue(activeChapterIndex);
 const isOpen = useSignalValue(sidebarOpen);
 const addMenuOpen = ref(false);
@@ -40,6 +42,7 @@ const sourceDraft = ref(1);
 const drafts = ref<DraftSummary[]>([]);
 const activeDraft = ref(1);
 const draftBusy = ref(false);
+const draftLoading = ref(false);
 const draftError = ref("");
 const list = ref<HTMLOListElement | null>(null);
 let destroyDragDrop: (() => void) | undefined;
@@ -67,14 +70,6 @@ onUnmounted(() => destroyDragDrop?.());
 function choose(index: number): void {
   selectChapter(index);
   if (matchMedia("(max-width: 55rem)").matches) sidebarOpen.value = false;
-}
-
-async function refreshDrafts(): Promise<void> {
-  const response = await fetch("/api/editor/drafts");
-  if (!response.ok) throw new Error(await response.text());
-  const result = await response.json();
-  drafts.value = result.drafts;
-  activeDraft.value = result.activeDraft;
 }
 
 async function chooseDraft(number: number): Promise<void> {
@@ -154,19 +149,34 @@ async function saveBeforeDraftChange(): Promise<boolean> {
   return !hasUnsavedChanges.peek();
 }
 
-onMounted(() => {
-  void refreshDrafts().catch((error: unknown) => {
-    console.error("Could not load project drafts:", error);
-    draftError.value = error instanceof Error ? error.message : "Could not load project drafts.";
-  });
-});
-
-watch(() => manuscriptState.value.filename, () => {
-  void refreshDrafts().catch((error: unknown) => {
-    console.error("Could not refresh project drafts:", error);
-    draftError.value = error instanceof Error ? error.message : "Could not refresh project drafts.";
-  });
-});
+watch(
+  [loadVersion, () => manuscriptState.value.filename],
+  async (_value, _previous, onCleanup) => {
+    let current = true;
+    onCleanup(() => current = false);
+    drafts.value = [];
+    activeDraft.value = 1;
+    draftError.value = "";
+    draftMenuOpen.value = false;
+    createDraftOpen.value = false;
+    draftLoading.value = true;
+    try {
+      const response = await fetch("/api/editor/drafts");
+      if (!response.ok) throw new Error(await response.text());
+      const result = await response.json();
+      if (!current) return;
+      drafts.value = result.drafts;
+      activeDraft.value = result.activeDraft;
+    } catch (error) {
+      if (!current) return;
+      console.error("Could not load project drafts:", error);
+      draftError.value = error instanceof Error ? error.message : "Could not load project drafts.";
+    } finally {
+      if (current) draftLoading.value = false;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -185,7 +195,7 @@ watch(() => manuscriptState.value.filename, () => {
               size="small"
               aria-haspopup="menu"
               :aria-expanded="draftMenuOpen"
-              :disabled="draftBusy"
+              :disabled="draftBusy || draftLoading"
               data-draft-selector
             >
               Draft {{ activeDraft }} <span aria-hidden="true">▾</span>
@@ -216,7 +226,7 @@ watch(() => manuscriptState.value.filename, () => {
             </button>
           </div>
         </DropdownMenu>
-        <span class="draft-count">{{ drafts.length }} draft{{ drafts.length === 1 ? "" : "s" }}</span>
+        <span class="draft-count" data-draft-count>{{ drafts.length }} draft{{ drafts.length === 1 ? "" : "s" }}</span>
       </div>
       <p v-if="draftError && !createDraftOpen" class="draft-error" role="alert">{{ draftError }}</p>
     </div>

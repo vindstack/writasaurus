@@ -235,6 +235,125 @@ async function withEditorPage(
   }
 }
 
+for (const previousDraftsFail of [false, true]) {
+  browserTest(
+    `browser: project changes reset draft ${
+      previousDraftsFail ? "errors" : "counts"
+    } with identical filenames`,
+    async () => {
+      await withEditorPage(async (page) => {
+        const oldManuscript = {
+          ...blankManuscript("Previous Project"),
+          filename: "draft_1.epub",
+        };
+        const newManuscript = {
+          ...blankManuscript("New Project"),
+          filename: "draft_1.epub",
+        };
+        const oldResponse = previousDraftsFail
+          ? { status: 500, body: "Could not read project drafts." }
+          : {
+            json: {
+              drafts: [
+                { number: 1, filename: "draft_1.epub" },
+                { number: 2, filename: "draft_2.epub" },
+              ],
+              activeDraft: 1,
+            },
+          };
+        const releaseOldRequest = Promise.withResolvers<void>();
+        const oldRequestStarted = Promise.withResolvers<void>();
+        let draftRequests = 0;
+        await page.route("**/api/editor/status", (route) =>
+          route.fulfill({
+            json: { activeFile: "draft_1.epub", manuscript: oldManuscript },
+          }));
+        await page.route(
+          "**/api/editor/project/location",
+          (route) => route.fulfill({ json: { parentPath: "/tmp" } }),
+        );
+        await page.route(
+          "**/api/editor/project/new",
+          (route) => route.fulfill({ json: { ok: true, manuscript: newManuscript } }),
+        );
+        await page.route(
+          "**/api/editor/project/open",
+          (route) => route.fulfill({ json: { ok: true, manuscript: oldManuscript } }),
+        );
+        await page.route("**/api/editor/drafts", async (route) => {
+          const requestNumber = ++draftRequests;
+          if (requestNumber === 3) {
+            oldRequestStarted.resolve();
+            await releaseOldRequest.promise;
+          }
+          await route.fulfill(
+            requestNumber === 1 || requestNumber === 3 ? oldResponse : {
+              json: {
+                drafts: [{ number: 1, filename: "draft_1.epub" }],
+                activeDraft: 1,
+              },
+            },
+          );
+        });
+
+        async function createProject(): Promise<void> {
+          await page.locator("#menu-toggle").click();
+          await page.locator("#menu-new-project").click();
+          await page.locator("#choose-project-location").click();
+          await page.getByTestId("project-parent-path").waitFor();
+          await page.locator("#create-project-submit").click();
+          await page.waitForFunction(() =>
+            (document.querySelector("#manuscript-title") as HTMLInputElement)?.value ===
+              "New Project"
+          );
+          await page.waitForFunction(() =>
+            document.querySelector("[data-draft-count]")?.textContent?.trim() === "1 draft" &&
+            !(document.querySelector("[data-draft-selector]") as HTMLButtonElement)?.disabled
+          );
+          assert(await page.getByRole("alert").count() === 0, "Expected old draft errors to clear");
+        }
+
+        try {
+          await page.reload();
+          await page.waitForSelector('[data-ready="true"]');
+          await openSidebar(page);
+          if (previousDraftsFail) {
+            await page.getByRole("alert").filter({ hasText: "Could not read project drafts." })
+              .waitFor();
+          } else {
+            await page.waitForFunction(() =>
+              document.querySelector("[data-draft-count]")?.textContent?.trim() === "2 drafts"
+            );
+          }
+          await createProject();
+
+          await page.keyboard.press("Control+o");
+          await oldRequestStarted.promise;
+          await createProject();
+          const lateResponse = page.waitForResponse((response) =>
+            response.url().endsWith("/api/editor/drafts")
+          );
+          releaseOldRequest.resolve();
+          await (await lateResponse).finished();
+          await page.evaluate(() =>
+            new Promise<void>((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+            )
+          );
+          assert(
+            (await page.locator("[data-draft-count]").textContent())?.trim() === "1 draft",
+            "Expected a late response from the previous project not to replace the new draft list",
+          );
+          assert(await page.getByRole("alert").count() === 0, "Expected no stale draft error");
+          assert(draftRequests === 4, `Expected four draft refreshes, got ${draftRequests}`);
+        } finally {
+          releaseOldRequest.resolve();
+        }
+      });
+    },
+  );
+}
+
 browserTest("browser: chapters and assistance share the same slideout shell", async () => {
   await withEditorPage(async (page) => {
     const styles = await page.evaluate(() => {
