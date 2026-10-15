@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import SitePage from "../components/SitePage.astro";
+import TermsConsent from "../components/TermsConsent.astro";
 
 const cancelled = Astro.url.searchParams.get("cancelled") === "1";
 ---
@@ -83,6 +84,7 @@ const cancelled = Astro.url.searchParams.get("cancelled") === "1";
           <option value="windows">Windows</option>
         </select>
       </div>
+      <TermsConsent />
       <button type="submit" class="button--primary" data-submit-button
         >Continue to download</button
       >

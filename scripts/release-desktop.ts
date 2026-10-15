@@ -4,7 +4,13 @@ import {
   type ReleaseArtifact,
   type ReleaseManifest,
 } from "../packages/shared/releases.ts";
-import { bucketStorageBytes, objectExists, putObject, type R2Credentials } from "./r2.ts";
+import {
+  bucketStorageBytes,
+  objectExists,
+  putObject,
+  type R2Credentials,
+  requestR2,
+} from "./r2.ts";
 
 interface DesktopConfig {
   output: Record<"linux" | "macos" | "windows", string>;
@@ -43,7 +49,7 @@ const contentTypes: Record<string, string> = {
   ".msi": "application/x-msi",
   ".txt": "text/plain; charset=utf-8",
 };
-const latestPath = "apps/website/public/latest.json";
+const latestKey = "latest.json";
 
 function usage(): string {
   return "Usage: deno task release:desktop <version> [--dry-run]\n" +
@@ -145,6 +151,12 @@ function publicBaseUrl(): URL {
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
     throw new Error(
       "WRITASAURUS_R2_PUBLIC_BASE_URL must be an HTTPS URL without credentials, query, or fragment.",
+    );
+  }
+  if (url.hostname.endsWith(".r2.cloudflarestorage.com")) {
+    throw new Error(
+      "WRITASAURUS_R2_PUBLIC_BASE_URL points to the private R2 S3 API. " +
+        "Use a public custom domain or an enabled r2.dev URL instead.",
     );
   }
   url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
@@ -520,62 +532,35 @@ function makeChecksumsFromManifest(manifest: ReleaseManifest): string {
   }\n`;
 }
 
-async function readLocalLatest(): Promise<ReleaseManifest | null> {
-  let contents: string;
-  try {
-    contents = await Deno.readTextFile(latestPath);
-  } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return null;
-    throw error;
+async function assertNewReleaseVersion(
+  version: string,
+  credentials: R2Credentials,
+): Promise<string | null> {
+  const response = await requestR2("GET", latestKey, credentials);
+  if (response.status === 404) {
+    await response.body?.cancel();
+    return null;
   }
-  let value: unknown;
-  try {
-    value = JSON.parse(contents);
-  } catch {
-    throw new Error(`${latestPath} is not valid JSON; refusing to publish.`);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`R2 GET ${latestKey} failed (${response.status}).`);
   }
-  if (!isReleaseManifest(value)) {
-    throw new Error(`${latestPath} is invalid; refusing to publish.`);
+  const latest: unknown = await response.json();
+  // Only the version is needed here, so older bucket manifest formats can be upgraded.
+  if (
+    typeof latest !== "object" || latest === null || !("version" in latest) ||
+    typeof latest.version !== "string" || !isSemanticVersion(latest.version)
+  ) {
+    throw new Error(`R2 ${latestKey} has an invalid version; refusing to publish.`);
   }
-  return value;
-}
-
-async function assertNewReleaseVersion(version: string): Promise<void> {
-  const latest = await readLocalLatest();
-  if (latest && compareVersions(version, latest.version) <= 0) {
+  if (compareVersions(version, latest.version) <= 0) {
     throw new Error(
       `Version ${version} must be newer than current latest version ${latest.version}.`,
     );
   }
-  try {
-    await Deno.stat(`apps/website/public/releases/v${version}/release.json`);
-    throw new Error(`Version ${version} already has local release metadata.`);
-  } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  }
-}
-
-async function writeWebsiteReleaseMetadata(
-  version: string,
-  manifest: ReleaseManifest,
-  checksums: string,
-): Promise<void> {
-  const outputDir = `apps/website/public/releases/v${version}`;
-  try {
-    await Deno.stat(`${outputDir}/release.json`);
-    throw new Error(`Website release metadata for ${version} already exists.`);
-  } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
-  }
-  await Deno.mkdir(outputDir, { recursive: true });
-  await Deno.writeTextFile(
-    `${outputDir}/release.json`,
-    `${JSON.stringify(manifest, null, 2)}\n`,
-  );
-  await Deno.writeTextFile(`${outputDir}/SHA256SUMS.txt`, checksums);
-  const tempPath = `${latestPath}.tmp`;
-  await Deno.writeTextFile(tempPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  await Deno.rename(tempPath, latestPath);
+  const etag = response.headers.get("etag");
+  if (!etag) throw new Error(`R2 ${latestKey} is missing an ETag; refusing to publish.`);
+  return etag;
 }
 
 async function publish(
@@ -583,11 +568,12 @@ async function publish(
   artifacts: BuiltArtifact[],
   credentials: R2Credentials,
 ): Promise<void> {
+  const latestEtag = await assertNewReleaseVersion(manifest.version, credentials);
   const releaseBytes = new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
   const checksumBytes = new TextEncoder().encode(makeChecksumsFromManifest(manifest));
   const currentStorage = await bucketStorageBytes(credentials);
   const addedBytes = artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
-    releaseBytes.byteLength + checksumBytes.byteLength;
+    releaseBytes.byteLength * 2 + checksumBytes.byteLength;
   if (currentStorage + addedBytes > R2_FREE_STORAGE_BYTES) {
     throw new Error(
       `Publishing would exceed the 10 GB R2 free storage allowance ` +
@@ -632,17 +618,25 @@ async function publish(
   });
   console.log(`Verified ${releaseKey}`);
 
+  await putObject(credentials, latestKey, releaseBytes, {
+    contentType: "application/json",
+    immutable: latestEtag === null,
+    ifMatch: latestEtag ?? undefined,
+    cacheControl: "no-cache",
+  });
+  console.log(`Verified ${latestKey}`);
+
   console.log(`\nPublished Writasaurus ${manifest.version} to public artifact storage.`);
 }
 
 async function main(): Promise<void> {
   const { version, dryRun } = parseArguments(Deno.args);
   const publicUrlBase = publicBaseUrl();
-  await assertNewReleaseVersion(version);
   let credentials: R2Credentials | undefined;
   if (!dryRun) {
     credentials = readCredentials();
     await ensureNetworkPermission(credentials.accountId);
+    await assertNewReleaseVersion(version, credentials);
     await verifyNotPublished(version, credentials);
   } else {
     console.log("Dry run: remote duplicate-version checks and uploads are skipped.");
@@ -666,8 +660,7 @@ async function main(): Promise<void> {
     await writeDryRun(version, manifest);
   } else {
     await publish(manifest, artifacts, credentials!);
-    await writeWebsiteReleaseMetadata(version, manifest, checksums);
-    console.log(`Updated ${latestPath}; deploy the website to publish the release links.`);
+    console.log(`Updated ${publicDownloadUrl(publicUrlBase, latestKey)}; downloads are live.`);
   }
 }
 
@@ -681,12 +674,15 @@ if (import.meta.main) {
 }
 
 export {
+  assertNewReleaseVersion,
   desktopTargets,
   makeChecksums,
   makeManifest,
   parseArguments,
   parseVersion,
   projectPath,
+  publicBaseUrl,
   publicDownloadUrl,
+  publish,
   validateArtifact,
 };

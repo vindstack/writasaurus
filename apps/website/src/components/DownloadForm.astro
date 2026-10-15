@@ -1,4 +1,9 @@
+---
+import TermsConsent from "./TermsConsent.astro";
+---
+
 <form class="downloadForm" action="/api/download" method="post">
+  <TermsConsent />
   <div class="downloadSplit">
     <button class="downloadButton" type="submit" data-download-button>
       Download Writasaurus

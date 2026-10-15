@@ -1,0 +1,20 @@
+<label class="termsConsent">
+  <input type="checkbox" name="termsAccepted" value="yes" required data-terms-consent />
+  <span>
+    I agree to the <a href="/agreement" target="_blank" rel="noopener noreferrer">
+      terms and conditions
+    </a> (opens in a new tab).
+  </span>
+</label>
+
+<style>
+  .termsConsent {
+    align-items: baseline;
+    display: flex;
+    gap: 0.75rem;
+  }
+
+  .termsConsent input {
+    flex-shrink: 0;
+  }
+</style>

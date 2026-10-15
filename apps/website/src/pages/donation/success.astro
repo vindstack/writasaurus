@@ -23,7 +23,7 @@ if (
 }
 
 Astro.response.headers.set("cache-control", "no-store");
-Astro.response.headers.set("referrer-policy", "no-referrer");
+Astro.response.headers.set("referrer-policy", "same-origin");
 ---
 
 <BaseLayout title="Writasaurus donation">

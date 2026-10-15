@@ -125,6 +125,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     provider: Deno.env.get("PAYMENT_PROVIDER"),
     deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
     siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
+    downloadBase: Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL"),
     emailLogFile: Deno.env.get("EMAIL_LOG_FILE"),
     sessionSecret: Deno.env.get("SESSION_SECRET"),
   };
@@ -170,11 +171,14 @@ Deno.test("free downloads and optional donations share normal accounts", async (
   Deno.env.set("PAYMENT_PROVIDER", "mock");
   Deno.env.delete("DENO_DEPLOYMENT_ID");
   Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
+  Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example/apps/");
   Deno.env.set("EMAIL_LOG_FILE", emailLogFile);
   Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
   setWebsiteStoreForTests(store);
-  globalThis.fetch = (input) => {
-    if (String(input) === "https://writasaurus.test/latest.json") {
+  globalThis.fetch = (input, init) => {
+    if (String(input) === "https://downloads.example/apps/latest.json") {
+      assert(init?.redirect === "error");
+      assert(init?.cache === "no-store");
       return Promise.resolve(Response.json(release));
     }
     if (String(input) === "https://api.resend.com/emails") {
@@ -187,6 +191,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     const freeForm = new FormData();
     freeForm.set("platform", "linux");
     freeForm.set("donation", "none");
+    freeForm.set("termsAccepted", "yes");
     const freeDownload = await request("/api/download", {
       method: "POST",
       headers: { origin: "http://localhost" },
@@ -201,6 +206,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     const noEmailForm = new FormData();
     noEmailForm.set("platform", "windows");
     noEmailForm.set("donation", "10");
+    noEmailForm.set("termsAccepted", "yes");
     const noEmail = await request("/api/download", {
       method: "POST",
       headers: { origin: "http://localhost" },
@@ -213,6 +219,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     donationForm.set("email", "writer@example.com");
     donationForm.set("marketingEmails", "yes");
     donationForm.set("donation", "10");
+    donationForm.set("termsAccepted", "yes");
     const checkout = await request("/api/download", {
       method: "POST",
       headers: { origin: "http://localhost" },
@@ -275,6 +282,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
         platform: "linux",
         donation: "none",
         email: unpaidEmail,
+        termsAccepted: "yes",
       }),
     });
     assert(unpaidDownload.status === 303);
@@ -328,6 +336,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
         PAYMENT_PROVIDER: original.provider,
         DENO_DEPLOYMENT_ID: original.deploymentId,
         PUBLIC_SITE_URL: original.siteUrl,
+        WRITASAURUS_R2_PUBLIC_BASE_URL: original.downloadBase,
         EMAIL_LOG_FILE: original.emailLogFile,
         SESSION_SECRET: original.sessionSecret,
       })

@@ -209,6 +209,7 @@ export async function requestR2(
   const body = options.body ?? new Uint8Array();
   const payloadHash = await sha256(body);
   const headers = new Headers(options.headers);
+  headers.set("accept-encoding", "identity");
   const url = r2ObjectUrl(credentials, key);
   if (options.query) url.search = options.query.toString();
   const signed = await signR2Request(
@@ -283,7 +284,11 @@ export async function putObject(
   if (!verification.ok) {
     throw new Error(`R2 upload verification failed for ${key} (${verification.status}).`);
   }
-  const contentLength = Number(verification.headers.get("content-length"));
+  const lengthHeader = verification.headers.get("content-length");
+  if (lengthHeader === null || !/^\d+$/.test(lengthHeader)) {
+    throw new Error(`R2 upload verification failed for ${key}: missing or invalid Content-Length.`);
+  }
+  const contentLength = Number(lengthHeader);
   if (contentLength !== body.byteLength) {
     throw new Error(
       `R2 upload verification failed for ${key}: expected ${body.byteLength} bytes, got ${contentLength}.`,

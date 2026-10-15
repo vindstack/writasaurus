@@ -6,18 +6,25 @@ import {
   parseDonationAmount,
   startDonationCheckout,
 } from "../../lib/payment-service.ts";
-import { isReleaseManifest } from "../../../../../packages/shared/releases.ts";
+import { isPublicHttpsUrl, isReleaseManifest } from "../../../../../packages/shared/releases.ts";
 
 export const prerender = false;
 
 async function currentRelease(): Promise<unknown> {
-  const site = Deno.env.get("PUBLIC_SITE_URL")?.trim();
-  if (!site) throw new Error("PUBLIC_SITE_URL is not configured.");
-  const response = await fetch(new URL("/latest.json", site), {
+  const base = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL")?.trim();
+  if (!base) throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL is not configured.");
+  if (!isPublicHttpsUrl(base) || new URL(base).hostname.endsWith(".r2.cloudflarestorage.com")) {
+    throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a public HTTPS URL.");
+  }
+  const response = await fetch(new URL("latest.json", `${base.replace(/\/+$/, "")}/`), {
     redirect: "error",
+    cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });
-  if (!response.ok) throw new Error("The current release metadata is unavailable.");
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`The current release metadata is unavailable (HTTP ${response.status}).`);
+  }
   return await response.json();
 }
 
@@ -34,6 +41,11 @@ export async function POST(context: { request: Request }): Promise<Response> {
   let marketingOptIn: boolean;
   try {
     const form = await context.request.formData();
+    if (form.get("termsAccepted") !== "yes") {
+      return new Response("You must agree to the terms and conditions before downloading.", {
+        status: 400,
+      });
+    }
     const selectedPlatform = form.get("platform");
     const selectedEmail = form.get("email");
     if (!isDownloadPlatform(selectedPlatform)) {

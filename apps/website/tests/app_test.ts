@@ -20,6 +20,40 @@ Deno.test("website root presents free downloads and optional donations", async (
   assert(!page.includes('component-url="/_astro/EditorApp.'));
 });
 
+Deno.test("download forms require explicit acceptance of the terms", async () => {
+  for (const path of ["/download", "/donation/success"]) {
+    const response = await request(path);
+    const page = await response.text();
+    const checkbox = page.match(/<input\b[^>]*name="termsAccepted"[^>]*>/)?.[0];
+    assert(checkbox);
+    assert(checkbox.includes('type="checkbox"'));
+    assert(checkbox.includes('value="yes"'));
+    assert(checkbox.includes("required"));
+    assert(!checkbox.includes("checked"));
+    assert(page.includes('href="/agreement"'));
+  }
+});
+
+Deno.test("downloads and donations reject missing or invalid terms acceptance", async () => {
+  for (const donation of ["none", "10"]) {
+    for (const consent of [undefined, "no", "on", ""]) {
+      const body = new URLSearchParams({
+        platform: "linux",
+        donation,
+        email: "writer@example.com",
+      });
+      if (consent !== undefined) body.set("termsAccepted", consent);
+      const response = await request("/api/download", {
+        method: "POST",
+        headers: { origin: "http://localhost" },
+        body,
+      });
+      assert(response.status === 400);
+      assert((await response.text()).includes("must agree to the terms and conditions"));
+    }
+  }
+});
+
 Deno.test("website no longer exposes licensing, purchase, or administration routes", async () => {
   for (
     const path of [
@@ -70,4 +104,29 @@ Deno.test("download page presents optional email and donation choices", async ()
   assert(page.includes('name="marketingEmails"'));
   assert(page.includes('name="marketingEmails" value="yes" checked'));
   assert(page.includes("No email is needed for a free download."));
+});
+
+Deno.test("form redirects allow only the website, Stripe, and the configured download origin", async () => {
+  const original = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL");
+  try {
+    for (const base of [undefined, "https://downloads.example.com/apps/"]) {
+      if (base === undefined) Deno.env.delete("WRITASAURUS_R2_PUBLIC_BASE_URL");
+      else Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", base);
+      const response = await request("/download");
+      await response.body?.cancel();
+      const policy = response.headers.get("content-security-policy") ?? "";
+      const formAction = policy.split("; ").find((directive) =>
+        directive.startsWith("form-action ")
+      );
+      assert(
+        formAction ===
+          `form-action 'self' https://checkout.stripe.com${
+            base ? " https://downloads.example.com" : ""
+          }`,
+      );
+    }
+  } finally {
+    if (original === undefined) Deno.env.delete("WRITASAURUS_R2_PUBLIC_BASE_URL");
+    else Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", original);
+  }
 });

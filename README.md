@@ -63,6 +63,8 @@ Configure the website's environment/secret store with:
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
 - `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
 - `PUBLIC_SITE_URL` and `SESSION_SECRET`
+- `WRITASAURUS_R2_PUBLIC_BASE_URL` (the public download domain, also allowed by the website's
+  form-redirect security policy)
 
 Configure Stripe Checkout for one-time payments and a webhook for `checkout.session.completed`,
 `checkout.session.async_payment_succeeded`, `charge.refunded`, and `charge.dispute.created`. Set its
@@ -90,7 +92,10 @@ separate database for staging or production.
 The desktop app is free to download and use. The website's download flow asks for a platform and
 optionally an email address, then offers free, a one-time $10 or $25 USD donation, or a custom
 one-time USD amount. Custom amounts must meet Stripe's minimum; Writasaurus sets no additional upper
-cap. An email is required for a donation. Downloads do not require an account or payment.
+cap. An email is required for a donation. Downloads do not require an account or payment. The
+website requires explicit agreement to the terms and conditions before starting a download or
+donation checkout. The checkbox is unchecked by default and validated by both the browser and
+server.
 
 Anyone who provides an email has an account, whether or not they donate. Accounts use passwordless
 email codes to show any donation receipts and manage the marketing email preference. The marketing
@@ -100,10 +105,11 @@ Passcode emails are necessary for sign-in and are not affected by the marketing 
 ### Public desktop releases
 
 Create a Cloudflare R2 bucket for downloadable release artifacts and expose it through a public
-HTTPS custom domain. For local publishing, copy `.env.example` to `.env` and set the R2 account ID,
-access key ID, secret access key, bucket name, and public base URL for that domain. Keep R2
-credentials local; they are only used by the release command. Build and publish an immutable
-semantic version:
+HTTPS custom domain (or enable its public `r2.dev` URL for development). Do not use the private
+`r2.cloudflarestorage.com` S3 API endpoint as `WRITASAURUS_R2_PUBLIC_BASE_URL`. For local
+publishing, copy `.env.example` to `.env` and set the R2 account ID, access key ID, secret access
+key, bucket name, and public base URL for that domain. Keep R2 credentials local; they are only used
+by the release command. Build and publish an immutable semantic version:
 
 ```sh
 deno task release:desktop 1.2.3
@@ -111,14 +117,18 @@ deno task release:desktop 1.2.3
 
 The release task builds the Linux AppImage, Apple Silicon macOS archive, and Windows MSI; validates
 the package signatures; generates a `SHA256SUMS.txt`; and uploads the artifacts and versioned
-metadata to R2. Uploads are verified and version paths cannot be overwritten. The task writes
-`apps/website/public/releases/v<version>/release.json` and updates `apps/website/public/latest.json`
-with public artifact URLs. Review and deploy the website to publish the latest release links. Use
-`--dry-run` to build, validate, and preview the release metadata without reading R2 credentials or
-uploading. Existing immutable version paths cannot be republished.
+metadata to R2. Uploads are verified and version paths cannot be overwritten. After all versioned
+objects are verified, the task updates `latest.json` at the bucket root with the release manifest
+and public artifact URLs. Downloads use the new release immediately, without a website deployment.
+The latest pointer is revalidated rather than cached, and conditional writes prevent concurrent
+releases from overwriting a newer pointer. Use `--dry-run` to build, validate, and preview the
+release metadata without reading R2 credentials or uploading. Existing immutable version paths
+cannot be republished.
 
-The website reads the release manifest and redirects download requests directly to the public
-artifact URL. No purchase, account, or license check is involved.
+The website fetches `latest.json` from `WRITASAURUS_R2_PUBLIC_BASE_URL` and redirects download
+requests directly to the public artifact URL. No purchase, account, or license check is involved.
+Release metadata is stored only in R2, not the website's public directory. Keep `PUBLIC_SITE_URL`
+set to the website URL (`http://localhost:8000` for local development), not R2.
 
 ## Data and security
 
