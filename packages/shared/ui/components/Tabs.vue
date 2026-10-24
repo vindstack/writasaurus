@@ -26,7 +26,7 @@ function selectTab(index: number): void {
 
 function onKeydown(event: KeyboardEvent, currentIndex: number): void {
   const enabled = props.tabs
-    .map((tab, index) => tab.disabled ? -1 : index)
+    .map((tab, index) => (tab.disabled ? -1 : index))
     .filter((index) => index >= 0);
   if (!enabled.length) return;
 

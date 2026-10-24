@@ -1,7 +1,15 @@
+import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   assertNewReleaseVersion,
+  assertNativeBuildPlatform,
   compareVersions,
   desktopTargets,
+  desktopBuildCommands,
+  buildDesktopTargets,
+  main,
   parseArguments,
   projectPath,
   publicBaseUrl,
@@ -20,6 +28,50 @@ import {
   isSemanticVersion,
   type ReleaseManifest,
 } from "../../../packages/shared/releases.ts";
+
+vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+vi.mock("node:fs/promises", () => ({
+  mkdir: vi.fn(),
+  readFile: vi.fn(),
+  rm: vi.fn(),
+  stat: vi.fn(),
+  writeFile: vi.fn(),
+}));
+
+const nativePlatform =
+  process.platform === "darwin" ? "macos" : process.platform === "win32" ? "windows" : "linux";
+
+afterEach(() => {
+  vi.resetAllMocks();
+  vi.unstubAllEnvs();
+});
+
+function mockPackaging(exitCode = 0): void {
+  vi.mocked(spawn).mockImplementation(() => {
+    const child = new EventEmitter();
+    queueMicrotask(() => child.emit("exit", exitCode, null));
+    return child as ReturnType<typeof spawn>;
+  });
+}
+
+function mockArtifactFiles(): void {
+  const appImage = Buffer.alloc(11);
+  appImage.set([0x41, 0x49], 8);
+  const bytes = (path: unknown): Buffer<ArrayBuffer> => {
+    const name = String(path);
+    if (name.endsWith(".AppImage")) return appImage;
+    if (name.endsWith(".tar.gz")) return Buffer.from([0x1f, 0x8b, 0x08]);
+    return Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1, 0]);
+  };
+  vi.mocked(readFile).mockImplementation(async (path) => bytes(path));
+  vi.mocked(stat).mockImplementation(
+    async (path) =>
+      ({
+        isFile: () => true,
+        size: bytes(path).byteLength,
+      }) as Awaited<ReturnType<typeof stat>>,
+  );
+}
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
@@ -65,22 +117,39 @@ function testManifest(): ReleaseManifest {
   };
 }
 
-Deno.test("release: validates versions and command arguments", () => {
+test("release: validates versions and command arguments", () => {
   assert(isSemanticVersion("1.2.3"));
   assert(isSemanticVersion("2.0.0-rc.1+build.12"));
   assert(!isSemanticVersion("v1.2.3"));
   assert(!isSemanticVersion("01.2.3"));
   const parsed = parseArguments(["1.2.3", "--dry-run"]);
   assert(parsed.version === "1.2.3" && parsed.dryRun);
+  expect(parseArguments(["1.2.3", "--skip-build", "--dry-run"])).toMatchObject({
+    version: "1.2.3",
+    dryRun: true,
+    skipBuild: true,
+  });
+  expect(parseArguments(["1.2.3", "--build-platform", "macos"])).toMatchObject({
+    buildPlatform: "macos",
+    skipBuild: false,
+  });
+  for (const args of [
+    ["1.2.3", "--build-platform"],
+    ["1.2.3", "--build-platform", "unsupported"],
+    ["1.2.3", "--build-platform", "linux", "--skip-build"],
+    ["1.2.3", "--build-platform", "linux", "--dry-run"],
+    ["1.2.3", "--unknown"],
+  ])
+    expect(() => parseArguments(args)).toThrow("Invalid");
 });
 
-Deno.test("release: compares stable and prerelease versions", () => {
+test("release: compares stable and prerelease versions", () => {
   assert(compareVersions("1.0.0", "1.0.0-rc.1") > 0);
   assert(compareVersions("1.0.0-rc.2", "1.0.0-rc.10") < 0);
   assert(compareVersions("1.2.3+one", "1.2.3+two") === 0);
 });
 
-Deno.test("release: constrains artifact paths and maps cross-compilation targets", () => {
+test("release: constrains artifact paths and maps Electron packaging targets", () => {
   assert(projectPath("./desktop/Writasaurus.AppImage") === "desktop/Writasaurus.AppImage");
   for (const path of ["./public/app", "./desktop/../public/app"]) {
     let rejected = false;
@@ -91,12 +160,266 @@ Deno.test("release: constrains artifact paths and maps cross-compilation targets
     }
     assert(rejected);
   }
-  assert(desktopTargets.linux.target === "x86_64-unknown-linux-gnu");
-  assert(desktopTargets.macos.target === "aarch64-apple-darwin");
-  assert(desktopTargets.windows.target === "x86_64-pc-windows-msvc");
+  assert(desktopTargets.linux.target === "AppImage" && desktopTargets.linux.arch === "--x64");
+  assert(desktopTargets.macos.target === "tar.gz" && desktopTargets.macos.arch === "--arm64");
+  assert(desktopTargets.windows.target === "msi" && desktopTargets.windows.arch === "--x64");
 });
 
-Deno.test("release: validates public artifact URLs and immutable metadata", () => {
+test("release: builds Electron entry points before packaging every platform without publishing", () => {
+  const commands = desktopBuildCommands("1.2.3");
+  const prefixLength = process.env.npm_execpath ? 1 : 0;
+  assert(commands.length === 4);
+  assert(commands[0].args.slice(prefixLength).join(" ") === "--filter @writasaurus/desktop build");
+  for (const [index, platform] of (["linux", "macos", "windows"] as const).entries()) {
+    const { command, args: fullArgs } = commands[index + 1];
+    const args = fullArgs.slice(prefixLength);
+    const target = desktopTargets[platform];
+    assert(command === (process.env.npm_execpath ? process.execPath : "pnpm"));
+    assert(args.slice(0, 4).join(" ") === "--filter @writasaurus/desktop exec electron-builder");
+    assert(
+      args.includes(target.flag) && args.includes(target.target) && args.includes(target.arch),
+    );
+    assert(args[args.indexOf("--publish") + 1] === "never");
+    assert(args.includes("--config.extraMetadata.version=1.2.3"));
+    assert(
+      args.some(
+        (arg) =>
+          arg.startsWith("--config.directories.output=") &&
+          arg.replaceAll("\\", "/").endsWith(`/desktop/${platform}`),
+      ),
+    );
+    assert(args.some((arg) => arg.endsWith(`.artifactName=${target.fileName}`)));
+    assert(!args.some((arg) => arg.includes("deno")));
+  }
+  let rejected = false;
+  try {
+    desktopBuildCommands("v1.2.3");
+  } catch {
+    rejected = true;
+  }
+  assert(rejected);
+});
+
+test("release: executes native packaging sequentially and clears only its stale output", async () => {
+  mockPackaging();
+  const paths = await buildDesktopTargets("1.2.3", nativePlatform);
+  expect(spawn).toHaveBeenCalledTimes(2);
+  expect(rm).toHaveBeenCalledTimes(1);
+  expect(rm).toHaveBeenCalledWith(expect.any(String), { force: true });
+  expect(String(vi.mocked(rm).mock.calls[0][0]).replaceAll("\\", "/")).toContain(
+    `desktop/${nativePlatform}/${desktopTargets[nativePlatform].fileName}`,
+  );
+  for (const [index, planned] of desktopBuildCommands("1.2.3", nativePlatform).entries()) {
+    expect(spawn).toHaveBeenNthCalledWith(index + 1, planned.command, planned.args, {
+      cwd: expect.any(String),
+      stdio: "inherit",
+    });
+  }
+  expect(paths).toEqual({
+    linux: "desktop/linux/Writasaurus.AppImage",
+    macos: "desktop/macos/Writasaurus-macos.tar.gz",
+    windows: "desktop/windows/Writasaurus.msi",
+  });
+});
+
+test("release: stops packaging after a failed build", async () => {
+  mockPackaging(1);
+  await expect(buildDesktopTargets("1.2.3", nativePlatform)).rejects.toThrow("exit code 1");
+  expect(spawn).toHaveBeenCalledTimes(1);
+});
+
+test("release: refuses implicit cross-platform builds before deleting files or spawning", async () => {
+  await expect(buildDesktopTargets("1.2.3")).rejects.toThrow("--skip-build");
+  expect(rm).not.toHaveBeenCalled();
+  expect(spawn).not.toHaveBeenCalled();
+  expect(() => assertNativeBuildPlatform("macos", "linux")).toThrow("native darwin runner");
+  expect(() => assertNativeBuildPlatform("linux", "win32")).toThrow("native linux runner");
+  expect(() => assertNativeBuildPlatform("windows", "darwin")).toThrow("native win32 runner");
+  assertNativeBuildPlatform("linux", "linux");
+  assertNativeBuildPlatform("macos", "darwin");
+  assertNativeBuildPlatform("windows", "win32");
+});
+
+test("release: main fails fast without a build mode, credentials, or public URL", async () => {
+  const originalArgs = process.argv;
+  process.argv = [process.execPath, "scripts/release-desktop.ts", "1.2.3"];
+  vi.stubEnv("WRITASAURUS_R2_PUBLIC_BASE_URL", "");
+  try {
+    await expect(main()).rejects.toThrow("--skip-build");
+    expect(rm).not.toHaveBeenCalled();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(stat).not.toHaveBeenCalled();
+  } finally {
+    process.argv = originalArgs;
+  }
+});
+
+test("release: prebuilt dry run validates every package without credentials, builds, or R2", async () => {
+  const originalArgs = process.argv;
+  const originalFetch = globalThis.fetch;
+  const request = vi.fn<typeof fetch>();
+  globalThis.fetch = request;
+  process.argv = [
+    process.execPath,
+    "scripts/release-desktop.ts",
+    "1.2.3",
+    "--skip-build",
+    "--dry-run",
+  ];
+  vi.stubEnv("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example.com/");
+  for (const name of [
+    "WRITASAURUS_R2_ACCOUNT_ID",
+    "WRITASAURUS_R2_ACCESS_KEY_ID",
+    "WRITASAURUS_R2_SECRET_ACCESS_KEY",
+    "WRITASAURUS_R2_BUCKET",
+  ])
+    vi.stubEnv(name, "");
+  mockPackaging();
+  mockArtifactFiles();
+  try {
+    await main();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(rm).not.toHaveBeenCalled();
+    expect(stat).toHaveBeenCalledTimes(3);
+    expect(readFile).toHaveBeenCalledTimes(3);
+    expect(request).not.toHaveBeenCalled();
+    expect(mkdir).toHaveBeenCalledWith(expect.any(String), {
+      recursive: true,
+    });
+    expect(String(vi.mocked(mkdir).mock.calls[0][0]).replaceAll("\\", "/")).toContain(
+      "release-dry-run/v1.2.3",
+    );
+    expect(writeFile).toHaveBeenCalledTimes(2);
+    const metadata = vi.mocked(writeFile).mock.calls[0][1];
+    assert(typeof metadata === "string");
+    assert(isReleaseManifest(JSON.parse(metadata), "1.2.3"));
+  } finally {
+    process.argv = originalArgs;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test.each(["missing", "empty", "invalid"] as const)(
+  "release: prebuilt dry run rejects %s packages without rebuilding or writing metadata",
+  async (failure) => {
+    const originalArgs = process.argv;
+    process.argv = [
+      process.execPath,
+      "scripts/release-desktop.ts",
+      "1.2.3",
+      "--skip-build",
+      "--dry-run",
+    ];
+    vi.stubEnv("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example.com/");
+    mockArtifactFiles();
+    if (failure === "missing") {
+      vi.mocked(stat).mockRejectedValueOnce(
+        Object.assign(new Error("missing"), { code: "ENOENT" }),
+      );
+    } else if (failure === "empty") {
+      vi.mocked(stat).mockResolvedValueOnce({
+        isFile: () => true,
+        size: 0,
+      } as Awaited<ReturnType<typeof stat>>);
+    } else vi.mocked(readFile).mockResolvedValueOnce(Buffer.from([1, 2, 3]));
+    try {
+      await expect(main()).rejects.toThrow(
+        failure === "missing" ? "not produced" : failure === "empty" ? "non-empty" : "signature",
+      );
+      expect(spawn).not.toHaveBeenCalled();
+      expect(rm).not.toHaveBeenCalled();
+      expect(writeFile).not.toHaveBeenCalled();
+    } finally {
+      process.argv = originalArgs;
+    }
+  },
+);
+
+test("release: native build mode validates one package without release credentials or publishing", async () => {
+  const originalArgs = process.argv;
+  process.argv = [
+    process.execPath,
+    "scripts/release-desktop.ts",
+    "1.2.3",
+    "--build-platform",
+    nativePlatform,
+  ];
+  vi.stubEnv("WRITASAURUS_R2_PUBLIC_BASE_URL", "");
+  mockPackaging();
+  mockArtifactFiles();
+  try {
+    await main();
+    expect(spawn).toHaveBeenCalledTimes(2);
+    expect(stat).toHaveBeenCalledTimes(1);
+    expect(readFile).toHaveBeenCalledTimes(1);
+    expect(writeFile).not.toHaveBeenCalled();
+  } finally {
+    process.argv = originalArgs;
+  }
+});
+
+test("release: prebuilt publishing uploads all validated artifacts before the latest pointer", async () => {
+  const originalArgs = process.argv;
+  const originalFetch = globalThis.fetch;
+  process.argv = [process.execPath, "scripts/release-desktop.ts", "1.2.3", "--skip-build"];
+  vi.stubEnv("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example.com/");
+  vi.stubEnv("WRITASAURUS_R2_ACCOUNT_ID", "a".repeat(32));
+  vi.stubEnv("WRITASAURUS_R2_ACCESS_KEY_ID", "test-access-key");
+  vi.stubEnv("WRITASAURUS_R2_SECRET_ACCESS_KEY", "test-secret-key");
+  vi.stubEnv("WRITASAURUS_R2_BUCKET", "releases");
+  mockArtifactFiles();
+  const puts: string[] = [];
+  const stored = new Map<string, { size: number; sha256: string | null }>();
+  globalThis.fetch = async (input, init) => {
+    const url = new URL(String(input));
+    const key = url.pathname.slice("/releases/".length);
+    if (init?.method === "GET" && key === "latest.json") {
+      return new Response(null, { status: 404 });
+    }
+    if (init?.method === "GET" && url.searchParams.has("list-type")) {
+      return new Response("<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>");
+    }
+    if (init?.method === "PUT") {
+      assert(init.body instanceof Blob);
+      const headers = new Headers(init.headers);
+      assert(headers.get("if-none-match") === "*");
+      puts.push(key);
+      stored.set(key, { size: init.body.size, sha256: headers.get("x-amz-meta-sha256") });
+      return new Response(null);
+    }
+    if (init?.method === "HEAD") {
+      const object = stored.get(key);
+      return object
+        ? new Response(null, {
+            headers: {
+              "content-length": String(object.size),
+              ...(object.sha256 ? { "x-amz-meta-sha256": object.sha256 } : {}),
+            },
+          })
+        : new Response(null, { status: 404 });
+    }
+    throw new Error(`Unexpected R2 request: ${init?.method} ${url}`);
+  };
+  try {
+    await main();
+    expect(puts).toEqual([
+      "releases/v1.2.3/Writasaurus.AppImage",
+      "releases/v1.2.3/Writasaurus-macos.tar.gz",
+      "releases/v1.2.3/Writasaurus.msi",
+      "releases/v1.2.3/SHA256SUMS.txt",
+      "releases/v1.2.3/release.json",
+      "latest.json",
+    ]);
+    expect(spawn).not.toHaveBeenCalled();
+    expect(rm).not.toHaveBeenCalled();
+    expect(writeFile).not.toHaveBeenCalled();
+  } finally {
+    process.argv = originalArgs;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("release: validates public artifact URLs and immutable metadata", () => {
   const manifest = testManifest();
   assert(isReleaseManifest(manifest, "1.0.0"));
   const wrongVersion: unknown = { ...manifest, version: "2.0.0" };
@@ -108,9 +431,7 @@ Deno.test("release: validates public artifact URLs and immutable metadata", () =
       linux: { ...manifest.artifacts.linux, objectKey: "https://evil.test/file" },
     },
   };
-  assert(
-    !isReleaseManifest(invalidArtifact),
-  );
+  assert(!isReleaseManifest(invalidArtifact));
   const invalidUrl: unknown = {
     ...manifest,
     artifacts: {
@@ -125,7 +446,7 @@ Deno.test("release: validates public artifact URLs and immutable metadata", () =
   assert(!Object.hasOwn(manifest.artifacts.linux, "url"));
 });
 
-Deno.test("release: validates desktop package file signatures", () => {
+test("release: validates desktop package file signatures", () => {
   const appImage = new Uint8Array(11);
   appImage.set([0x41, 0x49], 8);
   validateArtifact("linux", appImage, "Writasaurus.AppImage");
@@ -144,10 +465,10 @@ Deno.test("release: validates desktop package file signatures", () => {
   assert(rejected, "Expected the Windows package signature to be validated");
 });
 
-Deno.test("release: public base URL rejects the private R2 API and preserves path prefixes", () => {
-  const original = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL");
+test("release: public base URL rejects the private R2 API and preserves path prefixes", () => {
+  const original = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
   try {
-    Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://account.r2.cloudflarestorage.com");
+    process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = "https://account.r2.cloudflarestorage.com";
     let rejected = false;
     try {
       publicBaseUrl();
@@ -155,18 +476,18 @@ Deno.test("release: public base URL rejects the private R2 API and preserves pat
       rejected = error instanceof Error && error.message.includes("private R2 S3 API");
     }
     assert(rejected);
-    Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example.com/apps/");
+    process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = "https://downloads.example.com/apps/";
     assert(
       publicDownloadUrl(publicBaseUrl(), "releases/v1.0.0/release.json") ===
         "https://downloads.example.com/apps/releases/v1.0.0/release.json",
     );
   } finally {
-    if (original === undefined) Deno.env.delete("WRITASAURUS_R2_PUBLIC_BASE_URL");
-    else Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", original);
+    if (original === undefined) delete process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
+    else process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = original;
   }
 });
 
-Deno.test("release: checks the bucket version and ETag, including legacy manifests", async () => {
+test("release: checks the bucket version and ETag, including legacy manifests", async () => {
   const originalFetch = globalThis.fetch;
   const credentials: R2Credentials = {
     accountId: "a".repeat(32),
@@ -181,18 +502,16 @@ Deno.test("release: checks the bucket version and ETag, including legacy manifes
       assert(init?.redirect === "error");
       return Promise.resolve(Response.json({ version: "0.9.0" }, { headers: { etag: '"old"' } }));
     };
-    assert(await assertNewReleaseVersion("1.0.0", credentials) === '"old"');
+    assert((await assertNewReleaseVersion("1.0.0", credentials)) === '"old"');
     globalThis.fetch = () => Promise.resolve(new Response(null, { status: 404 }));
-    assert(await assertNewReleaseVersion("1.0.0", credentials) === null);
-    for (
-      const [response, expectedError] of [
-        [new Response("Unavailable", { status: 503 }), "503"],
-        [Response.json(testManifest()), "must be newer"],
-        [Response.json({ version: "2.0.0" }), "must be newer"],
-        [Response.json({ version: "invalid" }), "invalid version"],
-        [Response.json({ version: "0.9.0" }), "missing an ETag"],
-      ] as const
-    ) {
+    assert((await assertNewReleaseVersion("1.0.0", credentials)) === null);
+    for (const [response, expectedError] of [
+      [new Response("Unavailable", { status: 503 }), "503"],
+      [Response.json(testManifest()), "must be newer"],
+      [Response.json({ version: "2.0.0" }), "must be newer"],
+      [Response.json({ version: "invalid" }), "invalid version"],
+      [Response.json({ version: "0.9.0" }), "missing an ETag"],
+    ] as const) {
       globalThis.fetch = () => Promise.resolve(response);
       let rejected = false;
       try {
@@ -207,7 +526,7 @@ Deno.test("release: checks the bucket version and ETag, including legacy manifes
   }
 });
 
-Deno.test("release: publishes the bucket root pointer last with conditional writes", async () => {
+test("release: publishes the bucket root pointer last with conditional writes", async () => {
   const originalFetch = globalThis.fetch;
   const credentials: R2Credentials = {
     accountId: "a".repeat(32),
@@ -273,7 +592,8 @@ Deno.test("release: publishes the bucket root pointer last with conditional writ
         try {
           await publish(manifest, [], credentials);
         } catch (error) {
-          rejected = error instanceof Error &&
+          rejected =
+            error instanceof Error &&
             (failure === "artifact"
               ? error.message.includes("500")
               : error.message.includes(initial ? "immutable" : "newer release"));
@@ -289,7 +609,7 @@ Deno.test("release: publishes the bucket root pointer last with conditional writ
   }
 });
 
-Deno.test("release: signs R2 requests with configured credentials", async () => {
+test("release: signs R2 requests with configured credentials", async () => {
   const credentials: R2Credentials = {
     accountId: "a".repeat(32),
     accessKeyId: "test-access-key",
@@ -310,7 +630,7 @@ Deno.test("release: signs R2 requests with configured credentials", async () => 
   assert(/Signature=[a-f0-9]{64}$/.test(authorization));
 });
 
-Deno.test("release: upload verification rejects absent and invalid object sizes", async () => {
+test("release: upload verification rejects absent and invalid object sizes", async () => {
   const originalFetch = globalThis.fetch;
   const credentials: R2Credentials = {
     accountId: "a".repeat(32),
@@ -344,7 +664,7 @@ Deno.test("release: upload verification rejects absent and invalid object sizes"
   }
 });
 
-Deno.test("release: parses R2 bucket listing sizes and continuation tokens", () => {
+test("release: parses R2 bucket listing sizes and continuation tokens", () => {
   const result = parseBucketListing(
     "<ListBucketResult><Contents><Key>a&amp;b</Key><Size>42</Size></Contents>" +
       "<IsTruncated>true</IsTruncated><NextContinuationToken>next&amp;page</NextContinuationToken>" +

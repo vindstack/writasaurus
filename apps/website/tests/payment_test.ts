@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { test } from "vitest";
 import {
   isDownloadPlatform,
   isValidEmail,
@@ -7,13 +9,13 @@ import {
 } from "../src/lib/payment-service.ts";
 import { MemoryWebsiteStore, setWebsiteStoreForTests } from "../src/lib/donation-store.ts";
 import { verifyStripeWebhook } from "../src/lib/stripe.ts";
-import { request } from "./helpers.ts";
+import { removeTestFile, request } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test("donation input is validated and normalized to cents", () => {
+test("donation input is validated and normalized to cents", () => {
   assert(parseDonationAmount("none", "") === 0);
   assert(parseDonationAmount("10", "") === 1000);
   assert(parseDonationAmount("25", "") === 2500);
@@ -37,16 +39,16 @@ Deno.test("donation input is validated and normalized to cents", () => {
   }
 });
 
-Deno.test("Stripe Checkout receives the selected one-time donation amount", async () => {
+test("Stripe Checkout receives the selected one-time donation amount", async () => {
   const original = {
-    secretKey: Deno.env.get("STRIPE_SECRET_KEY"),
-    siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
-    deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
+    secretKey: process.env.STRIPE_SECRET_KEY,
+    siteUrl: process.env.PUBLIC_SITE_URL,
+    nodeEnv: process.env.NODE_ENV,
   };
   const originalFetch = globalThis.fetch;
-  Deno.env.set("STRIPE_SECRET_KEY", "sk_test_writasaurus");
-  Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
-  Deno.env.set("DENO_DEPLOYMENT_ID", "test-deployment");
+  process.env.STRIPE_SECRET_KEY = "sk_test_writasaurus";
+  process.env.PUBLIC_SITE_URL = "https://writasaurus.test";
+  process.env.NODE_ENV = "production";
   let checkoutParams: URLSearchParams | undefined;
   globalThis.fetch = (input, init) => {
     if (String(input) === "https://api.stripe.com/v1/checkout/sessions") {
@@ -72,20 +74,18 @@ Deno.test("Stripe Checkout receives the selected one-time donation amount", asyn
     assert(checkoutParams?.get("cancel_url") === "https://writasaurus.test/download?cancelled=1");
   } finally {
     globalThis.fetch = originalFetch;
-    for (
-      const [name, value] of Object.entries({
-        STRIPE_SECRET_KEY: original.secretKey,
-        PUBLIC_SITE_URL: original.siteUrl,
-        DENO_DEPLOYMENT_ID: original.deploymentId,
-      })
-    ) {
-      if (value === undefined) Deno.env.delete(name);
-      else Deno.env.set(name, value);
+    for (const [name, value] of Object.entries({
+      STRIPE_SECRET_KEY: original.secretKey,
+      PUBLIC_SITE_URL: original.siteUrl,
+      NODE_ENV: original.nodeEnv,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 });
 
-Deno.test("Stripe webhook signatures are verified and expire", async () => {
+test("Stripe webhook signatures are verified and expire", async () => {
   const secret = "test_webhook_secret";
   const body = JSON.stringify({
     id: "evt_test",
@@ -120,14 +120,14 @@ Deno.test("Stripe webhook signatures are verified and expire", async () => {
   assert(rejected, "Expected stale Stripe webhook signatures to be rejected.");
 });
 
-Deno.test("free downloads and optional donations share normal accounts", async () => {
+test("free downloads and optional donations share normal accounts", async () => {
   const original = {
-    provider: Deno.env.get("PAYMENT_PROVIDER"),
-    deploymentId: Deno.env.get("DENO_DEPLOYMENT_ID"),
-    siteUrl: Deno.env.get("PUBLIC_SITE_URL"),
-    downloadBase: Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL"),
-    emailLogFile: Deno.env.get("EMAIL_LOG_FILE"),
-    sessionSecret: Deno.env.get("SESSION_SECRET"),
+    provider: process.env.PAYMENT_PROVIDER,
+    nodeEnv: process.env.NODE_ENV,
+    siteUrl: process.env.PUBLIC_SITE_URL,
+    downloadBase: process.env.WRITASAURUS_R2_PUBLIC_BASE_URL,
+    emailLogFile: process.env.EMAIL_LOG_FILE,
+    sessionSecret: process.env.SESSION_SECRET,
   };
   const originalFetch = globalThis.fetch;
   const store = new MemoryWebsiteStore();
@@ -168,12 +168,12 @@ Deno.test("free downloads and optional donations share normal accounts", async (
       sha256: "d".repeat(64),
     },
   };
-  Deno.env.set("PAYMENT_PROVIDER", "mock");
-  Deno.env.delete("DENO_DEPLOYMENT_ID");
-  Deno.env.set("PUBLIC_SITE_URL", "https://writasaurus.test");
-  Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", "https://downloads.example/apps/");
-  Deno.env.set("EMAIL_LOG_FILE", emailLogFile);
-  Deno.env.set("SESSION_SECRET", "test-session-secret-that-is-at-least-32-characters");
+  process.env.PAYMENT_PROVIDER = "mock";
+  process.env.NODE_ENV = "test";
+  process.env.PUBLIC_SITE_URL = "https://writasaurus.test";
+  process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = "https://downloads.example/apps/";
+  process.env.EMAIL_LOG_FILE = emailLogFile;
+  process.env.SESSION_SECRET = "test-session-secret-that-is-at-least-32-characters";
   setWebsiteStoreForTests(store);
   globalThis.fetch = (input, init) => {
     if (String(input) === "https://downloads.example/apps/latest.json") {
@@ -184,7 +184,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     if (String(input) === "https://api.resend.com/emails") {
       return Promise.reject(new Error("Development emails must not call Resend."));
     }
-    return originalFetch(input);
+    return originalFetch(input, init);
   };
 
   try {
@@ -243,9 +243,10 @@ Deno.test("free downloads and optional donations share normal accounts", async (
       body: new URLSearchParams({ email: "writer@example.com" }),
     });
     assert(authRequest.status === 303);
-    const emailMessages = (await Deno.readTextFile(emailLogFile)).trim().split("\n").map(
-      (line) => JSON.parse(line) as { text: string },
-    );
+    const emailMessages = (await readFile(emailLogFile, "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { text: string });
     const passcode = emailMessages.at(-1)?.text.match(/code is (\d{8})/)?.[1];
     assert(passcode, "Expected a passwordless sign-in code.");
 
@@ -294,7 +295,7 @@ Deno.test("free downloads and optional donations share normal accounts", async (
     });
     assert(unpaidSignIn.status === 303);
     const unpaidMessage = JSON.parse(
-      (await Deno.readTextFile(emailLogFile)).trim().split("\n").at(-1)!,
+      (await readFile(emailLogFile, "utf8")).trim().split("\n").at(-1)!,
     ) as { to: string; text: string };
     assert(unpaidMessage.to === unpaidEmail);
     const unpaidCode = unpaidMessage.text.match(/code is (\d{8})/)?.[1];
@@ -326,31 +327,25 @@ Deno.test("free downloads and optional donations share normal accounts", async (
   } finally {
     globalThis.fetch = originalFetch;
     setWebsiteStoreForTests(undefined);
-    try {
-      await Deno.remove(emailLogFile);
-    } catch (error) {
-      if (!(error instanceof Deno.errors.NotFound)) throw error;
-    }
-    for (
-      const [name, value] of Object.entries({
-        PAYMENT_PROVIDER: original.provider,
-        DENO_DEPLOYMENT_ID: original.deploymentId,
-        PUBLIC_SITE_URL: original.siteUrl,
-        WRITASAURUS_R2_PUBLIC_BASE_URL: original.downloadBase,
-        EMAIL_LOG_FILE: original.emailLogFile,
-        SESSION_SECRET: original.sessionSecret,
-      })
-    ) {
-      if (value === undefined) Deno.env.delete(name);
-      else Deno.env.set(name, value);
+    await removeTestFile(emailLogFile);
+    for (const [name, value] of Object.entries({
+      PAYMENT_PROVIDER: original.provider,
+      NODE_ENV: original.nodeEnv,
+      PUBLIC_SITE_URL: original.siteUrl,
+      WRITASAURUS_R2_PUBLIC_BASE_URL: original.downloadBase,
+      EMAIL_LOG_FILE: original.emailLogFile,
+      SESSION_SECRET: original.sessionSecret,
+    })) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
 });
 
-Deno.test("Stripe donation events are idempotent and update receipt status", async () => {
+test("Stripe donation events are idempotent and update receipt status", async () => {
   const originalFetch = globalThis.fetch;
-  const originalSecretKey = Deno.env.get("STRIPE_SECRET_KEY");
-  Deno.env.set("STRIPE_SECRET_KEY", "sk_test_writasaurus");
+  const originalSecretKey = process.env.STRIPE_SECRET_KEY;
+  process.env.STRIPE_SECRET_KEY = "sk_test_writasaurus";
   const store = new MemoryWebsiteStore();
   setWebsiteStoreForTests(store);
   globalThis.fetch = (input) => {
@@ -397,7 +392,7 @@ Deno.test("Stripe donation events are idempotent and update receipt status", asy
   } finally {
     globalThis.fetch = originalFetch;
     setWebsiteStoreForTests(undefined);
-    if (originalSecretKey === undefined) Deno.env.delete("STRIPE_SECRET_KEY");
-    else Deno.env.set("STRIPE_SECRET_KEY", originalSecretKey);
+    if (originalSecretKey === undefined) delete process.env.STRIPE_SECRET_KEY;
+    else process.env.STRIPE_SECRET_KEY = originalSecretKey;
   }
 });

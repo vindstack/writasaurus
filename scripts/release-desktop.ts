@@ -1,3 +1,8 @@
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   isReleaseManifest,
   isSemanticVersion,
@@ -12,17 +17,6 @@ import {
   requestR2,
 } from "./r2.ts";
 
-interface DesktopConfig {
-  output: Record<"linux" | "macos" | "windows", string>;
-}
-
-interface ProjectConfig {
-  desktop?: {
-    output?: DesktopConfig["output"];
-    app?: { name?: string; identifier?: string };
-  };
-}
-
 interface BuiltArtifact extends Omit<ReleaseArtifact, "objectKey"> {
   platform: "linux" | "macos" | "windows";
   objectKey: string;
@@ -33,11 +27,20 @@ type ReleasePlatform = "linux" | "macos" | "windows";
 
 const releasePrefix = "releases";
 const R2_FREE_STORAGE_BYTES = 10_000_000_000;
-const desktopTargets: Record<ReleasePlatform, { target: string; icon: boolean }> = {
-  linux: { target: "x86_64-unknown-linux-gnu", icon: true },
-  macos: { target: "aarch64-apple-darwin", icon: false },
-  windows: { target: "x86_64-pc-windows-msvc", icon: false },
-};
+const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+const desktopTargets = {
+  linux: { flag: "--linux", target: "AppImage", arch: "--x64", fileName: "Writasaurus.AppImage" },
+  macos: { flag: "--mac", target: "tar.gz", arch: "--arm64", fileName: "Writasaurus-macos.tar.gz" },
+  windows: { flag: "--win", target: "msi", arch: "--x64", fileName: "Writasaurus.msi" },
+} as const;
+interface BuildCommand {
+  command: string;
+  args: string[];
+  description: string;
+}
+const platforms: ReleasePlatform[] = ["linux", "macos", "windows"];
+const packageManager = process.env.npm_execpath ? process.execPath : "pnpm";
+const packageManagerArgs = process.env.npm_execpath ? [process.env.npm_execpath] : [];
 const artifactLabels = {
   linux: "Linux",
   macos: "macOS",
@@ -52,24 +55,58 @@ const contentTypes: Record<string, string> = {
 const latestKey = "latest.json";
 
 function usage(): string {
-  return "Usage: deno task release:desktop <version> [--dry-run]\n" +
-    "Example: deno task release:desktop 1.2.3 --dry-run";
+  return (
+    "Usage: pnpm release:desktop <version> --skip-build [--dry-run]\n" +
+    "       pnpm release:desktop <version> --build-platform linux|macos|windows\n\n" +
+    "Build each platform on its native Linux, macOS, or Windows runner. " +
+    "Cross-platform release builds are not supported.\n" +
+    "--build-platform builds and validates only that platform; it never publishes.\n" +
+    "Combine the native runner outputs at:\n" +
+    platforms
+      .map((platform) => `  desktop/${platform}/${desktopTargets[platform].fileName}`)
+      .join("\n") +
+    "\n" +
+    "--skip-build validates all three existing packages without deleting or rebuilding them, " +
+    "then publishes (or writes metadata only with --dry-run).\n" +
+    "Example: pnpm release:desktop 1.2.3 --skip-build --dry-run"
+  );
 }
 
-function parseArguments(args: string[]): { version: string; dryRun: boolean } {
+function parseArguments(args: string[]): {
+  version: string;
+  dryRun: boolean;
+  skipBuild: boolean;
+  buildPlatform?: ReleasePlatform;
+} {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(usage());
-    Deno.exit(0);
+    process.exit(0);
   }
-  const positional = args.filter((arg) => arg !== "--dry-run");
+  const positional: string[] = [];
+  let buildPlatform: ReleasePlatform | undefined;
+  let dryRun = false;
+  let skipBuild = false;
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (arg === "--dry-run") dryRun = true;
+    else if (arg === "--skip-build") skipBuild = true;
+    else if (arg === "--build-platform") {
+      const platform = args[++index];
+      if (buildPlatform || !platforms.includes(platform as ReleasePlatform)) {
+        throw new Error(`Invalid --build-platform argument.\n${usage()}`);
+      }
+      buildPlatform = platform as ReleasePlatform;
+    } else positional.push(arg);
+  }
   if (
-    args.some((arg) => arg.startsWith("-") && arg !== "--dry-run") ||
+    positional.some((arg) => arg.startsWith("-")) ||
     positional.length !== 1 ||
-    !isSemanticVersion(positional[0])
+    !isSemanticVersion(positional[0]) ||
+    (buildPlatform !== undefined && (skipBuild || dryRun))
   ) {
     throw new Error(`Invalid release arguments.\n${usage()}`);
   }
-  return { version: positional[0], dryRun: args.includes("--dry-run") };
+  return { version: positional[0], dryRun, skipBuild, buildPlatform };
 }
 
 function parseVersion(value: string): {
@@ -119,7 +156,7 @@ export function compareVersions(left: string, right: string): number {
 }
 
 function requiredEnv(name: string): string {
-  const value = Deno.env.get(name)?.trim();
+  const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable ${name}.`);
   return value;
 }
@@ -170,159 +207,20 @@ function publicDownloadUrl(base: URL, objectKey: string): string {
 
 async function runCommand(command: string, args: string[], description: string): Promise<void> {
   console.log(`\n${description}`);
-  const child = new Deno.Command(command, {
-    args,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  }).spawn();
-  const status = await child.status;
-  if (!status.success) {
-    throw new Error(`${description} failed (exit code ${status.code}).`);
-  }
-}
-
-function writeString(header: Uint8Array, offset: number, length: number, value: string): void {
-  const encoded = new TextEncoder().encode(value);
-  if (encoded.length > length) throw new Error(`Tar archive field is too long: ${value}`);
-  header.set(encoded, offset);
-}
-
-function writeOctal(header: Uint8Array, offset: number, length: number, value: number): void {
-  const encoded = value.toString(8).padStart(length - 1, "0");
-  if (encoded.length > length - 1) throw new Error("File metadata exceeds the tar format limits.");
-  writeString(header, offset, length - 1, encoded);
-  header[offset + length - 1] = 0;
-}
-
-function tarPathFields(path: string): { name: string; prefix: string } {
-  if (new TextEncoder().encode(path).length <= 100) return { name: path, prefix: "" };
-  const separators = [...path.matchAll(/\//g)].map((match) => match.index!);
-  for (const separator of separators.reverse()) {
-    const prefix = path.slice(0, separator);
-    const name = path.slice(separator + 1);
-    if (
-      new TextEncoder().encode(prefix).length <= 155 &&
-      new TextEncoder().encode(name).length <= 100
-    ) return { name, prefix };
-  }
-  throw new Error(`Path is too long for a portable macOS application archive: ${path}`);
-}
-
-function tarHeader(
-  path: string,
-  options: {
-    size: number;
-    mode: number;
-    mtime: number;
-    type: "file" | "directory" | "symlink";
-    link?: string;
-  },
-): Uint8Array<ArrayBuffer> {
-  const header = new Uint8Array(new ArrayBuffer(512));
-  const fields = tarPathFields(path);
-  writeString(header, 0, 100, fields.name);
-  writeOctal(header, 100, 8, options.mode);
-  writeOctal(header, 108, 8, 0);
-  writeOctal(header, 116, 8, 0);
-  writeOctal(header, 124, 12, options.size);
-  writeOctal(header, 136, 12, options.mtime);
-  header.fill(32, 148, 156);
-  header[156] = options.type === "directory" ? 53 : options.type === "symlink" ? 50 : 48;
-  if (options.link) writeString(header, 157, 100, options.link);
-  writeString(header, 257, 6, "ustar\0");
-  writeString(header, 263, 2, "00");
-  writeString(header, 265, 32, "root");
-  writeString(header, 297, 32, "root");
-  writeString(header, 345, 155, fields.prefix);
-  const checksum = header.reduce((sum, byte) => sum + byte, 0);
-  writeString(header, 148, 6, checksum.toString(8).padStart(6, "0"));
-  header[154] = 0;
-  header[155] = 32;
-  return header;
-}
-
-async function writeCompressedMacApp(bundlePath: string): Promise<string> {
-  const archivePath = "desktop/Writasaurus-macos.tar.gz";
-  const output = await Deno.create(archivePath);
-  const compression = new CompressionStream("gzip");
-  const compressedWriter = compression.writable.getWriter();
-  const writeOutput = async (chunk: Uint8Array): Promise<void> => {
-    let offset = 0;
-    while (offset < chunk.byteLength) offset += await output.write(chunk.subarray(offset));
-  };
-  const pump = compression.readable.pipeTo(
-    new WritableStream<Uint8Array>({ write: writeOutput }),
-  );
-
-  const writeEntry = async (
-    relative: string,
-    path: string,
-    kind: "file" | "directory" | "symlink",
-  ): Promise<void> => {
-    const info = await Deno.stat(path);
-    const archiveName = kind === "directory" ? `${relative.replace(/\/+$/, "")}/` : relative;
-    const link = kind === "symlink" ? await Deno.readLink(path) : undefined;
-    const size = kind === "file" ? info.size : 0;
-    await compressedWriter.write(
-      tarHeader(archiveName, {
-        size,
-        mode: info.mode ? info.mode & 0o777 : kind === "directory" ? 0o755 : 0o644,
-        mtime: Math.floor((info.mtime?.getTime() ?? Date.now()) / 1000),
-        type: kind,
-        link,
-      }),
-    );
-
-    if (kind === "file") {
-      const file = await Deno.open(path, { read: true });
-      try {
-        let read = 0;
-        const buffer = new Uint8Array(128 * 1024);
-        while (read < size) {
-          const count = await file.read(
-            buffer.subarray(0, Math.min(buffer.byteLength, size - read)),
-          );
-          if (count === null) throw new Error(`File changed while archiving: ${path}`);
-          read += count;
-          await compressedWriter.write(buffer.subarray(0, count));
-        }
-        if (read !== size) throw new Error(`File changed while archiving: ${path}`);
-      } finally {
-        file.close();
-      }
-      const padding = (512 - (size % 512)) % 512;
-      if (padding) await compressedWriter.write(new Uint8Array(padding));
-    } else if (kind === "directory") {
-      const children = [];
-      for await (const entry of Deno.readDir(path)) children.push(entry);
-      children.sort((left, right) => left.name.localeCompare(right.name));
-      for (const child of children) {
-        const childPath = `${path}/${child.name}`;
-        const childRelative = `${archiveName}${child.name}`;
-        await writeEntry(
-          childRelative,
-          childPath,
-          child.isSymlink ? "symlink" : child.isDirectory ? "directory" : "file",
+  await new Promise<void>((accept, reject) => {
+    const child = spawn(command, args, { cwd: projectRoot, stdio: "inherit" });
+    child.once("error", reject);
+    child.once("exit", (code, signal) => {
+      if (code === 0) accept();
+      else {
+        reject(
+          new Error(
+            `${description} failed (${signal ? `signal ${signal}` : `exit code ${code}`}).`,
+          ),
         );
       }
-    }
-  };
-
-  try {
-    const rootName = bundlePath.split("/").pop()!;
-    await writeEntry(rootName, bundlePath, "directory");
-    await compressedWriter.write(new Uint8Array(1024));
-    await compressedWriter.close();
-    await pump;
-  } catch (error) {
-    await compressedWriter.abort(error).catch(() => {});
-    await pump.catch(() => {});
-    throw error;
-  } finally {
-    output.close();
-  }
-  return archivePath;
+    });
+  });
 }
 
 function projectPath(path: string): string {
@@ -333,52 +231,83 @@ function projectPath(path: string): string {
   return normalized;
 }
 
-async function buildDesktopTargets(): Promise<Record<"linux" | "macos" | "windows", string>> {
-  await runCommand(
-    "deno",
-    ["task", "--cwd", "apps/desktop", "build"],
-    "Building the desktop web application",
-  );
-
-  const config = JSON.parse(await Deno.readTextFile("deno.json")) as ProjectConfig;
-  const output = config.desktop?.output;
-  if (!output?.linux || !output.macos || !output.windows) {
-    throw new Error("deno.json must define Desktop output paths for linux, macos, and windows.");
+function desktopBuildCommands(version: string, platform?: ReleasePlatform): BuildCommand[] {
+  if (!isSemanticVersion(version)) throw new Error(`Invalid semantic version: ${version}`);
+  if (process.platform === "win32" && !process.env.npm_execpath) {
+    throw new Error("On Windows, invoke this script with pnpm release:desktop.");
   }
-  const paths = {
-    linux: projectPath(output.linux),
-    macos: projectPath(output.macos),
-    windows: projectPath(output.windows),
-  };
-  for (const platform of ["linux", "macos", "windows"] as const) {
-    const options = desktopTargets[platform];
-    const args = [
-      "desktop",
-      "--no-check",
-      "--include=apps/desktop/dist/",
-      `--target=${options.target}`,
-      `--output=./${paths[platform]}`,
-      ...(options.icon ? ["--icon=apps/desktop/public/desktop-icon.png"] : []),
-      "--allow-env=HOME,XDG_DATA_HOME,LOCALAPPDATA,APPDATA,PORT,DENO_SERVE_ADDRESS,DENO_DESKTOP,WRITASAURUS_DESKTOP,CI,NO_COLOR,FORCE_COLOR,TERM,NODE_ENV",
-      "--allow-net",
-      "--allow-read",
-      "--allow-write",
-      "--allow-run=zenity,kdialog,which,osascript,powershell,ioreg",
-      "apps/desktop/desktop.ts",
-    ];
-    await runCommand(
-      "deno",
-      args,
-      `Building ${artifactLabels[platform]} Desktop package (${options.target})`,
+  return [
+    {
+      command: packageManager,
+      args: [...packageManagerArgs, "--filter", "@writasaurus/desktop", "build"],
+      description: "Building the desktop web application and Electron entry points",
+    },
+    ...(platform ? [platform] : platforms).map((platform) => {
+      const options = desktopTargets[platform];
+      const configPlatform = platform === "linux" ? "linux" : platform === "macos" ? "mac" : "win";
+      return {
+        command: packageManager,
+        args: [
+          ...packageManagerArgs,
+          "--filter",
+          "@writasaurus/desktop",
+          "exec",
+          "electron-builder",
+          options.flag,
+          options.target,
+          options.arch,
+          "--publish",
+          "never",
+          `--config.directories.output=${resolve(projectRoot, "desktop", platform)}`,
+          `--config.${configPlatform}.artifactName=${options.fileName}`,
+          `--config.extraMetadata.version=${version}`,
+        ],
+        description: `Packaging ${artifactLabels[platform]} Electron application (${options.target})`,
+      };
+    }),
+  ];
+}
+
+function artifactPaths(): Record<ReleasePlatform, string> {
+  return Object.fromEntries(
+    platforms.map((platform) => [
+      platform,
+      projectPath(`desktop/${platform}/${desktopTargets[platform].fileName}`),
+    ]),
+  ) as Record<ReleasePlatform, string>;
+}
+
+function assertNativeBuildPlatform(
+  platform?: ReleasePlatform,
+  host = process.platform,
+): asserts platform is ReleasePlatform {
+  if (!platform) {
+    throw new Error(
+      "A release requires artifacts from native Linux, macOS, and Windows runners. " +
+        "Build each with --build-platform linux|macos|windows, combine their desktop/ outputs, " +
+        "then use --skip-build (optionally --dry-run). No files were deleted or rebuilt.",
     );
   }
-
-  paths.macos = `${paths.macos}.app`;
-  const macInfo = await Deno.stat(paths.macos);
-  if (!macInfo.isDirectory) {
-    throw new Error(`Expected a macOS application bundle directory at ${paths.macos}.`);
+  const nativeHosts = { linux: "linux", macos: "darwin", windows: "win32" } as const;
+  if (nativeHosts[platform] !== host) {
+    throw new Error(
+      `${artifactLabels[platform]} packaging requires a native ${nativeHosts[platform]} runner; ` +
+        `current host is ${host}. Collect native artifacts and publish with --skip-build.`,
+    );
   }
-  paths.macos = await writeCompressedMacApp(paths.macos);
+}
+
+async function buildDesktopTargets(
+  version: string,
+  platform?: ReleasePlatform,
+): Promise<Record<ReleasePlatform, string>> {
+  assertNativeBuildPlatform(platform);
+  const commands = desktopBuildCommands(version, platform);
+  const paths = artifactPaths();
+  await rm(resolve(projectRoot, paths[platform]), { force: true });
+  for (const { command, args, description } of commands) {
+    await runCommand(command, args, description);
+  }
   return paths;
 }
 
@@ -390,20 +319,21 @@ async function describeArtifacts(
   version: string,
   paths: Record<"linux" | "macos" | "windows", string>,
   publicUrlBase: URL,
+  selectedPlatforms: ReleasePlatform[] = platforms,
 ): Promise<BuiltArtifact[]> {
   const artifacts: BuiltArtifact[] = [];
-  for (const platform of ["linux", "macos", "windows"] as const) {
+  for (const platform of selectedPlatforms) {
     const path = paths[platform];
-    let info: Deno.FileInfo;
+    let info: Awaited<ReturnType<typeof stat>>;
     try {
-      info = await Deno.stat(path);
+      info = await stat(resolve(projectRoot, path));
     } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
         throw new Error(`Expected Desktop package was not produced: ${path}`);
       }
       throw error;
     }
-    if (!info.isFile || info.size <= 0) {
+    if (!info.isFile() || info.size <= 0) {
       throw new Error(`Expected a non-empty release file at ${path}.`);
     }
     const fileName = path.split("/").pop()!;
@@ -413,9 +343,9 @@ async function describeArtifacts(
     const extension = fileName.slice(fileName.lastIndexOf("."));
     const contentType = contentTypes[extension];
     if (!contentType) throw new Error(`Unsupported Desktop package extension: ${extension}`);
-    const bytes = await Deno.readFile(path);
+    const bytes = await readFile(resolve(projectRoot, path));
     validateArtifact(platform, bytes, path);
-    const sha256 = toHex(await crypto.subtle.digest("SHA-256", bytes));
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     const key = `${releasePrefix}/v${version}/${fileName}`;
     artifacts.push({
       platform,
@@ -432,14 +362,15 @@ async function describeArtifacts(
 }
 
 function validateArtifact(platform: ReleasePlatform, bytes: Uint8Array, path: string): void {
-  const valid = platform === "linux"
-    ? bytes.length > 10 && bytes[8] === 0x41 && bytes[9] === 0x49
-    : platform === "macos"
-    ? bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b
-    : bytes.length > 8 &&
-      [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every((value, index) =>
-        bytes[index] === value
-      );
+  const valid =
+    platform === "linux"
+      ? bytes.length > 10 && bytes[8] === 0x41 && bytes[9] === 0x49
+      : platform === "macos"
+        ? bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b
+        : bytes.length > 8 &&
+          [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1].every(
+            (value, index) => bytes[index] === value,
+          );
   if (!valid) {
     throw new Error(
       `The ${artifactLabels[platform]} package has an invalid file signature: ${path}`,
@@ -472,17 +403,12 @@ async function makeManifest(
       fileName: "SHA256SUMS.txt",
       objectKey: checksumsKey,
       downloadUrl: publicDownloadUrl(publicUrlBase, checksumsKey),
-      sha256: toHex(
-        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(checksums)),
-      ),
+      sha256: toHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(checksums))),
     },
   };
 }
 
-async function verifyNotPublished(
-  version: string,
-  credentials: R2Credentials,
-): Promise<void> {
+async function verifyNotPublished(version: string, credentials: R2Credentials): Promise<void> {
   const versionPrefix = `${releasePrefix}/v${version}/`;
   const keys = [
     `${versionPrefix}Writasaurus.AppImage`,
@@ -503,33 +429,26 @@ async function verifyNotPublished(
   }
 }
 
-async function ensureNetworkPermission(accountId: string): Promise<void> {
-  const permission = await Deno.permissions.request({
-    name: "net",
-    host: `${accountId}.r2.cloudflarestorage.com`,
-  });
-  if (permission.state !== "granted") {
-    throw new Error("Network permission for the Cloudflare R2 account was not granted.");
-  }
-}
-
 async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<void> {
   const outputDir = `desktop/release-dry-run/v${version}`;
-  await Deno.mkdir(outputDir, { recursive: true });
+  await mkdir(resolve(projectRoot, outputDir), { recursive: true });
   const json = `${JSON.stringify(manifest, null, 2)}\n`;
-  await Deno.writeTextFile(`${outputDir}/release.json`, json);
-  await Deno.writeTextFile(`${outputDir}/SHA256SUMS.txt`, makeChecksumsFromManifest(manifest));
+  await writeFile(resolve(projectRoot, outputDir, "release.json"), json);
+  await writeFile(
+    resolve(projectRoot, outputDir, "SHA256SUMS.txt"),
+    makeChecksumsFromManifest(manifest),
+  );
   console.log(`Dry run complete. Metadata preview: ${outputDir}/release.json`);
   console.log("No Cloudflare credentials were read and no R2 API requests or uploads were made.");
 }
 
 function makeChecksumsFromManifest(manifest: ReleaseManifest): string {
-  return `${
-    (["linux", "macos", "windows"] as const).map((platform) => {
+  return `${(["linux", "macos", "windows"] as const)
+    .map((platform) => {
       const artifact = manifest.artifacts[platform];
       return `${artifact.sha256}  ${artifact.fileName}`;
-    }).join("\n")
-  }\n`;
+    })
+    .join("\n")}\n`;
 }
 
 async function assertNewReleaseVersion(
@@ -548,8 +467,11 @@ async function assertNewReleaseVersion(
   const latest: unknown = await response.json();
   // Only the version is needed here, so older bucket manifest formats can be upgraded.
   if (
-    typeof latest !== "object" || latest === null || !("version" in latest) ||
-    typeof latest.version !== "string" || !isSemanticVersion(latest.version)
+    typeof latest !== "object" ||
+    latest === null ||
+    !("version" in latest) ||
+    typeof latest.version !== "string" ||
+    !isSemanticVersion(latest.version)
   ) {
     throw new Error(`R2 ${latestKey} has an invalid version; refusing to publish.`);
   }
@@ -572,8 +494,10 @@ async function publish(
   const releaseBytes = new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
   const checksumBytes = new TextEncoder().encode(makeChecksumsFromManifest(manifest));
   const currentStorage = await bucketStorageBytes(credentials);
-  const addedBytes = artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
-    releaseBytes.byteLength * 2 + checksumBytes.byteLength;
+  const addedBytes =
+    artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
+    releaseBytes.byteLength * 2 +
+    checksumBytes.byteLength;
   if (currentStorage + addedBytes > R2_FREE_STORAGE_BYTES) {
     throw new Error(
       `Publishing would exceed the 10 GB R2 free storage allowance ` +
@@ -586,7 +510,14 @@ async function publish(
   );
 
   for (const artifact of artifacts) {
-    const bytes = await Deno.readFile(artifact.path);
+    const bytes = await readFile(resolve(projectRoot, artifact.path));
+    validateArtifact(artifact.platform, bytes, artifact.path);
+    if (
+      bytes.byteLength !== artifact.sizeBytes ||
+      createHash("sha256").update(bytes).digest("hex") !== artifact.sha256
+    ) {
+      throw new Error(`Release artifact changed before upload: ${artifact.path}`);
+    }
     console.log(`Uploading ${artifact.label} (${artifact.sizeBytes.toLocaleString()} bytes)…`);
     await putObject(credentials, artifact.objectKey, bytes, {
       contentType: contentTypes[artifact.fileName.slice(artifact.fileName.lastIndexOf("."))],
@@ -598,17 +529,12 @@ async function publish(
   }
 
   const releaseKey = `${releasePrefix}/v${manifest.version}/release.json`;
-  await putObject(
-    credentials,
-    manifest.checksums.objectKey,
-    checksumBytes,
-    {
-      contentType: contentTypes[".txt"],
-      sha256: manifest.checksums.sha256,
-      immutable: true,
-      cacheControl: "public, max-age=31536000, immutable",
-    },
-  );
+  await putObject(credentials, manifest.checksums.objectKey, checksumBytes, {
+    contentType: contentTypes[".txt"],
+    sha256: manifest.checksums.sha256,
+    immutable: true,
+    cacheControl: "public, max-age=31536000, immutable",
+  });
   console.log(`Verified ${manifest.checksums.objectKey}`);
 
   await putObject(credentials, releaseKey, releaseBytes, {
@@ -630,19 +556,30 @@ async function publish(
 }
 
 async function main(): Promise<void> {
-  const { version, dryRun } = parseArguments(Deno.args);
+  const { version, dryRun, skipBuild, buildPlatform } = parseArguments(process.argv.slice(2));
+  if (!skipBuild) assertNativeBuildPlatform(buildPlatform);
+  if (buildPlatform) {
+    const paths = await buildDesktopTargets(version, buildPlatform);
+    await describeArtifacts(version, paths, new URL("https://native-build.invalid/"), [
+      buildPlatform,
+    ]);
+    console.log(
+      `Validated ${paths[buildPlatform]}. Collect all native platform outputs, ` +
+        "then publish with --skip-build.",
+    );
+    return;
+  }
   const publicUrlBase = publicBaseUrl();
   let credentials: R2Credentials | undefined;
   if (!dryRun) {
     credentials = readCredentials();
-    await ensureNetworkPermission(credentials.accountId);
     await assertNewReleaseVersion(version, credentials);
     await verifyNotPublished(version, credentials);
   } else {
     console.log("Dry run: remote duplicate-version checks and uploads are skipped.");
   }
 
-  const paths = await buildDesktopTargets();
+  const paths = artifactPaths();
   const artifacts = await describeArtifacts(version, paths, publicUrlBase);
   const checksums = makeChecksums(artifacts);
   const manifest = await makeManifest(version, artifacts, checksums, publicUrlBase);
@@ -664,20 +601,25 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.main) {
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await main();
   } catch (error) {
     console.error(`Release failed: ${error instanceof Error ? error.message : String(error)}`);
-    Deno.exitCode = 1;
+    process.exitCode = 1;
   }
 }
 
 export {
   assertNewReleaseVersion,
+  assertNativeBuildPlatform,
+  buildDesktopTargets,
+  describeArtifacts,
+  desktopBuildCommands,
   desktopTargets,
   makeChecksums,
   makeManifest,
+  main,
   parseArguments,
   parseVersion,
   projectPath,
@@ -685,4 +627,6 @@ export {
   publicDownloadUrl,
   publish,
   validateArtifact,
+  verifyNotPublished,
+  writeDryRun,
 };

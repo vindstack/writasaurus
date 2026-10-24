@@ -50,7 +50,7 @@ function canonicalQuery(url: URL): string {
   return [...url.searchParams.entries()]
     .map(([key, value]) => [encode(key), encode(value)] as const)
     .sort(([keyA, valueA], [keyB, valueB]) =>
-      keyA === keyB ? valueA.localeCompare(valueB) : keyA.localeCompare(keyB)
+      keyA === keyB ? valueA.localeCompare(valueB) : keyA.localeCompare(keyB),
     )
     .map(([key, value]) => `${key}=${value}`)
     .join("&");
@@ -63,7 +63,9 @@ export async function presignR2GetUrl(
   now = new Date(),
 ): Promise<URL> {
   if (
-    !Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 1 || expiresInSeconds > 604800
+    !Number.isSafeInteger(expiresInSeconds) ||
+    expiresInSeconds < 1 ||
+    expiresInSeconds > 604800
   ) {
     throw new Error("Presigned URL expiry must be between 1 and 604800 seconds.");
   }
@@ -72,10 +74,7 @@ export async function presignR2GetUrl(
   const shortDate = date.slice(0, 8);
   const scope = `${shortDate}/auto/s3/aws4_request`;
   url.searchParams.set("X-Amz-Algorithm", "AWS4-HMAC-SHA256");
-  url.searchParams.set(
-    "X-Amz-Credential",
-    `${credentials.accessKeyId}/${scope}`,
-  );
+  url.searchParams.set("X-Amz-Credential", `${credentials.accessKeyId}/${scope}`);
   url.searchParams.set("X-Amz-Date", date);
   url.searchParams.set("X-Amz-Expires", String(expiresInSeconds));
   url.searchParams.set("X-Amz-SignedHeaders", "host");
@@ -131,23 +130,23 @@ export async function signR2Request(
     ["x-amz-content-sha256", payloadHash],
     ["x-amz-date", date],
   ]);
-  for (
-    const name of [
-      "content-disposition",
-      "content-type",
-      "cache-control",
-      "if-match",
-      "if-none-match",
-      "x-amz-meta-sha256",
-    ]
-  ) {
+  for (const name of [
+    "content-disposition",
+    "content-type",
+    "cache-control",
+    "if-match",
+    "if-none-match",
+    "x-amz-meta-sha256",
+  ]) {
     const value = headers.get(name);
     if (value !== null) canonicalHeaders.set(name, value.trim().replaceAll(/\s+/g, " "));
   }
 
   const signedHeaders = [...canonicalHeaders.keys()].sort().join(";");
-  const canonicalHeaderString = [...canonicalHeaders.keys()].sort()
-    .map((name) => `${name}:${canonicalHeaders.get(name)}\n`).join("");
+  const canonicalHeaderString = [...canonicalHeaders.keys()]
+    .sort()
+    .map((name) => `${name}:${canonicalHeaders.get(name)}\n`)
+    .join("");
   const canonicalRequest = [
     method,
     url.pathname,
@@ -294,9 +293,7 @@ export async function putObject(
       `R2 upload verification failed for ${key}: expected ${body.byteLength} bytes, got ${contentLength}.`,
     );
   }
-  if (
-    options.sha256 && verification.headers.get("x-amz-meta-sha256") !== options.sha256
-  ) {
+  if (options.sha256 && verification.headers.get("x-amz-meta-sha256") !== options.sha256) {
     throw new Error(`R2 upload verification failed: checksum metadata mismatch for ${key}.`);
   }
 }
@@ -321,12 +318,13 @@ function decodeXmlText(value: string): string {
         const codePoint = /^#x[0-9a-f]+$/i.test(name)
           ? Number.parseInt(name.slice(2), 16)
           : /^#\d+$/.test(name)
-          ? Number.parseInt(name.slice(1), 10)
-          : Number.NaN;
+            ? Number.parseInt(name.slice(1), 10)
+            : Number.NaN;
         if (
           !Number.isInteger(codePoint) ||
-          codePoint < 0x20 && ![0x09, 0x0a, 0x0d].includes(codePoint) ||
-          codePoint > 0x10ffff || codePoint >= 0xd800 && codePoint <= 0xdfff
+          (codePoint < 0x20 && ![0x09, 0x0a, 0x0d].includes(codePoint)) ||
+          codePoint > 0x10ffff ||
+          (codePoint >= 0xd800 && codePoint <= 0xdfff)
         ) {
           throw new Error(`R2 returned invalid XML entity &${name};.`);
         }

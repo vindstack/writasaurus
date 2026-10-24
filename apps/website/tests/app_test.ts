@@ -1,10 +1,11 @@
+import { test } from "vitest";
 import { request } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test("website root presents free downloads and optional donations", async () => {
+test("website root presents free downloads and optional donations", async () => {
   const response = await request("/");
   assert(response.status === 200);
   const page = await response.text();
@@ -23,7 +24,7 @@ Deno.test("website root presents free downloads and optional donations", async (
   assert(!page.includes("FIELD NOTES"));
 });
 
-Deno.test("download forms require explicit acceptance of the terms", async () => {
+test("download forms require explicit acceptance of the terms", async () => {
   for (const path of ["/download", "/donation/success"]) {
     const response = await request(path);
     const page = await response.text();
@@ -37,7 +38,7 @@ Deno.test("download forms require explicit acceptance of the terms", async () =>
   }
 });
 
-Deno.test("downloads and donations reject missing or invalid terms acceptance", async () => {
+test("downloads and donations reject missing or invalid terms acceptance", async () => {
   for (const donation of ["none", "10"]) {
     for (const consent of [undefined, "no", "on", ""]) {
       const body = new URLSearchParams({
@@ -57,26 +58,24 @@ Deno.test("downloads and donations reject missing or invalid terms acceptance", 
   }
 });
 
-Deno.test("website no longer exposes licensing, purchase, or administration routes", async () => {
-  for (
-    const path of [
-      "/welcome",
-      "/open",
-      "/settings",
-      "/api/editor/status",
-      "/checkout",
-      "/admin",
-      "/api/license/activate",
-      "/api/license/refresh",
-      "/api/account/refund",
-    ]
-  ) {
+test("website no longer exposes licensing, purchase, or administration routes", async () => {
+  for (const path of [
+    "/welcome",
+    "/open",
+    "/settings",
+    "/api/editor/status",
+    "/checkout",
+    "/admin",
+    "/api/license/activate",
+    "/api/license/refresh",
+    "/api/account/refund",
+  ]) {
     const response = await request(path);
     assert(response.status === 404, `Expected ${path} to be absent.`);
   }
 });
 
-Deno.test("marketing page has nonce-based CSP and terms link", async () => {
+test("marketing page has nonce-based CSP and terms link", async () => {
   const response = await request("/");
   const policy = response.headers.get("content-security-policy") ?? "";
   const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
@@ -91,7 +90,7 @@ Deno.test("marketing page has nonce-based CSP and terms link", async () => {
   assert(page.includes('href="/agreement"'));
 });
 
-Deno.test("download page presents optional email and donation choices", async () => {
+test("download page presents optional email and donation choices", async () => {
   const response = await request("/download");
   assert(response.status === 200);
   const page = await response.text();
@@ -109,18 +108,18 @@ Deno.test("download page presents optional email and donation choices", async ()
   assert(page.includes("No email is needed for a free download."));
 });
 
-Deno.test("form redirects allow only the website, Stripe, and the configured download origin", async () => {
-  const original = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL");
+test("form redirects allow only the website, Stripe, and the configured download origin", async () => {
+  const original = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
   try {
     for (const base of [undefined, "https://downloads.example.com/apps/"]) {
-      if (base === undefined) Deno.env.delete("WRITASAURUS_R2_PUBLIC_BASE_URL");
-      else Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", base);
+      if (base === undefined) delete process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
+      else process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = base;
       const response = await request("/download");
       await response.body?.cancel();
       const policy = response.headers.get("content-security-policy") ?? "";
-      const formAction = policy.split("; ").find((directive) =>
-        directive.startsWith("form-action ")
-      );
+      const formAction = policy
+        .split("; ")
+        .find((directive) => directive.startsWith("form-action "));
       assert(
         formAction ===
           `form-action 'self' https://checkout.stripe.com${
@@ -129,7 +128,7 @@ Deno.test("form redirects allow only the website, Stripe, and the configured dow
       );
     }
   } finally {
-    if (original === undefined) Deno.env.delete("WRITASAURUS_R2_PUBLIC_BASE_URL");
-    else Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", original);
+    if (original === undefined) delete process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
+    else process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = original;
   }
 });

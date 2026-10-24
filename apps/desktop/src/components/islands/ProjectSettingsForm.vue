@@ -65,9 +65,11 @@ async function saveGoal(): Promise<void> {
     return;
   }
   if (
-    manuscriptWordGoal === savedGoals.value.manuscript &&
-    dailyWordGoal === savedGoals.value.daily || saving.value
-  ) return;
+    (manuscriptWordGoal === savedGoals.value.manuscript &&
+      dailyWordGoal === savedGoals.value.daily) ||
+    saving.value
+  )
+    return;
 
   saving.value = true;
   error.value = "";
@@ -90,10 +92,10 @@ async function saveGoal(): Promise<void> {
       manuscript: project.settings.user_settings.manuscriptWordGoal,
       daily: project.settings.user_settings.dailyWordGoal,
     };
-    status.value = manuscriptWordGoal === Number(goal.value) &&
-        dailyWordGoal === Number(dailyGoal.value)
-      ? "Project goals saved."
-      : "";
+    status.value =
+      manuscriptWordGoal === Number(goal.value) && dailyWordGoal === Number(dailyGoal.value)
+        ? "Project goals saved."
+        : "";
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : "Could not save project settings.";
     status.value = "";
@@ -102,7 +104,8 @@ async function saveGoal(): Promise<void> {
     if (
       Number(goal.value) !== savedGoals.value.manuscript ||
       Number(dailyGoal.value) !== savedGoals.value.daily
-    ) scheduleGoalSave();
+    )
+      scheduleGoalSave();
   }
 }
 

@@ -35,7 +35,7 @@ export async function POST({ request }: { request: Request }): Promise<Response>
     try {
       return Response.json({
         ok: true,
-        ...await createDraft(payload.mode, payload.sourceDraft),
+        ...(await createDraft(payload.mode, payload.sourceDraft)),
       });
     } catch (error) {
       console.error("Could not create project draft:", error);

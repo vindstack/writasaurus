@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { test } from "vitest";
 import { createTestApp } from "./helpers.ts";
 import {
   closeActiveFile,
@@ -27,28 +30,32 @@ function assertEquals<T>(actual: T, expected: T): void {
 }
 
 function createDesktopApp() {
-  return createTestApp();
+  return createTestApp({
+    openFile: async () => null,
+    saveFile: async () => null,
+    chooseDirectory: async () => null,
+  });
 }
 
-Deno.test("project: ignores legacy EPUBs without migrating them", async () => {
-  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-drafts-" });
+test("project: ignores legacy EPUBs without migrating them", async () => {
+  const directory = await mkdtemp(resolve(".writasaurus-drafts-"));
   try {
     const epub = await generateEpub(blankManuscript("Legacy Book"));
-    await Deno.writeFile(`${directory}/legacy-book.epub`, epub);
+    await writeFile(`${directory}/legacy-book.epub`, epub);
     assertEquals(await projectEpubPath(directory), null);
-    const settings = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    const settings = JSON.parse(await readFile(`${directory}/settings.json`, "utf8"));
     assertEquals(settings.drafts.length, 0);
     assertEquals(settings.user_settings.manuscriptWordGoal, DEFAULT_MANUSCRIPT_WORD_GOAL);
-    assertEquals(await Deno.stat(`${directory}/legacy-book.epub`).then(() => true), true);
+    assertEquals(await stat(`${directory}/legacy-book.epub`).then(() => true), true);
   } finally {
-    await Deno.remove(directory, { recursive: true });
+    await rm(directory, { recursive: true });
   }
 });
 
-Deno.test("project: user settings default, persist, and preserve draft metadata", async () => {
-  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-settings-" });
+test("project: user settings default, persist, and preserve draft metadata", async () => {
+  const directory = await mkdtemp(resolve(".writasaurus-settings-"));
   try {
-    await Deno.writeTextFile(
+    await writeFile(
       `${directory}/settings.json`,
       JSON.stringify({ drafts: [{ number: 1, filename: "draft_1.epub" }] }),
     );
@@ -57,10 +64,13 @@ Deno.test("project: user settings default, persist, and preserve draft metadata"
     assert(defaults.user_settings.dailyWordGoal > 0);
     assertEquals(defaults.drafts[0].filename, "draft_1.epub");
 
-    const updated = await updateProjectSettings({
-      manuscriptWordGoal: 95_000,
-      dailyWordGoal: 2_000,
-    }, directory);
+    const updated = await updateProjectSettings(
+      {
+        manuscriptWordGoal: 95_000,
+        dailyWordGoal: 2_000,
+      },
+      directory,
+    );
     assertEquals(updated.user_settings.manuscriptWordGoal, 95_000);
     assertEquals(updated.user_settings.dailyWordGoal, 2_000);
     assertEquals(updated.drafts[0].filename, "draft_1.epub");
@@ -78,17 +88,17 @@ Deno.test("project: user settings default, persist, and preserve draft metadata"
       assert(rejected, `Expected ${manuscriptWordGoal} to be rejected`);
     }
   } finally {
-    await Deno.remove(directory, { recursive: true });
+    await rm(directory, { recursive: true });
   }
 });
 
-Deno.test("project settings API: reports when there is no active project", async () => {
+test("project settings API: reports when there is no active project", async () => {
   const response = await getProjectSettingsApi();
   assertEquals(response.status, 409);
 });
 
-Deno.test("project: active project details include saved goal and manuscript word count", async () => {
-  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-project-" });
+test("project: active project details include saved goal and manuscript word count", async () => {
+  const directory = await mkdtemp(resolve(".writasaurus-project-"));
   const previousActivePath = getActivePath();
   const previousSavedPath = await loadLastFilePath();
   try {
@@ -96,7 +106,7 @@ Deno.test("project: active project details include saved goal and manuscript wor
     manuscript.filename = "draft_1.epub";
     manuscript.chapters[0].content = "<p>one two three four</p>";
     manuscript.chapters[0].wordCount = 4;
-    await Deno.writeFile(`${directory}/draft_1.epub`, await generateEpub(manuscript));
+    await writeFile(`${directory}/draft_1.epub`, await generateEpub(manuscript));
     await setActivePath(`${directory}/draft_1.epub`);
 
     const initial = await getActiveProjectDetails();
@@ -128,26 +138,26 @@ Deno.test("project: active project details include saved goal and manuscript wor
     if (previousActivePath) await setActivePath(previousActivePath);
     else if (previousSavedPath) await setActivePath(previousSavedPath);
     else await closeActiveFile();
-    await Deno.remove(directory, { recursive: true });
+    await rm(directory, { recursive: true });
   }
 });
 
-Deno.test("project: settings track numbered drafts and select the latest tracked draft", async () => {
-  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-drafts-" });
+test("project: settings track numbered drafts and select the latest tracked draft", async () => {
+  const directory = await mkdtemp(resolve(".writasaurus-drafts-"));
   try {
     const epub = await generateEpub(blankManuscript("Drafted Book"));
-    await Deno.writeFile(`${directory}/draft_1.epub`, epub);
-    await Deno.writeFile(`${directory}/draft_3.epub`, epub);
+    await writeFile(`${directory}/draft_1.epub`, epub);
+    await writeFile(`${directory}/draft_3.epub`, epub);
     assertEquals(await projectEpubPath(directory), `${directory}/draft_3.epub`);
 
-    await Deno.writeFile(`${directory}/draft_5.epub`, epub);
+    await writeFile(`${directory}/draft_5.epub`, epub);
     assertEquals(await projectEpubPath(directory), `${directory}/draft_3.epub`);
   } finally {
-    await Deno.remove(directory, { recursive: true });
+    await rm(directory, { recursive: true });
   }
 });
 
-Deno.test("project: opening a project returns 204 if no folder is chosen", async () => {
+test("project: opening a project returns 204 if no folder is chosen", async () => {
   const app = createDesktopApp();
   const response = await app.request("/api/editor/project/open", {
     method: "POST",
@@ -156,7 +166,7 @@ Deno.test("project: opening a project returns 204 if no folder is chosen", async
   assertEquals(response.status, 204);
 });
 
-Deno.test("editor-api: status reports active file properties", async () => {
+test("editor-api: status reports active file properties", async () => {
   const app = createDesktopApp();
   const res = await app.request("/api/editor/status");
   assertEquals(res.status, 200);
@@ -166,7 +176,7 @@ Deno.test("editor-api: status reports active file properties", async () => {
   assert(data.activePath === null || typeof data.activePath === "string");
 });
 
-Deno.test("editor-api: close resets active file state", async () => {
+test("editor-api: close resets active file state", async () => {
   const app = createDesktopApp();
   const closeRes = await app.request("/api/editor/close", {
     method: "POST",
@@ -183,14 +193,9 @@ Deno.test("editor-api: close resets active file state", async () => {
   assertEquals(statusData.activePath, null);
 });
 
-Deno.test("editor-api: save validates request payload", async () => {
+test("editor-api: save validates request payload", async () => {
   const app = createDesktopApp();
-  const invalidPayloads = [
-    null,
-    {},
-    { content: 123 },
-    { other: "field" },
-  ];
+  const invalidPayloads = [null, {}, { content: 123 }, { other: "field" }];
 
   for (const payload of invalidPayloads) {
     const res = await app.request("/api/editor/save", {
@@ -206,7 +211,7 @@ Deno.test("editor-api: save validates request payload", async () => {
   }
 });
 
-Deno.test("editor-api: save returns 204 if no file chosen", async () => {
+test("editor-api: save returns 204 if no file chosen", async () => {
   const app = createDesktopApp();
   await app.request("/api/editor/close", {
     method: "POST",
@@ -224,7 +229,7 @@ Deno.test("editor-api: save returns 204 if no file chosen", async () => {
   assertEquals(res.status, 204);
 });
 
-Deno.test("editor-api: exit invokes the configured desktop shutdown callback", async () => {
+test("editor-api: exit invokes the configured desktop shutdown callback", async () => {
   let exitCalled = false;
   const app = createTestApp({
     exit: () => {
@@ -242,7 +247,7 @@ Deno.test("editor-api: exit invokes the configured desktop shutdown callback", a
   assertEquals(exitCalled, true);
 });
 
-Deno.test("editor-api: save-epub validates request payload", async () => {
+test("editor-api: save-epub validates request payload", async () => {
   const app = createDesktopApp();
   const invalidPayloads = [
     null,
@@ -265,7 +270,7 @@ Deno.test("editor-api: save-epub validates request payload", async () => {
   }
 });
 
-Deno.test("editor-api: outline save validates request payload", async () => {
+test("editor-api: outline save validates request payload", async () => {
   const app = createDesktopApp();
   const response = await app.request("/api/editor/outline/save", {
     method: "POST",
@@ -279,7 +284,7 @@ Deno.test("editor-api: outline save validates request payload", async () => {
   assertEquals(await response.text(), "Invalid outline content");
 });
 
-Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
+test("editor-api: save-epub returns 204 if no file chosen", async () => {
   const app = createDesktopApp();
   const res = await app.request("/api/editor/save-epub", {
     method: "POST",
@@ -298,7 +303,7 @@ Deno.test("editor-api: save-epub returns 204 if no file chosen", async () => {
   assertEquals(res.status, 204);
 });
 
-Deno.test("project: create requires a project folder name", async () => {
+test("project: create requires a project folder name", async () => {
   const app = createDesktopApp();
   const response = await app.request("/api/editor/project/new", {
     method: "POST",
@@ -311,7 +316,7 @@ Deno.test("project: create requires a project folder name", async () => {
   assertEquals(response.status, 400);
 });
 
-Deno.test("project: create requires a selected parent folder", async () => {
+test("project: create requires a selected parent folder", async () => {
   const app = createDesktopApp();
   const response = await app.request("/api/editor/project/new", {
     method: "POST",

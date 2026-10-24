@@ -1,4 +1,5 @@
-import { type PoolClient, withConnection, withTransaction } from "./db.ts";
+import { env } from "node:process";
+import { type PoolClient, query, withConnection, withTransaction } from "./db.ts";
 
 export interface DonationRecord {
   id: string;
@@ -59,7 +60,7 @@ async function selectDonation(
   client: PoolClient,
   sessionId: string,
 ): Promise<DonationRecord | null> {
-  const result = await client.queryObject<Record<string, unknown>>`
+  const result = await query<Record<string, unknown>>(client)`
     SELECT id, stripe_session_id AS "stripeSessionId",
       payment_intent_id AS "paymentIntentId", email, amount_total AS "amountTotal",
       currency, status, receipt_url AS "receiptUrl", donated_at AS "donatedAt"
@@ -71,17 +72,17 @@ async function selectDonation(
 export class PostgresWebsiteStore implements WebsiteStore {
   async createAuthCode(email: string, codeHash: string): Promise<boolean> {
     return await withTransaction(async (client) => {
-      await client.queryArray`SELECT pg_advisory_xact_lock(hashtext(${email}))`;
-      const recent = await client.queryObject<{ count: number }>`
+      await query(client)`SELECT pg_advisory_xact_lock(hashtext(${email}))`;
+      const recent = await query<{ count: number }>(client)`
         SELECT count(*)::int AS count FROM auth_codes
         WHERE email = ${email} AND created_at > now() - interval '1 hour'
       `;
       if ((recent.rows[0]?.count ?? 0) >= 5) return false;
-      await client.queryArray`
+      await query(client)`
         UPDATE auth_codes SET consumed_at = now()
         WHERE email = ${email} AND consumed_at IS NULL
       `;
-      await client.queryArray`
+      await query(client)`
         INSERT INTO auth_codes (id, email, code_hash, expires_at)
         VALUES (${crypto.randomUUID()}, ${email}, ${codeHash}, now() + interval '10 minutes')
       `;
@@ -91,7 +92,7 @@ export class PostgresWebsiteStore implements WebsiteStore {
 
   async verifyAuthCode(email: string, codeHash: string): Promise<boolean> {
     return await withTransaction(async (client) => {
-      const result = await client.queryObject<{ id: string; codeHash: string }>`
+      const result = await query<{ id: string; codeHash: string }>(client)`
         SELECT id, code_hash AS "codeHash" FROM auth_codes
         WHERE email = ${email} AND consumed_at IS NULL AND expires_at > now() AND attempts < 5
         ORDER BY created_at DESC LIMIT 1 FOR UPDATE
@@ -99,27 +100,27 @@ export class PostgresWebsiteStore implements WebsiteStore {
       const code = result.rows[0];
       if (!code) return false;
       if (code.codeHash !== codeHash) {
-        await client
-          .queryArray`UPDATE auth_codes SET attempts = attempts + 1 WHERE id = ${code.id}`;
+        await query(client)`UPDATE auth_codes SET attempts = attempts + 1 WHERE id = ${code.id}`;
         return false;
       }
-      await client.queryArray`UPDATE auth_codes SET consumed_at = now() WHERE id = ${code.id}`;
+      await query(client)`UPDATE auth_codes SET consumed_at = now() WHERE id = ${code.id}`;
       return true;
     });
   }
 
   async saveSession(tokenHash: string, email: string, expiresAt: Date): Promise<void> {
-    await withConnection((client) =>
-      client.queryArray`
+    await withConnection(
+      (client) =>
+        query(client)`
         INSERT INTO auth_sessions (token_hash, email, expires_at)
         VALUES (${tokenHash}, ${email}, ${expiresAt})
-      `
+      `,
     );
   }
 
   async getSession(tokenHash: string): Promise<{ email: string } | null> {
     return await withConnection(async (client) => {
-      const result = await client.queryObject<{ email: string }>`
+      const result = await query<{ email: string }>(client)`
         SELECT email FROM auth_sessions WHERE token_hash = ${tokenHash} AND expires_at > now()
       `;
       return result.rows[0] ?? null;
@@ -127,14 +128,14 @@ export class PostgresWebsiteStore implements WebsiteStore {
   }
 
   async deleteSession(tokenHash: string): Promise<void> {
-    await withConnection((client) =>
-      client.queryArray`DELETE FROM auth_sessions WHERE token_hash = ${tokenHash}`
+    await withConnection(
+      (client) => query(client)`DELETE FROM auth_sessions WHERE token_hash = ${tokenHash}`,
     );
   }
 
   async getDonationsByEmail(email: string): Promise<DonationRecord[]> {
     return await withConnection(async (client) => {
-      const result = await client.queryObject<Record<string, unknown>>`
+      const result = await query<Record<string, unknown>>(client)`
         SELECT id, stripe_session_id AS "stripeSessionId",
           payment_intent_id AS "paymentIntentId", email, amount_total AS "amountTotal",
           currency, status, receipt_url AS "receiptUrl", donated_at AS "donatedAt"
@@ -151,7 +152,7 @@ export class PostgresWebsiteStore implements WebsiteStore {
   async recordDonation(input: DonationInput, eventId?: string): Promise<DonationRecord> {
     return await withTransaction(async (client) => {
       if (eventId) {
-        const event = await client.queryObject<{ eventId: string }>`
+        const event = await query<{ eventId: string }>(client)`
           INSERT INTO processed_stripe_events (event_id, event_type)
           VALUES (${eventId}, 'donation.completed')
           ON CONFLICT (event_id) DO NOTHING
@@ -166,11 +167,14 @@ export class PostgresWebsiteStore implements WebsiteStore {
       const existing = await selectDonation(client, input.stripeSessionId);
       if (existing) {
         if (
-          existing.email !== input.email || existing.paymentIntentId !== input.paymentIntentId ||
-          existing.amountTotal !== input.amountTotal || existing.currency !== input.currency
-        ) throw new Error("Stripe session conflicts with the recorded donation.");
+          existing.email !== input.email ||
+          existing.paymentIntentId !== input.paymentIntentId ||
+          existing.amountTotal !== input.amountTotal ||
+          existing.currency !== input.currency
+        )
+          throw new Error("Stripe session conflicts with the recorded donation.");
         if (!existing.receiptUrl && input.receiptUrl) {
-          await client.queryArray`
+          await query(client)`
             UPDATE donations SET receipt_url = ${input.receiptUrl}
             WHERE stripe_session_id = ${input.stripeSessionId}
           `;
@@ -178,7 +182,7 @@ export class PostgresWebsiteStore implements WebsiteStore {
         }
         return existing;
       }
-      await client.queryArray`
+      await query(client)`
         INSERT INTO donations (
           id, stripe_session_id, payment_intent_id, email, amount_total, currency,
           status, receipt_url, donated_at
@@ -194,19 +198,20 @@ export class PostgresWebsiteStore implements WebsiteStore {
   }
 
   async setMarketingPreference(email: string, optedIn: boolean): Promise<void> {
-    await withConnection((client) =>
-      client.queryArray`
+    await withConnection(
+      (client) =>
+        query(client)`
         INSERT INTO email_preferences (email, marketing_opt_in, updated_at)
         VALUES (${email}, ${optedIn}, now())
         ON CONFLICT (email) DO UPDATE
         SET marketing_opt_in = EXCLUDED.marketing_opt_in, updated_at = now()
-      `
+      `,
     );
   }
 
   async getMarketingPreference(email: string): Promise<boolean | null> {
     return await withConnection(async (client) => {
-      const result = await client.queryObject<{ optedIn: boolean }>`
+      const result = await query<{ optedIn: boolean }>(client)`
         SELECT marketing_opt_in AS "optedIn" FROM email_preferences WHERE email = ${email}
       `;
       return result.rows[0]?.optedIn ?? null;
@@ -219,13 +224,13 @@ export class PostgresWebsiteStore implements WebsiteStore {
     status: "refunded" | "disputed",
   ): Promise<void> {
     await withTransaction(async (client) => {
-      const updated = await client.queryObject<{ id: string }>`
+      const updated = await query<{ id: string }>(client)`
         UPDATE donations SET status = ${status}
         WHERE payment_intent_id = ${paymentIntentId}
         RETURNING id
       `;
       if (!updated.rows.length) return;
-      await client.queryArray`
+      await query(client)`
         INSERT INTO processed_stripe_events (event_id, event_type)
         VALUES (${eventId}, ${status})
         ON CONFLICT (event_id) DO NOTHING
@@ -245,8 +250,8 @@ export class MemoryWebsiteStore implements WebsiteStore {
   readonly events = new Set<string>();
 
   async createAuthCode(email: string, codeHash: string): Promise<boolean> {
-    const recent = [...this.codes.entries()].filter(([key, code]) =>
-      key.startsWith(`${email}:`) && code.createdAt > Date.now() - 3_600_000
+    const recent = [...this.codes.entries()].filter(
+      ([key, code]) => key.startsWith(`${email}:`) && code.createdAt > Date.now() - 3_600_000,
     );
     if (recent.length >= 5) return false;
     for (const key of this.codes.keys()) {
@@ -262,9 +267,12 @@ export class MemoryWebsiteStore implements WebsiteStore {
   }
 
   async verifyAuthCode(email: string, codeHash: string): Promise<boolean> {
-    const entry = [...this.codes.entries()].reverse().find(([key, code]) =>
-      key.startsWith(`${email}:`) && code.expiresAt > Date.now() && code.attempts < 5
-    );
+    const entry = [...this.codes.entries()]
+      .reverse()
+      .find(
+        ([key, code]) =>
+          key.startsWith(`${email}:`) && code.expiresAt > Date.now() && code.attempts < 5,
+      );
     if (!entry) return false;
     const [key, code] = entry;
     if (code.hash !== codeHash) {
@@ -290,9 +298,9 @@ export class MemoryWebsiteStore implements WebsiteStore {
   }
 
   async getDonationsByEmail(email: string): Promise<DonationRecord[]> {
-    return [...this.donations.values()].filter((donation) => donation.email === email).sort(
-      (left, right) => right.donatedAt.getTime() - left.donatedAt.getTime(),
-    );
+    return [...this.donations.values()]
+      .filter((donation) => donation.email === email)
+      .sort((left, right) => right.donatedAt.getTime() - left.donatedAt.getTime());
   }
 
   async getDonationBySession(sessionId: string): Promise<DonationRecord | null> {
@@ -322,8 +330,8 @@ export class MemoryWebsiteStore implements WebsiteStore {
     status: "refunded" | "disputed",
   ): Promise<void> {
     if (this.events.has(eventId)) return;
-    const donation = [...this.donations.values()].find((entry) =>
-      entry.paymentIntentId === paymentIntentId
+    const donation = [...this.donations.values()].find(
+      (entry) => entry.paymentIntentId === paymentIntentId,
     );
     if (!donation) return;
     donation.status = status;
@@ -335,9 +343,9 @@ let activeStore: WebsiteStore | undefined;
 
 export function getWebsiteStore(): WebsiteStore {
   if (activeStore) return activeStore;
-  if (Deno.env.get("DATABASE_URL")) {
+  if (process.env.DATABASE_URL) {
     activeStore = new PostgresWebsiteStore();
-  } else if (Deno.env.get("DENO_DEPLOYMENT_ID") === undefined) {
+  } else if (env.NODE_ENV !== "production") {
     activeStore = new MemoryWebsiteStore();
   } else {
     throw new Error("DATABASE_URL is not configured.");

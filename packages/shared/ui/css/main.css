@@ -66,18 +66,28 @@
   outline-offset: 2px;
 }
 
-:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea) {
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]),
+  select,
+  textarea
+) {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
   color: var(--text);
   min-height: 2.5rem;
   padding: 0.5rem 0.75rem;
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
   width: 100%;
 }
 
-:where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]), select, textarea):focus {
+:where(
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"]),
+  select,
+  textarea
+):focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }

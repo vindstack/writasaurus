@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { test } from "vitest";
 import { MemoryWebsiteStore, setWebsiteStoreForTests } from "../src/lib/donation-store.ts";
 import { POST as requestCode } from "../src/pages/api/auth/request.ts";
 import { POST as verifyCode } from "../src/pages/api/auth/verify.ts";
@@ -21,25 +23,25 @@ async function withAuth(
   const names = [
     "SESSION_SECRET",
     "EMAIL_LOG_FILE",
-    "DENO_DEPLOYMENT_ID",
+    "NODE_ENV",
     "PUBLIC_SITE_URL",
     "RESEND_API_KEY",
   ];
-  const original = new Map(names.map((name) => [name, Deno.env.get(name)]));
+  const original = new Map(names.map((name) => [name, process.env[name]]));
   const logFile = `.data/auth-test-${crypto.randomUUID()}.jsonl`;
   const store = new AuthTestStore();
-  Deno.env.set("SESSION_SECRET", "auth-test-secret-at-least-32-characters-long");
-  Deno.env.set("EMAIL_LOG_FILE", logFile);
-  Deno.env.set("PUBLIC_SITE_URL", "http://localhost");
-  Deno.env.delete("DENO_DEPLOYMENT_ID");
+  process.env.SESSION_SECRET = "auth-test-secret-at-least-32-characters-long";
+  process.env.EMAIL_LOG_FILE = logFile;
+  process.env.PUBLIC_SITE_URL = "http://localhost";
+  process.env.NODE_ENV = "test";
   setWebsiteStoreForTests(store);
   try {
     await test(store, logFile);
   } finally {
     setWebsiteStoreForTests(undefined);
     for (const [name, value] of original) {
-      if (value === undefined) Deno.env.delete(name);
-      else Deno.env.set(name, value);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
     await removeTestFile(logFile);
   }
@@ -65,13 +67,13 @@ function authRequest(
 }
 
 async function latestCode(logFile: string): Promise<string> {
-  const message = (await Deno.readTextFile(logFile)).trim().split("\n").at(-1);
+  const message = (await readFile(logFile, "utf8")).trim().split("\n").at(-1);
   const code = message?.match(/code is (\d{8})/)?.[1];
   assert(code, "Expected a development passcode email.");
   return code;
 }
 
-Deno.test("account renders an Astro email-first flow and native code-entry fallback", async () => {
+test("account renders an Astro email-first flow and native code-entry fallback", async () => {
   for (const sent of [false, true]) {
     const response = await request(sent ? "/account?sent=1" : "/account");
     assert(response.status === 200);
@@ -94,7 +96,7 @@ Deno.test("account renders an Astro email-first flow and native code-entry fallb
   }
 });
 
-Deno.test("enhanced auth validates input and preserves native response contracts", async () => {
+test("enhanced auth validates input and preserves native response contracts", async () => {
   await withAuth(async () => {
     const invalidEmail = await authRequest("request", { email: "invalid" });
     assert(invalidEmail.status === 400);
@@ -125,7 +127,7 @@ Deno.test("enhanced auth validates input and preserves native response contracts
   });
 });
 
-Deno.test("enhanced sign-in creates a session and codes are single-use", async () => {
+test("enhanced sign-in creates a session and codes are single-use", async () => {
   await withAuth(async (_store, logFile) => {
     const sent = await authRequest("request", { email: " Writer@Example.com " }, true, true);
     assert(sent.status === 200);
@@ -157,7 +159,7 @@ Deno.test("enhanced sign-in creates a session and codes are single-use", async (
   });
 });
 
-Deno.test("verification errors retain attempt and expiry rules; resends replace codes", async () => {
+test("verification errors retain attempt and expiry rules; resends replace codes", async () => {
   await withAuth(async (store, logFile) => {
     await authRequest("request", { email: "writer@example.com" });
     const firstCode = await latestCode(logFile);
@@ -194,7 +196,7 @@ Deno.test("verification errors retain attempt and expiry rules; resends replace 
   });
 });
 
-Deno.test("enhanced issuance reports refusal without claiming delivery", async () => {
+test("enhanced issuance reports refusal without claiming delivery", async () => {
   await withAuth(async (store) => {
     store.refuseCodes = true;
     const limited = await authRequest("request", { email: "writer@example.com" });
@@ -209,10 +211,10 @@ Deno.test("enhanced issuance reports refusal without claiming delivery", async (
   });
 });
 
-Deno.test("email delivery failures propagate instead of reporting a code was sent", async () => {
+test("email delivery failures propagate instead of reporting a code was sent", async () => {
   await withAuth(async () => {
-    Deno.env.set("DENO_DEPLOYMENT_ID", "auth-delivery-test");
-    Deno.env.set("RESEND_API_KEY", "");
+    process.env.NODE_ENV = "production";
+    process.env.RESEND_API_KEY = "";
     let failed = false;
     try {
       await authRequest("request", { email: "writer@example.com" });

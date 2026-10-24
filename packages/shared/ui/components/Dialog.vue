@@ -16,12 +16,7 @@ onMounted(() => syncOpenState(props.open));
 </script>
 
 <template>
-  <dialog
-    ref="dialog"
-    :id="id"
-    :aria-labelledby="`${id}-title`"
-    @close="emit('close')"
-  >
+  <dialog ref="dialog" :id="id" :aria-labelledby="`${id}-title`" @close="emit('close')">
     <header class="dialog__header">
       <h2 :id="`${id}-title`">{{ title }}</h2>
       <button

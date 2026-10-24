@@ -1,0 +1,73 @@
+{
+  "name": "@writasaurus/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Writasaurus manuscript editor",
+  "type": "module",
+  "main": "dist-electron/main.mjs",
+  "scripts": {
+    "dev": "astro dev --host 127.0.0.1 --port 8000",
+    "build:electron": "esbuild main.ts --bundle --platform=node --format=esm --packages=external --outfile=dist-electron/main.mjs && esbuild preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist-electron/preload.cjs",
+    "build": "astro build && pnpm build:electron",
+    "dev:electron": "pnpm build:electron && electron . --dev",
+    "electron": "pnpm build && electron .",
+    "electron:build": "pnpm build && electron-builder",
+    "test": "pnpm build && vitest run --config ../../vitest.config.ts",
+    "type-check": "astro check && tsc -p tsconfig.json",
+    "build:wordnet": "node scripts/build-wordnet-index.ts"
+  },
+  "dependencies": {
+    "@astrojs/node": "^11.1.9",
+    "@astrojs/vue": "^7.0.3",
+    "@preact/signals": "^2.9.0",
+    "@writasaurus/shared": "workspace:*",
+    "astro": "^7.3.5",
+    "harper.js": "2.10.0",
+    "preact": "^10.27.0",
+    "serve-static": "^2.2.0",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@types/node": "^24.0.0",
+    "electron": "^45.0.0",
+    "electron-builder": "^26.18.0",
+    "electron-builder-squirrel-windows": "26.18.0",
+    "playwright": "^1.63.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "build": {
+    "appId": "io.github.8bitreed.dino-writer",
+    "productName": "Writasaurus",
+    "executableName": "writasaurus",
+    "asar": true,
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "public",
+      "output": "../../desktop"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "public/desktop-icon.png"
+    },
+    "win": {
+      "target": [
+        "msi"
+      ],
+      "icon": "public/desktop-icon.png"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "icon": "public/desktop-icon.png"
+    }
+  }
+}

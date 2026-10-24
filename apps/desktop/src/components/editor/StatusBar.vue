@@ -1,9 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from "vue";
-import {
-  appSettingsError,
-  getWordsPerPagePreference,
-} from "../../lib/app-settings-client.ts";
+import { appSettingsError, getWordsPerPagePreference } from "../../lib/app-settings-client.ts";
 import {
   recordDailyWritingProgress,
   type ProjectDailyProgress,
@@ -52,25 +49,28 @@ async function saveDailyProgress(): Promise<void> {
     projectDailyProgress.value = result;
     dailyProgressError.value = "";
   } catch (error) {
-    dailyProgressError.value = error instanceof Error
-      ? error.message
-      : "Could not update daily writing progress.";
+    dailyProgressError.value =
+      error instanceof Error ? error.message : "Could not update daily writing progress.";
     console.error("Could not update daily writing progress.", error);
   }
 }
 
-watch([manuscriptId, () => totalState.value], ([id]) => {
-  const manuscriptChanged = lastTrackedManuscriptId !== id;
-  if (manuscriptChanged) {
-    projectDailyProgress.value = null;
-    lastTrackedManuscriptId = id;
+watch(
+  [manuscriptId, () => totalState.value],
+  ([id]) => {
+    const manuscriptChanged = lastTrackedManuscriptId !== id;
+    if (manuscriptChanged) {
+      projectDailyProgress.value = null;
+      lastTrackedManuscriptId = id;
+      clearTimeout(dailyProgressTimer);
+      void saveDailyProgress();
+      return;
+    }
     clearTimeout(dailyProgressTimer);
-    void saveDailyProgress();
-    return;
-  }
-  clearTimeout(dailyProgressTimer);
-  dailyProgressTimer = setTimeout(() => void saveDailyProgress(), 500);
-}, { immediate: true });
+    dailyProgressTimer = setTimeout(() => void saveDailyProgress(), 500);
+  },
+  { immediate: true },
+);
 
 watch(dailyWords, (words, previousWords) => {
   if (previousWords < dailyWordGoal.value && words >= dailyWordGoal.value) {
@@ -106,8 +106,13 @@ const totalStats = computed(() => {
     pages,
   };
 });
-const outlineWords = computed(() =>
-  outlineState.value.replace(/[>#*_`~\[\]()]/g, " ").trim().split(/\s+/).filter(Boolean).length
+const outlineWords = computed(
+  () =>
+    outlineState.value
+      .replace(/[>#*_`~[\]()]/g, " ")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean).length,
 );
 </script>
 
@@ -122,7 +127,7 @@ const outlineWords = computed(() =>
         :aria-valuetext="`${dailyWords.toLocaleString()} of ${dailyWordGoal.toLocaleString()} words`"
         :title="`${dailyWords.toLocaleString()} of ${dailyWordGoal.toLocaleString()} words today`"
       >
-        {{ dailyProgress / dailyWordGoal * 100 }}%
+        {{ (dailyProgress / dailyWordGoal) * 100 }}%
       </progress>
       <span v-if="celebration" class="fireworks" aria-hidden="true">
         <i v-for="spark in 9" :key="spark" class="spark" />
@@ -136,11 +141,23 @@ const outlineWords = computed(() =>
       {{ dailyProgressError || appSettingsError }}
     </p>
     <footer class="statusbar">
-      <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle chapters panel"
-        title="Toggle chapters panel (Ctrl+B)" @click="sidebarOpen.value = !sidebarOpen.value">
+      <Button
+        v-if="modeState === 'manuscript'"
+        variant="quiet"
+        size="small"
+        class="toggle"
+        aria-label="Toggle chapters panel"
+        title="Toggle chapters panel (Ctrl+B)"
+        @click="sidebarOpen.value = !sidebarOpen.value"
+      >
         Chapters <kbd class="kbd">Ctrl+B</kbd>
       </Button>
-      <span v-if="modeState === 'manuscript'" class="wordCount" role="group" aria-label="Word and page counts">
+      <span
+        v-if="modeState === 'manuscript'"
+        class="wordCount"
+        role="group"
+        aria-label="Word and page counts"
+      >
         <span class="statGroup" data-stat="chapter">
           <span class="statLabel">{{ chapterStats.label }}:</span>
           <span class="statValue">{{ chapterStats.words }}</span>
@@ -162,8 +179,15 @@ const outlineWords = computed(() =>
         <span class="statValue">{{ outlineWords.toLocaleString() }}</span>
         <span>words</span>
       </span>
-      <Button v-if="modeState === 'manuscript'" variant="quiet" size="small" class="toggle" aria-label="Toggle writing assistance panel"
-        title="Toggle writing assistance panel (Ctrl+Shift+A)" @click="toggleAssistance()">
+      <Button
+        v-if="modeState === 'manuscript'"
+        variant="quiet"
+        size="small"
+        class="toggle"
+        aria-label="Toggle writing assistance panel"
+        title="Toggle writing assistance panel (Ctrl+Shift+A)"
+        @click="toggleAssistance()"
+      >
         Writing Assistance <kbd class="kbd">Ctrl+Shift+A</kbd>
       </Button>
     </footer>
@@ -289,10 +313,7 @@ const outlineWords = computed(() =>
   }
   to {
     opacity: 0;
-    transform: translate(
-        calc(-50% + var(--spark-x, -1rem)),
-        calc(-50% + var(--spark-y, -1rem))
-      )
+    transform: translate(calc(-50% + var(--spark-x, -1rem)), calc(-50% + var(--spark-y, -1rem)))
       scale(0.2);
   }
 }

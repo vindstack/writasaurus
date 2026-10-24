@@ -68,10 +68,7 @@ export function createDragDrop(
   function updateDropTarget(x: number, y: number): void {
     const targetIndex = targetIndexAt(x, y);
     for (const [index, item] of items().entries()) {
-      item.classList.toggle(
-        dropTargetClass,
-        targetIndex === index && index !== state.index,
-      );
+      item.classList.toggle(dropTargetClass, targetIndex === index && index !== state.index);
     }
   }
 
@@ -142,11 +139,12 @@ export function createDragDrop(
 
     const item = itemFor(event.target);
     const fromIndex = item ? items().indexOf(item) : -1;
-    const toIndex = event.key === "ArrowUp"
-      ? fromIndex - 1
-      : event.key === "ArrowDown"
-      ? fromIndex + 1
-      : fromIndex;
+    const toIndex =
+      event.key === "ArrowUp"
+        ? fromIndex - 1
+        : event.key === "ArrowDown"
+          ? fromIndex + 1
+          : fromIndex;
 
     if (fromIndex < 0 || toIndex < 0 || toIndex >= items().length) return;
     event.preventDefault();

@@ -51,47 +51,95 @@ function applyTemplate(): void {
 <template>
   <div class="toolbar" role="toolbar" aria-label="Formatting">
     <div class="toolbarContent">
-      <Tooltip v-for="{ command, tip, label } in commands" :key="command" :content="tip" position="bottom">
-        <Button variant="quiet" size="small" :data-command="command" @mousedown.prevent @click="runCommand(command)">
+      <Tooltip
+        v-for="{ command, tip, label } in commands"
+        :key="command"
+        :content="tip"
+        position="bottom"
+      >
+        <Button
+          variant="quiet"
+          size="small"
+          :data-command="command"
+          @mousedown.prevent
+          @click="runCommand(command)"
+        >
           <strong v-if="command === 'bold'">{{ label }}</strong>
           <em v-else-if="command === 'italic'">{{ label }}</em>
           <template v-else>{{ label }}</template>
         </Button>
       </Tooltip>
-      <DropdownMenu placement="bottom-start" :open="headingMenuOpen" @open-change="headingMenuOpen = $event">
+      <DropdownMenu
+        placement="bottom-start"
+        :open="headingMenuOpen"
+        @open-change="headingMenuOpen = $event"
+      >
         <template #trigger>
-          <Button variant="quiet" size="small" aria-haspopup="true" :aria-expanded="headingMenuOpen" title="Text style"
-            @mousedown.prevent>
+          <Button
+            variant="quiet"
+            size="small"
+            aria-haspopup="true"
+            :aria-expanded="headingMenuOpen"
+            title="Text style"
+            @mousedown.prevent
+          >
             Heading
           </Button>
         </template>
         <div class="styleMenu">
-          <button v-for="{ label, value } in textStyles" :key="value" type="button" role="menuitem" class="styleItem"
-            @mousedown.prevent @click="runCommand('formatBlock', value)">
+          <button
+            v-for="{ label, value } in textStyles"
+            :key="value"
+            type="button"
+            role="menuitem"
+            class="styleItem"
+            @mousedown.prevent
+            @click="runCommand('formatBlock', value)"
+          >
             {{ label }}
           </button>
         </div>
       </DropdownMenu>
-      <DropdownMenu v-if="modeState === 'outline'" id="outline-template-menu" class="templateSelector"
-        placement="bottom-end" :open="templateMenuOpen" @open-change="templateMenuOpen = $event">
+      <DropdownMenu
+        v-if="modeState === 'outline'"
+        id="outline-template-menu"
+        class="templateSelector"
+        placement="bottom-end"
+        :open="templateMenuOpen"
+        @open-change="templateMenuOpen = $event"
+      >
         <template #trigger>
-          <Button variant="quiet" size="small" aria-haspopup="menu" :aria-expanded="templateMenuOpen"
-            data-outline-template-trigger>
+          <Button
+            variant="quiet"
+            size="small"
+            aria-haspopup="menu"
+            :aria-expanded="templateMenuOpen"
+            data-outline-template-trigger
+          >
             Change Template
           </Button>
         </template>
         <div class="styleMenu">
-          <button v-for="template in OUTLINE_TEMPLATES" :key="template.id" type="button" role="menuitem" class="styleItem"
-            :data-outline-template="template.id" @click="confirmTemplate(template)">
+          <button
+            v-for="template in OUTLINE_TEMPLATES"
+            :key="template.id"
+            type="button"
+            role="menuitem"
+            class="styleItem"
+            :data-outline-template="template.id"
+            @click="confirmTemplate(template)"
+          >
             {{ template.label }}
           </button>
         </div>
       </DropdownMenu>
-      <Dialog id="outline-template-confirmation" title="Replace outline content?" :open="templateConfirmationOpen"
-        @close="cancelTemplate">
-        <p>
-          Apply {{ selectedTemplate?.label }}? This will replace all current outline content.
-        </p>
+      <Dialog
+        id="outline-template-confirmation"
+        title="Replace outline content?"
+        :open="templateConfirmationOpen"
+        @close="cancelTemplate"
+      >
+        <p>Apply {{ selectedTemplate?.label }}? This will replace all current outline content.</p>
         <template #footer>
           <Button variant="quiet" size="small" @click="cancelTemplate">Cancel</Button>
           <Button variant="primary" data-confirm-template @click="applyTemplate">

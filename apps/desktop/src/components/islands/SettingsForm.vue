@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import Button from "../../../../../packages/shared/ui/components/Button.vue";
-import {
-  applyFontPreference,
-  type FontOption,
-} from "../../../../../packages/shared/settings.ts";
+import { applyFontPreference, type FontOption } from "../../../../../packages/shared/settings.ts";
 import {
   appSettingsError,
   getFontPreference,
@@ -59,9 +56,11 @@ function onNumberChange(
 ): void {
   const value = parsePositive((event.currentTarget as HTMLInputElement).value);
   if (value !== null) {
-    void save(value).then(() => showStatus(message)).catch((reason: unknown) => {
-      error.value = reason instanceof Error ? reason.message : "Could not save this setting.";
-    });
+    void save(value)
+      .then(() => showStatus(message))
+      .catch((reason: unknown) => {
+        error.value = reason instanceof Error ? reason.message : "Could not save this setting.";
+      });
   } else {
     field.value = String(read());
   }
@@ -87,24 +86,25 @@ onUnmounted(() => clearTimeout(timeout));
     <div class="group">
       <label for="font-select" class="label">
         <strong>Editor Font</strong>
-        <span class="help">
-          Choose the typeface used in the editor and chapter titles.
-        </span>
+        <span class="help"> Choose the typeface used in the editor and chapter titles. </span>
       </label>
       <select
         id="font-select"
         class="select"
         v-model="font"
-        @change="async (event) => {
-          const selected = (event.currentTarget as HTMLSelectElement).value as FontOption;
-          try {
-            await saveFontPreference(selected);
-            applyFontPreference(selected);
-            showStatus('Font preference saved.');
-          } catch (reason) {
-            error = reason instanceof Error ? reason.message : 'Could not save the font preference.';
+        @change="
+          async (event) => {
+            const selected = (event.currentTarget as HTMLSelectElement).value as FontOption;
+            try {
+              await saveFontPreference(selected);
+              applyFontPreference(selected);
+              showStatus('Font preference saved.');
+            } catch (reason) {
+              error =
+                reason instanceof Error ? reason.message : 'Could not save the font preference.';
+            }
           }
-        }"
+        "
       >
         <optgroup label="Serif">
           <option value="alegreya">Alegreya</option>
@@ -153,13 +153,15 @@ onUnmounted(() => clearTimeout(timeout));
         step="10"
         v-model="wordsPerPage"
         @input="onNumberInput(wordsPerPage, $event, saveWordsPerPagePreference)"
-        @change="onNumberChange(
-          wordsPerPage,
-          $event,
-          saveWordsPerPagePreference,
-          getWordsPerPagePreference,
-          'Words per page saved.',
-        )"
+        @change="
+          onNumberChange(
+            wordsPerPage,
+            $event,
+            saveWordsPerPagePreference,
+            getWordsPerPagePreference,
+            'Words per page saved.',
+          )
+        "
       />
     </div>
 

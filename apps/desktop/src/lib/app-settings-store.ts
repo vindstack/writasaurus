@@ -1,4 +1,4 @@
-import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import {
   DEFAULT_DAILY_WORD_GOAL,
   DEFAULT_FONT,
@@ -20,7 +20,7 @@ function requireDirectory(directory = applicationDataDirectory()): string {
 
 function settingsPath(directory?: string): string {
   directory = requireDirectory(directory);
-  const separator = Deno.build.os === "windows" ? "\\" : "/";
+  const separator = process.platform === "win32" ? "\\" : "/";
   return `${directory.replace(/[\\/]+$/, "")}${separator}${SETTINGS_FILE}`;
 }
 
@@ -43,8 +43,7 @@ function isWordCount(value: unknown): value is number {
 }
 
 function isMissingPathError(error: unknown): boolean {
-  return error instanceof Deno.errors.NotFound ||
-    typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
 function isStringList(value: unknown): value is string[] {
@@ -53,8 +52,11 @@ function isStringList(value: unknown): value is string[] {
 
 function parseSettings(value: unknown): AppSettings {
   if (
-    !isRecord(value) || value.version !== 1 || typeof value.font !== "string" ||
-    !VALID_FONTS.has(value.font as FontOption) || !isWordCount(value.wordsPerPage) ||
+    !isRecord(value) ||
+    value.version !== 1 ||
+    typeof value.font !== "string" ||
+    !VALID_FONTS.has(value.font as FontOption) ||
+    !isWordCount(value.wordsPerPage) ||
     !isStringList(value.writingAssistanceWords) ||
     !isStringList(value.writingAssistanceIgnores)
   ) {
@@ -71,14 +73,14 @@ function parseSettings(value: unknown): AppSettings {
 
 async function readStoredSettings(directory?: string): Promise<AppSettings> {
   try {
-    const stored: unknown = JSON.parse(await Deno.readTextFile(settingsPath(directory)));
+    const stored: unknown = JSON.parse(await readFile(settingsPath(directory), "utf8"));
     const settings = parseSettings(stored);
     if (isRecord(stored) && "licenseToken" in stored) {
       await writeStoredSettings(settings, directory);
     }
     return settings;
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) return defaultSettings();
+    if (isMissingPathError(error)) return defaultSettings();
     if (error instanceof SyntaxError) {
       throw new Error("The Writasaurus settings file contains invalid JSON.", { cause: error });
     }
@@ -86,24 +88,20 @@ async function readStoredSettings(directory?: string): Promise<AppSettings> {
   }
 }
 
-async function writeStoredSettings(
-  settings: AppSettings,
-  baseDirectory?: string,
-): Promise<void> {
+async function writeStoredSettings(settings: AppSettings, baseDirectory?: string): Promise<void> {
   const directory = requireDirectory(baseDirectory);
   const path = settingsPath(directory);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  if (Deno.build.os !== "windows") await chmod(directory, 0o700);
+  if (process.platform !== "win32") await chmod(directory, 0o700);
 
   const temporaryPath = `${path}.${crypto.randomUUID()}.tmp`;
   try {
-    await writeFile(
-      temporaryPath,
-      `${JSON.stringify(settings, null, 2)}\n`,
-      { flag: "wx", mode: 0o600 },
-    );
+    await writeFile(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
     await rename(temporaryPath, path);
-    if (Deno.build.os !== "windows") await chmod(path, 0o600);
+    if (process.platform !== "win32") await chmod(path, 0o600);
   } catch (error) {
     try {
       await rm(temporaryPath);
@@ -118,7 +116,10 @@ async function writeStoredSettings(
 
 function serializeWrite<T>(operation: () => Promise<T>): Promise<T> {
   const result = writes.then(operation);
-  writes = result.then(() => undefined, () => undefined);
+  writes = result.then(
+    () => undefined,
+    () => undefined,
+  );
   return result;
 }
 
@@ -173,9 +174,9 @@ export interface LegacyDailySettings {
 export async function getLegacyDailySettings(directory?: string): Promise<LegacyDailySettings> {
   let value: unknown;
   try {
-    value = JSON.parse(await Deno.readTextFile(settingsPath(directory)));
+    value = JSON.parse(await readFile(settingsPath(directory), "utf8"));
   } catch (error) {
-    if (error instanceof Deno.errors.NotFound) {
+    if (isMissingPathError(error)) {
       return {
         dailyWordGoal: DEFAULT_DAILY_WORD_GOAL,
         dailyWritingProgress: { date: "", startingWords: {} },
@@ -195,22 +196,24 @@ export async function getLegacyDailySettings(directory?: string): Promise<Legacy
     : DEFAULT_DAILY_WORD_GOAL;
   const progressValue = value.dailyWritingProgress;
   const progressRecord = isRecord(progressValue) ? progressValue : null;
-  const startingWords = progressRecord && isRecord(progressRecord.startingWords)
-    ? progressRecord.startingWords
-    : null;
-  const validProgress = progressRecord !== null && typeof progressRecord.date === "string" &&
+  const startingWords =
+    progressRecord && isRecord(progressRecord.startingWords) ? progressRecord.startingWords : null;
+  const validProgress =
+    progressRecord !== null &&
+    typeof progressRecord.date === "string" &&
     (progressRecord.date === "" || /^\d{4}-\d{2}-\d{2}$/.test(progressRecord.date)) &&
     startingWords !== null &&
-    Object.entries(startingWords).every(([key, words]) =>
-      key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0
+    Object.entries(startingWords).every(
+      ([key, words]) => key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0,
     );
   return {
     dailyWordGoal,
-    dailyWritingProgress: validProgress && progressRecord && startingWords
-      ? {
-        date: typeof progressRecord.date === "string" ? progressRecord.date : "",
-        startingWords: { ...startingWords } as Record<string, number>,
-      }
-      : { date: "", startingWords: {} },
+    dailyWritingProgress:
+      validProgress && progressRecord && startingWords
+        ? {
+            date: typeof progressRecord.date === "string" ? progressRecord.date : "",
+            startingWords: { ...startingWords } as Record<string, number>,
+          }
+        : { date: "", startingWords: {} },
   };
 }

@@ -1,24 +1,5 @@
-export async function dialogCommand(): Promise<string | null> {
-  if (Deno.build.os === "linux") {
-    for (const cmd of ["zenity", "kdialog"]) {
-      try {
-        const perm = await Deno.permissions.query({ name: "run", command: cmd });
-        if (perm.state !== "granted") continue;
-        const res = await new Deno.Command("which", {
-          args: [cmd],
-          stdout: "null",
-          stderr: "null",
-        }).output();
-        if (res.success) return cmd;
-      } catch {
-        // Continue searching
-      }
-    }
-    return "zenity";
-  }
-  if (Deno.build.os === "darwin") return "osascript";
-  return "powershell";
-}
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { getPlatform } from "./platform.ts";
 
 export async function chooseFile(
   action: "open" | "save",
@@ -26,108 +7,36 @@ export async function chooseFile(
   filterName = "EPUB eBook",
   filterExtensions = ["*.epub"],
 ): Promise<string | null> {
-  const command = await dialogCommand();
-  if (!command) return null;
-  const perm = await Deno.permissions.query({ name: "run", command });
-  if (perm.state !== "granted") return null;
-
-  let args: string[];
-  if (command === "zenity") {
-    const filter = `${filterName} | ${filterExtensions.join(" ")}`;
-    args = [
-      "--file-selection",
-      `--title=${action === "open" ? "Open" : "Save"} Manuscript`,
-      `--file-filter=${filter}`,
-      ...(action === "save"
-        ? ["--save", "--confirm-overwrite", `--filename=${suggestedName}`]
-        : []),
-    ];
-  } else if (command === "kdialog") {
-    const filter = `${filterExtensions.join(" ")}|${filterName}`;
-    args = action === "open"
-      ? ["--getopenfilename", ".", filter, `--title=Open Manuscript`]
-      : ["--getsavefilename", suggestedName, filter, `--title=Save Manuscript`];
-  } else if (command === "osascript") {
-    const script = action === "open"
-      ? 'POSIX path of (choose file with prompt "Open Manuscript")'
-      : `POSIX path of (choose file name with prompt "Save Manuscript" default name "${
-        suggestedName.replaceAll('"', "")
-      }")`;
-    args = ["-e", script];
-  } else {
-    const dialog = action === "open" ? "OpenFileDialog" : "SaveFileDialog";
-    const winFilter = `${filterName} (${filterExtensions.join(";")})|${filterExtensions.join(";")}`;
-    args = [
-      "-NoProfile",
-      "-Command",
-      `Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.${dialog}; ` +
-      `$d.Filter='${winFilter}'; ` +
-      `$d.FileName='${suggestedName.replaceAll("'", "")}'; ` +
-      `if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.FileName)}`,
-    ];
-  }
-
-  try {
-    const output = await new Deno.Command(command, {
-      args,
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    if (!output.success) return null;
-    return new TextDecoder().decode(output.stdout).trim() || null;
-  } catch {
-    return null;
-  }
+  const platform = getPlatform();
+  const options = {
+    title: `${action === "open" ? "Open" : "Save"} Manuscript`,
+    ...(action === "save" ? { defaultPath: suggestedName } : {}),
+    filters: [
+      {
+        name: filterName,
+        extensions: filterExtensions.map((extension) => extension.replace(/^\*?\./, "")),
+      },
+    ],
+  };
+  return await (action === "open" ? platform.openFile(options) : platform.saveFile(options));
 }
 
 export async function chooseDirectory(action: "open" | "new"): Promise<string | null> {
-  const command = await dialogCommand();
-  if (!command) return null;
-  const perm = await Deno.permissions.query({ name: "run", command });
-  if (perm.state !== "granted") return null;
-
-  const title = action === "open" ? "Open Project" : "Create New Project";
-  let args: string[];
-  if (command === "zenity") {
-    args = ["--file-selection", "--directory", `--title=${title}`];
-  } else if (command === "kdialog") {
-    args = ["--getexistingdirectory", ".", `--title=${title}`];
-  } else if (command === "osascript") {
-    args = ["-e", `POSIX path of (choose folder with prompt "${title}")`];
-  } else {
-    args = [
-      "-NoProfile",
-      "-Command",
-      "Add-Type -AssemblyName System.Windows.Forms; " +
-      "$d=New-Object System.Windows.Forms.FolderBrowserDialog; " +
-      `$d.Description='${title}'; ` +
-      "if($d.ShowDialog() -eq 'OK'){[Console]::Write($d.SelectedPath)}",
-    ];
-  }
-
-  try {
-    const output = await new Deno.Command(command, {
-      args,
-      stdout: "piped",
-      stderr: "null",
-    }).output();
-    if (!output.success) return null;
-    return new TextDecoder().decode(output.stdout).trim() || null;
-  } catch {
-    return null;
-  }
+  return await getPlatform().chooseDirectory({
+    title: action === "open" ? "Open Project" : "Create New Project",
+  });
 }
 
 export function applicationDataDirectory(): string | null {
-  const home = Deno.env.get("HOME");
-  if (Deno.build.os === "linux") {
-    const base = Deno.env.get("XDG_DATA_HOME") || (home ? `${home}/.local/share` : null);
+  const home = process.env.HOME;
+  if (process.platform === "linux") {
+    const base = process.env.XDG_DATA_HOME || (home ? `${home}/.local/share` : null);
     return base ? `${base}/writasaurus` : null;
   }
-  if (Deno.build.os === "darwin") {
+  if (process.platform === "darwin") {
     return home ? `${home}/Library/Application Support/writasaurus` : null;
   }
-  const base = Deno.env.get("LOCALAPPDATA") || Deno.env.get("APPDATA");
+  const base = process.env.LOCALAPPDATA || process.env.APPDATA;
   return base ? `${base}\\writasaurus` : null;
 }
 
@@ -140,22 +49,29 @@ export async function loadLastFilePath(): Promise<string | null> {
   try {
     const path = lastFilePath();
     if (!path) return null;
-    const data = JSON.parse(await Deno.readTextFile(path));
+    const data = JSON.parse(await readFile(path, "utf8"));
     return typeof data?.path === "string" ? data.path : null;
   } catch {
     return null;
   }
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
+
 export async function saveLastFilePath(path: string): Promise<void> {
+  const statePath = lastFilePath();
+  if (!statePath) return;
+  const temporaryPath = `${statePath}.${crypto.randomUUID()}.tmp`;
   try {
-    const statePath = lastFilePath();
-    if (!statePath) return;
     const dir = applicationDataDirectory();
-    if (dir) await Deno.mkdir(dir, { recursive: true });
-    await Deno.writeTextFile(statePath, JSON.stringify({ path }));
+    if (dir) await mkdir(dir, { recursive: true });
+    await writeFile(temporaryPath, JSON.stringify({ path }), { flag: "wx", mode: 0o600 });
+    await rename(temporaryPath, statePath);
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotCapable)) {
+    await rm(temporaryPath, { force: true }).catch(() => {});
+    if (!hasErrorCode(error, "EACCES") && !hasErrorCode(error, "EPERM")) {
       console.warn("Could not remember the last opened file.", error);
     }
   }
@@ -165,9 +81,13 @@ export async function clearLastFilePath(): Promise<void> {
   try {
     const statePath = lastFilePath();
     if (!statePath) return;
-    await Deno.remove(statePath);
+    await rm(statePath);
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound) && !(error instanceof Deno.errors.NotCapable)) {
+    if (
+      !hasErrorCode(error, "ENOENT") &&
+      !hasErrorCode(error, "EACCES") &&
+      !hasErrorCode(error, "EPERM")
+    ) {
       console.warn("Could not clear the last opened file.", error);
     }
   }

@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import { createTestApp } from "./helpers.ts";
 
 function assertEquals<T>(actual: T, expected: T, message = ""): void {
@@ -19,7 +20,7 @@ const unsafeRoutes = [
   "/api/editor/project/cancel",
 ];
 
-Deno.test("csrf: rejects cross-origin unsafe requests", async () => {
+test("csrf: rejects cross-origin unsafe requests", async () => {
   const app = createTestApp({ exit: () => {} });
   for (const path of unsafeRoutes) {
     const crossOrigin = await app.request(path, {
@@ -42,7 +43,7 @@ Deno.test("csrf: rejects cross-origin unsafe requests", async () => {
   }
 });
 
-Deno.test("csrf: allows same-origin requests and safe methods", async () => {
+test("csrf: allows same-origin requests and safe methods", async () => {
   const app = createTestApp({ exit: () => {} });
   const response = await app.request("/api/editor/close", {
     method: "POST",

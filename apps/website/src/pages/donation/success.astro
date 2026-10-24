@@ -10,7 +10,7 @@ let donationAmount: number | null = null;
 if (
   sessionId &&
   (/^cs_(test|live)_[A-Za-z0-9]+$/.test(sessionId) ||
-    Deno.env.get("PAYMENT_PROVIDER") === "mock" && sessionId.startsWith("mock_"))
+    process.env.PAYMENT_PROVIDER === "mock" && sessionId.startsWith("mock_"))
 ) {
   try {
     const result = await confirmDonationSession(sessionId);

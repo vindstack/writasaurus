@@ -1,6 +1,7 @@
+import { test } from "vitest";
 import { basename } from "../../../packages/shared/path.ts";
 
-Deno.test("path: basename handles POSIX and Windows separators", () => {
+test("path: basename handles POSIX and Windows separators", () => {
   if (basename("/home/user/manuscript.epub") !== "manuscript.epub") {
     throw new Error("Expected POSIX path basename");
   }
@@ -9,7 +10,7 @@ Deno.test("path: basename handles POSIX and Windows separators", () => {
   }
 });
 
-Deno.test("path: basename handles trailing separators and plain filenames", () => {
+test("path: basename handles trailing separators and plain filenames", () => {
   if (basename("/home/user/") !== "user") {
     throw new Error("Expected trailing separators to be ignored");
   }

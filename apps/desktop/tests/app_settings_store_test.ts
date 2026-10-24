@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { test } from "vitest";
 import {
   getAppSettings,
   getLegacyDailySettings,
@@ -9,15 +12,15 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
 }
 
 async function withTempSettings<T>(test: (directory: string) => Promise<T>): Promise<T> {
-  const directory = await Deno.makeTempDir({ dir: "/tmp", prefix: "writasaurus-settings-" });
+  const directory = await mkdtemp(resolve(".writasaurus-settings-"));
   try {
     return await test(directory);
   } finally {
-    await Deno.remove(directory, { recursive: true });
+    await rm(directory, { recursive: true });
   }
 }
 
-Deno.test("app settings: defaults, updates, writing progress, and license token persist", async () => {
+test("app settings: defaults, updates, writing progress, and license token persist", async () => {
   await withTempSettings(async (directory) => {
     const defaults = await getAppSettings(directory);
     assert(defaults.version === 1);
@@ -28,12 +31,15 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
     assert(defaults.writingAssistanceIgnores.length === 0);
     assert(!("licenseToken" in defaults), "Expected the public settings API to omit the token");
 
-    const updated = await updateAppSettings({
-      font: "georgia",
-      wordsPerPage: 420,
-      writingAssistanceWords: ["Writasaurus", "Writasaurus"],
-      writingAssistanceIgnores: ["grammar:example"],
-    }, directory);
+    const updated = await updateAppSettings(
+      {
+        font: "georgia",
+        wordsPerPage: 420,
+        writingAssistanceWords: ["Writasaurus", "Writasaurus"],
+        writingAssistanceIgnores: ["grammar:example"],
+      },
+      directory,
+    );
     assert(updated.font === "georgia");
     assert(updated.wordsPerPage === 420);
     assert(!("dailyWordGoal" in updated));
@@ -41,13 +47,13 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
     assert(updated.writingAssistanceIgnores[0] === "grammar:example");
 
     assert((await getAppSettings(directory)).font === "georgia");
-    const persisted = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    const persisted = JSON.parse(await readFile(`${directory}/settings.json`, "utf8"));
     assert(!("dailyWordGoal" in persisted));
     assert(!("dailyWritingProgress" in persisted));
 
-    if (Deno.build.os !== "windows") {
-      const directoryMode = (await Deno.stat(directory)).mode! & 0o777;
-      const fileMode = (await Deno.stat(`${directory}/settings.json`)).mode! & 0o777;
+    if (process.platform !== "win32") {
+      const directoryMode = (await stat(directory)).mode & 0o777;
+      const fileMode = (await stat(`${directory}/settings.json`)).mode & 0o777;
       assert(
         directoryMode === 0o700,
         `Expected private directory permissions, got ${directoryMode}`,
@@ -57,9 +63,9 @@ Deno.test("app settings: defaults, updates, writing progress, and license token 
   });
 });
 
-Deno.test("app settings: exposes legacy daily settings for project migration", async () => {
+test("app settings: exposes legacy daily settings for project migration", async () => {
   await withTempSettings(async (directory) => {
-    await Deno.writeTextFile(
+    await writeFile(
       `${directory}/settings.json`,
       JSON.stringify({
         version: 1,
@@ -80,12 +86,12 @@ Deno.test("app settings: exposes legacy daily settings for project migration", a
     assert(legacy.dailyWritingProgress.startingWords["manuscript-1"] === 125);
     const settings = await getAppSettings(directory);
     assert(!("dailyWordGoal" in settings));
-    const persisted = JSON.parse(await Deno.readTextFile(`${directory}/settings.json`));
+    const persisted = JSON.parse(await readFile(`${directory}/settings.json`, "utf8"));
     assert(!("licenseToken" in persisted), "Expected legacy license tokens to be removed");
   });
 });
 
-Deno.test("app settings: rejects invalid updates and malformed persisted data", async () => {
+test("app settings: rejects invalid updates and malformed persisted data", async () => {
   await withTempSettings(async (directory) => {
     let invalidUpdateRejected = false;
     try {
@@ -103,13 +109,12 @@ Deno.test("app settings: rejects invalid updates and malformed persisted data", 
     }
     assert(unknownUpdateRejected, "Expected private fields to be rejected by preference updates");
 
-    await Deno.writeTextFile(`${directory}/settings.json`, "{invalid");
+    await writeFile(`${directory}/settings.json`, "{invalid");
     let malformedFileRejected = false;
     try {
       await getAppSettings(directory);
     } catch (error) {
-      malformedFileRejected = error instanceof Error &&
-        error.message.includes("invalid JSON");
+      malformedFileRejected = error instanceof Error && error.message.includes("invalid JSON");
     }
     assert(malformedFileRejected, "Expected malformed settings JSON to surface as an error");
   });

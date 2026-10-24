@@ -1,4 +1,4 @@
-import { rename } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { clearLastFilePath, loadLastFilePath, saveLastFilePath } from "./desktop.ts";
 import { blankManuscript } from "./editor/data.ts";
 import { epubFilename, generateEpub, isEpubFilename, parseEpub } from "./epub.ts";
@@ -14,6 +14,10 @@ import { getLegacyDailySettings } from "./app-settings-store.ts";
 const state = { activePath: null as string | null, restoredLastFile: false };
 let pendingProjectPath: string | null = null;
 let pendingProjectParentPath: string | null = null;
+
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code;
+}
 
 export function getActivePath(): string | null {
   return state.activePath;
@@ -67,7 +71,7 @@ export async function editorStatus() {
       const latest = latestDraft(drafts);
       const path = latest && directory ? draftPath(directory, latest.filename) : activePath;
       if (path !== activePath) await setActivePath(path);
-      const bytes = await Deno.readFile(path);
+      const bytes = await readFile(path);
       const manuscript = await parseEpub(bytes, basename(path));
       return { activeFile: basename(path), activePath: path, manuscript };
     } catch (error) {
@@ -86,35 +90,34 @@ export async function editorStatus() {
 export function suggestedName(manuscript: Manuscript, filename: unknown): string {
   return epubFilename({
     ...manuscript,
-    filename: typeof filename === "string" && filename.trim()
-      ? basename(filename)
-      : manuscript.filename,
+    filename:
+      typeof filename === "string" && filename.trim() ? basename(filename) : manuscript.filename,
   });
 }
 
 export async function writeManuscript(path: string, manuscript: Manuscript): Promise<void> {
-  await Deno.writeFile(path, await generateEpub(manuscript));
+  await writeFile(path, await generateEpub(manuscript));
 }
 
 export async function loadOrCreateOutline(): Promise<string> {
   const path = activeOutlinePath();
   try {
-    return await Deno.readTextFile(path);
+    return await readFile(path, "utf8");
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    if (!hasErrorCode(error, "ENOENT")) throw error;
   }
 
   try {
-    await Deno.writeTextFile(path, DEFAULT_OUTLINE, { createNew: true });
+    await writeFile(path, DEFAULT_OUTLINE, { flag: "wx" });
     return DEFAULT_OUTLINE;
   } catch (error) {
-    if (error instanceof Deno.errors.AlreadyExists) return await Deno.readTextFile(path);
+    if (hasErrorCode(error, "EEXIST")) return await readFile(path, "utf8");
     throw error;
   }
 }
 
 export async function writeOutline(content: string): Promise<void> {
-  await Deno.writeTextFile(activeOutlinePath(), content);
+  await writeFile(activeOutlinePath(), content);
 }
 
 export interface DraftSummary {
@@ -163,7 +166,7 @@ function draftPath(directory: string, filename: string): string {
 
 function projectFilePath(projectPath: string, filename: string): string {
   const trimmedPath = projectPath.replace(/[\\/]+$/, "");
-  const separator = Deno.build.os === "windows" ? "\\" : "/";
+  const separator = process.platform === "win32" ? "\\" : "/";
   return `${trimmedPath}${separator}${filename}`;
 }
 
@@ -174,8 +177,8 @@ function projectDirectory(path: string): string | null {
 
 async function numberedDrafts(directory: string): Promise<DraftSummary[]> {
   const drafts: DraftSummary[] = [];
-  for await (const entry of Deno.readDir(directory)) {
-    if (!entry.isFile) continue;
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
     const number = draftNumber(entry.name);
     if (number !== null) drafts.push({ number, filename: entry.name });
   }
@@ -186,8 +189,12 @@ function isDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(`${value}T00:00:00`);
   const [year, month, day] = value.split("-").map(Number);
-  return !Number.isNaN(date.getTime()) && date.getFullYear() === year &&
-    date.getMonth() + 1 === month && date.getDate() === day;
+  return (
+    !Number.isNaN(date.getTime()) &&
+    date.getFullYear() === year &&
+    date.getMonth() + 1 === month &&
+    date.getDate() === day
+  );
 }
 
 function today(): string {
@@ -217,15 +224,17 @@ function trimHistory(history: DailyWritingHistoryEntry[], referenceDate = today(
     String(cutoff.getMonth() + 1).padStart(2, "0"),
     String(cutoff.getDate()).padStart(2, "0"),
   ].join("-");
-  return history.filter((entry) => entry.date >= minimumDate).sort((left, right) =>
-    left.date.localeCompare(right.date)
-  );
+  return history
+    .filter((entry) => entry.date >= minimumDate)
+    .sort((left, right) => left.date.localeCompare(right.date));
 }
 
 async function parseProjectSettings(source: string): Promise<ProjectSettings> {
   const parsed: unknown = JSON.parse(source);
   if (
-    !parsed || typeof parsed !== "object" || !("drafts" in parsed) ||
+    !parsed ||
+    typeof parsed !== "object" ||
+    !("drafts" in parsed) ||
     !Array.isArray(parsed.drafts)
   ) {
     throw new Error("The project settings file is invalid.");
@@ -234,10 +243,15 @@ async function parseProjectSettings(source: string): Promise<ProjectSettings> {
   const numbers = new Set<number>();
   for (const item of parsed.drafts) {
     if (
-      !item || typeof item !== "object" || !("number" in item) ||
-      !Number.isSafeInteger(item.number) || item.number < 1 ||
-      !("filename" in item) || typeof item.filename !== "string" ||
-      draftNumber(item.filename) !== item.number || numbers.has(item.number)
+      !item ||
+      typeof item !== "object" ||
+      !("number" in item) ||
+      !Number.isSafeInteger(item.number) ||
+      item.number < 1 ||
+      !("filename" in item) ||
+      typeof item.filename !== "string" ||
+      draftNumber(item.filename) !== item.number ||
+      numbers.has(item.number)
     ) {
       throw new Error("The project settings file contains an invalid draft entry.");
     }
@@ -245,48 +259,78 @@ async function parseProjectSettings(source: string): Promise<ProjectSettings> {
     drafts.push({ number: item.number, filename: item.filename });
   }
   const userSettings = "user_settings" in parsed ? parsed.user_settings : {};
-  const manuscriptWordGoal = userSettings && typeof userSettings === "object" &&
-      !Array.isArray(userSettings) && "manuscriptWordGoal" in userSettings
-    ? userSettings.manuscriptWordGoal
-    : DEFAULT_MANUSCRIPT_WORD_GOAL;
-  const dailyWordGoal = userSettings && typeof userSettings === "object" &&
-      !Array.isArray(userSettings) && "dailyWordGoal" in userSettings
-    ? userSettings.dailyWordGoal
-    : (await getLegacyDailySettings()).dailyWordGoal;
-  const dailyWritingProgress = userSettings && typeof userSettings === "object" &&
-      !Array.isArray(userSettings) && "dailyWritingProgress" in userSettings
-    ? userSettings.dailyWritingProgress
-    : { date: "", startingWords: {} };
-  const dailyWritingHistory = userSettings && typeof userSettings === "object" &&
-      !Array.isArray(userSettings) && "dailyWritingHistory" in userSettings
-    ? userSettings.dailyWritingHistory
-    : [];
-  const dailyWritingTrackingStarted = userSettings && typeof userSettings === "object" &&
-      !Array.isArray(userSettings) && "dailyWritingTrackingStarted" in userSettings
-    ? userSettings.dailyWritingTrackingStarted
-    : today();
+  const manuscriptWordGoal =
+    userSettings &&
+    typeof userSettings === "object" &&
+    !Array.isArray(userSettings) &&
+    "manuscriptWordGoal" in userSettings
+      ? userSettings.manuscriptWordGoal
+      : DEFAULT_MANUSCRIPT_WORD_GOAL;
+  const dailyWordGoal =
+    userSettings &&
+    typeof userSettings === "object" &&
+    !Array.isArray(userSettings) &&
+    "dailyWordGoal" in userSettings
+      ? userSettings.dailyWordGoal
+      : (await getLegacyDailySettings()).dailyWordGoal;
+  const dailyWritingProgress =
+    userSettings &&
+    typeof userSettings === "object" &&
+    !Array.isArray(userSettings) &&
+    "dailyWritingProgress" in userSettings
+      ? userSettings.dailyWritingProgress
+      : { date: "", startingWords: {} };
+  const dailyWritingHistory =
+    userSettings &&
+    typeof userSettings === "object" &&
+    !Array.isArray(userSettings) &&
+    "dailyWritingHistory" in userSettings
+      ? userSettings.dailyWritingHistory
+      : [];
+  const dailyWritingTrackingStarted =
+    userSettings &&
+    typeof userSettings === "object" &&
+    !Array.isArray(userSettings) &&
+    "dailyWritingTrackingStarted" in userSettings
+      ? userSettings.dailyWritingTrackingStarted
+      : today();
   if (
-    !userSettings || typeof userSettings !== "object" || Array.isArray(userSettings) ||
-    typeof manuscriptWordGoal !== "number" || !Number.isSafeInteger(manuscriptWordGoal) ||
-    manuscriptWordGoal < 1 || typeof dailyWordGoal !== "number" ||
-    !Number.isSafeInteger(dailyWordGoal) || dailyWordGoal < 1 ||
-    !dailyWritingProgress || typeof dailyWritingProgress !== "object" ||
-    Array.isArray(dailyWritingProgress) || !("date" in dailyWritingProgress) ||
+    !userSettings ||
+    typeof userSettings !== "object" ||
+    Array.isArray(userSettings) ||
+    typeof manuscriptWordGoal !== "number" ||
+    !Number.isSafeInteger(manuscriptWordGoal) ||
+    manuscriptWordGoal < 1 ||
+    typeof dailyWordGoal !== "number" ||
+    !Number.isSafeInteger(dailyWordGoal) ||
+    dailyWordGoal < 1 ||
+    !dailyWritingProgress ||
+    typeof dailyWritingProgress !== "object" ||
+    Array.isArray(dailyWritingProgress) ||
+    !("date" in dailyWritingProgress) ||
     typeof dailyWritingProgress.date !== "string" ||
     (dailyWritingProgress.date !== "" && !isDate(dailyWritingProgress.date)) ||
     !("startingWords" in dailyWritingProgress) ||
     !dailyWritingProgress.startingWords ||
     typeof dailyWritingProgress.startingWords !== "object" ||
     Array.isArray(dailyWritingProgress.startingWords) ||
-    !Object.entries(dailyWritingProgress.startingWords).every(([key, words]) =>
-      key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0
+    !Object.entries(dailyWritingProgress.startingWords).every(
+      ([key, words]) => key.length > 0 && Number.isSafeInteger(words) && (words as number) >= 0,
     ) ||
     !Array.isArray(dailyWritingHistory) ||
-    !dailyWritingHistory.every((entry) =>
-      !!entry && typeof entry === "object" && !Array.isArray(entry) &&
-      "date" in entry && isDate(entry.date) &&
-      "words" in entry && Number.isSafeInteger(entry.words) && entry.words >= 0 &&
-      "goal" in entry && Number.isSafeInteger(entry.goal) && entry.goal >= 1
+    !dailyWritingHistory.every(
+      (entry) =>
+        !!entry &&
+        typeof entry === "object" &&
+        !Array.isArray(entry) &&
+        "date" in entry &&
+        isDate(entry.date) &&
+        "words" in entry &&
+        Number.isSafeInteger(entry.words) &&
+        entry.words >= 0 &&
+        "goal" in entry &&
+        Number.isSafeInteger(entry.goal) &&
+        entry.goal >= 1,
     ) ||
     new Set(dailyWritingHistory.map((entry) => entry.date)).size !== dailyWritingHistory.length ||
     !isDate(dailyWritingTrackingStarted)
@@ -310,12 +354,12 @@ async function parseProjectSettings(source: string): Promise<ProjectSettings> {
 
 async function saveProjectSettings(directory: string, settings: ProjectSettings): Promise<void> {
   const path = draftPath(directory, PROJECT_SETTINGS_FILENAME);
-  const temporaryPath = `${path}.tmp`;
-  await Deno.writeTextFile(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`);
+  const temporaryPath = `${path}.${crypto.randomUUID()}.tmp`;
   try {
+    await writeFile(temporaryPath, `${JSON.stringify(settings, null, 2)}\n`, { flag: "wx" });
     await rename(temporaryPath, path);
   } catch (error) {
-    await Deno.remove(temporaryPath).catch(() => {});
+    await rm(temporaryPath, { force: true }).catch(() => {});
     throw error;
   }
 }
@@ -323,14 +367,17 @@ async function saveProjectSettings(directory: string, settings: ProjectSettings)
 async function readProjectSettings(directory: string): Promise<ProjectSettings> {
   const path = draftPath(directory, PROJECT_SETTINGS_FILENAME);
   try {
-    const source = await Deno.readTextFile(path);
+    const source = await readFile(path, "utf8");
     const settings = await parseProjectSettings(source);
     const stored: unknown = JSON.parse(source);
-    const userSettings = typeof stored === "object" && stored !== null &&
-        "user_settings" in stored && stored.user_settings &&
-        typeof stored.user_settings === "object"
-      ? stored.user_settings as Record<string, unknown>
-      : {};
+    const userSettings =
+      typeof stored === "object" &&
+      stored !== null &&
+      "user_settings" in stored &&
+      stored.user_settings &&
+      typeof stored.user_settings === "object"
+        ? (stored.user_settings as Record<string, unknown>)
+        : {};
     if (
       [
         "manuscriptWordGoal",
@@ -348,7 +395,7 @@ async function readProjectSettings(directory: string): Promise<ProjectSettings> 
     }
     return settings;
   } catch (error) {
-    if (!(error instanceof Deno.errors.NotFound)) throw error;
+    if (!hasErrorCode(error, "ENOENT")) throw error;
   }
 
   const settings = {
@@ -372,7 +419,8 @@ export async function updateProjectSettings(
   }
   const fields = Object.keys(update);
   if (
-    !fields.length || fields.some((key) => key !== "manuscriptWordGoal" && key !== "dailyWordGoal")
+    !fields.length ||
+    fields.some((key) => key !== "manuscriptWordGoal" && key !== "dailyWordGoal")
   ) {
     throw new TypeError("Provide valid project settings to update.");
   }
@@ -406,7 +454,7 @@ export async function getActiveProjectDetails(): Promise<ActiveProjectDetails | 
   if (!activePath || !directory) return null;
 
   const settings = await getProjectSettings(directory);
-  const activeManuscript = await parseEpub(await Deno.readFile(activePath), basename(activePath));
+  const activeManuscript = await parseEpub(await readFile(activePath), basename(activePath));
   return {
     settings,
     manuscript: {
@@ -429,16 +477,16 @@ export async function updateActiveProjectSettings(
 export async function recordActiveProjectDailyProgress(
   manuscriptId: string,
   totalWords: number,
-): Promise<
-  {
-    progress: ProjectDailyWritingProgress;
-    writtenWords: number;
-    dailyWordGoal: number;
-    history: DailyWritingHistoryEntry[];
-  } | null
-> {
+): Promise<{
+  progress: ProjectDailyWritingProgress;
+  writtenWords: number;
+  dailyWordGoal: number;
+  history: DailyWritingHistoryEntry[];
+} | null> {
   if (
-    !manuscriptId || manuscriptId.length > 1024 || !Number.isSafeInteger(totalWords) ||
+    !manuscriptId ||
+    manuscriptId.length > 1024 ||
+    !Number.isSafeInteger(totalWords) ||
     totalWords < 0
   ) {
     throw new TypeError("Invalid daily writing progress request.");
@@ -449,14 +497,16 @@ export async function recordActiveProjectDailyProgress(
 
   const settings = await getProjectSettings(directory);
   const date = today();
-  const progress = settings.user_settings.dailyWritingProgress.date === date
-    ? settings.user_settings.dailyWritingProgress
-    : { date, startingWords: {} };
+  const progress =
+    settings.user_settings.dailyWritingProgress.date === date
+      ? settings.user_settings.dailyWritingProgress
+      : { date, startingWords: {} };
   if (progress.startingWords[manuscriptId] === undefined) {
     const legacy = await getLegacyDailySettings();
-    const legacyStart = legacy.dailyWritingProgress.date === date
-      ? legacy.dailyWritingProgress.startingWords[manuscriptId]
-      : undefined;
+    const legacyStart =
+      legacy.dailyWritingProgress.date === date
+        ? legacy.dailyWritingProgress.startingWords[manuscriptId]
+        : undefined;
     progress.startingWords[manuscriptId] = legacyStart ?? totalWords;
   }
   const writtenWords = Math.max(totalWords - progress.startingWords[manuscriptId], 0);
@@ -496,7 +546,7 @@ async function projectDrafts(directory: string): Promise<DraftSummary[]> {
 
 function latestDraft(drafts: DraftSummary[]): DraftSummary | null {
   return drafts.reduce<DraftSummary | null>(
-    (latest, draft) => !latest || draft.number > latest.number ? draft : latest,
+    (latest, draft) => (!latest || draft.number > latest.number ? draft : latest),
     null,
   );
 }
@@ -513,9 +563,10 @@ export async function listDrafts(): Promise<{ drafts: DraftSummary[]; activeDraf
     const activeNumber = draftNumber(basename(activePath));
     return {
       drafts,
-      activeDraft: activeNumber && drafts.some((draft) => draft.number === activeNumber)
-        ? activeNumber
-        : latestDraft(drafts)!.number,
+      activeDraft:
+        activeNumber && drafts.some((draft) => draft.number === activeNumber)
+          ? activeNumber
+          : latestDraft(drafts)!.number,
     };
   }
   throw new Error("The project does not have a draft.");
@@ -533,7 +584,7 @@ export async function selectDraft(number: number): Promise<Manuscript> {
   if (!filename) throw new Error(`Draft ${number} was not found.`);
 
   const path = draftPath(directory, filename);
-  const manuscript = await parseEpub(await Deno.readFile(path), filename);
+  const manuscript = await parseEpub(await readFile(path), filename);
   await setActivePath(path);
   return manuscript;
 }
@@ -557,33 +608,35 @@ export async function createDraft(
 
   const sourceFilename = drafts.find((draft) => draft.number === sourceDraft)?.filename;
   if (mode === "copy" && !sourceFilename) throw new Error(`Draft ${sourceDraft} was not found.`);
-  const sourcePath = mode === "copy" && sourceFilename
-    ? draftPath(directory, sourceFilename)
-    : activePath;
-  const source = await parseEpub(await Deno.readFile(sourcePath), basename(sourcePath));
+  const sourcePath =
+    mode === "copy" && sourceFilename ? draftPath(directory, sourceFilename) : activePath;
+  const source = await parseEpub(await readFile(sourcePath), basename(sourcePath));
   const filename = `draft_${number}.epub`;
-  const next: Manuscript = mode === "copy" ? { ...source, filename } : {
-    ...blankManuscript(String(source.frontmatter.title ?? "Untitled Manuscript")),
-    filename,
-    frontmatter: {
-      ...source.frontmatter,
-      writasaurusId: crypto.randomUUID(),
-      updatedAt: new Date().toISOString(),
-    },
-  };
+  const next: Manuscript =
+    mode === "copy"
+      ? { ...source, filename }
+      : {
+          ...blankManuscript(String(source.frontmatter.title ?? "Untitled Manuscript")),
+          filename,
+          frontmatter: {
+            ...source.frontmatter,
+            writasaurusId: crypto.randomUUID(),
+            updatedAt: new Date().toISOString(),
+          },
+        };
 
   if (mode === "copy") {
     next.frontmatter = { ...next.frontmatter, writasaurusId: crypto.randomUUID() };
   }
 
-  await Deno.writeFile(draftPath(directory, filename), await generateEpub(next), {
-    createNew: true,
+  await writeFile(draftPath(directory, filename), await generateEpub(next), {
+    flag: "wx",
   });
   drafts = [...drafts, { number, filename }];
   try {
     await saveProjectSettings(directory, { ...currentSettings, drafts });
   } catch (error) {
-    await Deno.remove(draftPath(directory, filename));
+    await rm(draftPath(directory, filename));
     throw error;
   }
   const path = draftPath(directory, filename);
@@ -605,7 +658,7 @@ export async function openProject(projectPath: string): Promise<Manuscript | nul
     return null;
   }
 
-  const parsed = await parseEpub(await Deno.readFile(epubPath), basename(epubPath));
+  const parsed = await parseEpub(await readFile(epubPath), basename(epubPath));
   await setActivePath(epubPath);
   return parsed;
 }
@@ -616,7 +669,7 @@ export async function createProjectEpub(projectPath = pendingProjectPath): Promi
   const projectName = basename(projectPath) || "Untitled Manuscript";
   const manuscript = { ...blankManuscript(projectName), filename: "draft_1.epub" };
   const epubPath = projectFilePath(projectPath, epubFilename(manuscript));
-  await Deno.writeFile(epubPath, await generateEpub(manuscript), { createNew: true });
+  await writeFile(epubPath, await generateEpub(manuscript), { flag: "wx" });
   await saveProjectSettings(projectPath, {
     drafts: [{ number: 1, filename: "draft_1.epub" }],
     user_settings: await newProjectUserSettings(),
@@ -626,9 +679,7 @@ export async function createProjectEpub(projectPath = pendingProjectPath): Promi
   return manuscript;
 }
 
-export async function createProject(
-  projectName: string,
-): Promise<Manuscript> {
+export async function createProject(projectName: string): Promise<Manuscript> {
   const name = projectName.trim();
   if (!name || name === "." || name === ".." || /[\\/\0]/.test(name)) {
     throw new Error("Enter a valid project folder name without path separators.");
@@ -641,8 +692,8 @@ export async function createProject(
   const manuscript = { ...blankManuscript(name), filename: "draft_1.epub" };
   const epubPath = projectFilePath(projectPath, epubFilename(manuscript));
   const epub = await generateEpub(manuscript);
-  await Deno.mkdir(projectPath);
-  await Deno.writeFile(epubPath, epub, { createNew: true });
+  await mkdir(projectPath);
+  await writeFile(epubPath, epub, { flag: "wx" });
   await saveProjectSettings(projectPath, {
     drafts: [{ number: 1, filename: "draft_1.epub" }],
     user_settings: await newProjectUserSettings(),

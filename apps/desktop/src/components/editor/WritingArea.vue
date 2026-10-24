@@ -77,7 +77,6 @@ onBeforeUnmount(() => {
   stopFocusWatch?.();
   registerSurface(null);
 });
-
 </script>
 
 <template>
@@ -89,7 +88,10 @@ onBeforeUnmount(() => {
         id="chapter-title"
         class="title"
         aria-label="Chapter title"
-        @input="renameChapter(($event.currentTarget as HTMLInputElement).value); scheduleHistoryCapture()"
+        @input="
+          renameChapter(($event.currentTarget as HTMLInputElement).value);
+          scheduleHistoryCapture();
+        "
       />
       <div
         ref="editor"
@@ -100,19 +102,26 @@ onBeforeUnmount(() => {
         aria-multiline="true"
         :aria-label="props.mode === 'outline' ? 'Outline text' : 'Chapter text'"
         spellcheck="false"
-        @input="scheduleHistoryCapture(); props.mode === 'outline'
-          ? markOutlineChanged($event.currentTarget as HTMLElement)
-          : markChanged($event.currentTarget as HTMLElement)"
-        @paste="(event) => {
-          event.preventDefault();
-          executeEditorCommand('insertText', event.clipboardData?.getData('text/plain') ?? '');
-        }"
-        @keydown="(event) => {
-          if (event.key !== 'Tab') return;
-          event.preventDefault();
-          executeEditorCommand('insertText', '\t');
-          event.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
-        }"
+        @input="
+          scheduleHistoryCapture();
+          props.mode === 'outline'
+            ? markOutlineChanged($event.currentTarget as HTMLElement)
+            : markChanged($event.currentTarget as HTMLElement);
+        "
+        @paste="
+          (event) => {
+            event.preventDefault();
+            executeEditorCommand('insertText', event.clipboardData?.getData('text/plain') ?? '');
+          }
+        "
+        @keydown="
+          (event) => {
+            if (event.key !== 'Tab') return;
+            event.preventDefault();
+            executeEditorCommand('insertText', '\t');
+            event.currentTarget.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        "
       />
     </section>
     <div v-if="props.mode === 'manuscript'" class="chapterNavigation">

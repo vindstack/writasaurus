@@ -27,9 +27,11 @@ function parseAppSettings(value: unknown): AppSettings {
   }
   const settings = value as Record<string, unknown>;
   if (
-    settings.version !== 1 || typeof settings.font !== "string" ||
+    settings.version !== 1 ||
+    typeof settings.font !== "string" ||
     !VALID_FONTS.has(settings.font as FontOption) ||
-    !Number.isSafeInteger(settings.wordsPerPage) || (settings.wordsPerPage as number) < 1 ||
+    !Number.isSafeInteger(settings.wordsPerPage) ||
+    (settings.wordsPerPage as number) < 1 ||
     !Array.isArray(settings.writingAssistanceWords) ||
     !settings.writingAssistanceWords.every((word) => typeof word === "string") ||
     !Array.isArray(settings.writingAssistanceIgnores) ||
@@ -55,35 +57,43 @@ async function fetchSettings(): Promise<AppSettings> {
 export async function loadAppSettings(): Promise<AppSettings> {
   if (appSettings.value) return appSettings.value;
   if (loadingSettings) return await loadingSettings;
-  loadingSettings = fetchSettings().then((settings) => {
-    appSettings.value = settings;
-    appSettingsError.value = "";
-    return settings;
-  }).catch((error: unknown) => {
-    appSettingsError.value = error instanceof Error ? error.message : "Could not load settings.";
-    throw error;
-  }).finally(() => {
-    loadingSettings = undefined;
-  });
+  loadingSettings = fetchSettings()
+    .then((settings) => {
+      appSettings.value = settings;
+      appSettingsError.value = "";
+      return settings;
+    })
+    .catch((error: unknown) => {
+      appSettingsError.value = error instanceof Error ? error.message : "Could not load settings.";
+      throw error;
+    })
+    .finally(() => {
+      loadingSettings = undefined;
+    });
   return await loadingSettings;
 }
 
 export function updateAppSettings(update: AppSettingsUpdate): Promise<void> {
-  const operation = settingsUpdates.then(async () => {
-    await loadAppSettings();
-    const response = await fetch(SETTINGS_URL, {
-      method: "PATCH",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(update),
+  const operation = settingsUpdates
+    .then(async () => {
+      await loadAppSettings();
+      const response = await fetch(SETTINGS_URL, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(update),
+      });
+      if (!response.ok) throw await responseError(response, "Could not save Writasaurus settings");
+      appSettings.value = parseAppSettings(await response.json());
+      appSettingsError.value = "";
+    })
+    .catch((error: unknown) => {
+      appSettingsError.value = error instanceof Error ? error.message : "Could not save settings.";
+      throw error;
     });
-    if (!response.ok) throw await responseError(response, "Could not save Writasaurus settings");
-    appSettings.value = parseAppSettings(await response.json());
-    appSettingsError.value = "";
-  }).catch((error: unknown) => {
-    appSettingsError.value = error instanceof Error ? error.message : "Could not save settings.";
-    throw error;
-  });
-  settingsUpdates = operation.then(() => undefined, () => undefined);
+  settingsUpdates = operation.then(
+    () => undefined,
+    () => undefined,
+  );
   return operation;
 }
 

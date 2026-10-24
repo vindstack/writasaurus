@@ -11,7 +11,7 @@ import { isPublicHttpsUrl, isReleaseManifest } from "../../../../../packages/sha
 export const prerender = false;
 
 async function currentRelease(): Promise<unknown> {
-  const base = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL")?.trim();
+  const base = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL?.trim();
   if (!base) throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL is not configured.");
   if (!isPublicHttpsUrl(base) || new URL(base).hostname.endsWith(".r2.cloudflarestorage.com")) {
     throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a public HTTPS URL.");
@@ -58,10 +58,7 @@ export async function POST(context: { request: Request }): Promise<Response> {
     if (email && !isValidEmail(email)) {
       return new Response("Enter a valid email address.", { status: 400 });
     }
-    amountCents = parseDonationAmount(
-      form.get("donation") ?? "none",
-      form.get("customAmount"),
-    );
+    amountCents = parseDonationAmount(form.get("donation") ?? "none", form.get("customAmount"));
     if (amountCents > 0 && !email) {
       return new Response("Enter an email address to make a donation.", { status: 400 });
     }

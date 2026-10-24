@@ -1,16 +1,10 @@
 <script setup lang="ts">
-
 defineProps<{ status: "saved" | "unsaved" | ""; message: string; id?: string }>();
 </script>
 
 <template>
   <span class="status" :id="id" role="status" aria-live="polite" :data-status="status">
-    <span
-      v-if="status"
-      :class="['indicator', status]"
-      data-indicator
-      aria-hidden="true"
-    />
+    <span v-if="status" :class="['indicator', status]" data-indicator aria-hidden="true" />
     <span>{{ message }}</span>
   </span>
 </template>

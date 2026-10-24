@@ -1,7 +1,7 @@
 # Writasaurus
 
-A local-first manuscript editor built with Astro, Vue, and Deno. Desktop and website code are
-separate applications in one Deno workspace.
+A local-first manuscript editor built with Astro, Vue, and Node.js. Desktop and website code are
+separate applications in one pnpm workspace. Electron provides native desktop windows and dialogs.
 
 ## Applications
 
@@ -27,33 +27,49 @@ editable guidance.
 
 ## Development
 
-Use Deno 2:
+Use Node.js 24 or newer and pnpm 9.12 (pinned in `package.json`). Run `corepack enable` if needed,
+then install dependencies and the browser used by the tests:
 
 ```sh
-deno task dev:website         # website at http://localhost:8000
-deno task dev:desktop         # desktop app in a native window
-deno task build:website       # build the website
-deno task build:desktop       # build the desktop app
-deno task desktop             # package desktop app for this platform
-deno task test                # build and run unit and Playwright tests
-deno task check               # format, lint, types, and tests
+pnpm install
+pnpm exec playwright install chromium
+pnpm dev:website         # website at http://localhost:8000
+pnpm dev:desktop         # Electron window with Astro HMR
+pnpm build:website       # build the website
+pnpm build:desktop       # build the editor and Electron main process
+pnpm desktop             # package Electron for this platform in desktop/
+pnpm test                # build and run Vitest unit/API and Playwright browser tests
+pnpm check               # format, lint, types, and tests
 ```
 
 To exercise donations without Stripe, run the website with
-`PAYMENT_PROVIDER=mock deno task dev:website`. Mock donations are available only outside Deno
-Deploy; local sign-in messages are written to `apps/website/.data/emails.jsonl` instead of being
+`PAYMENT_PROVIDER=mock pnpm dev:website`. Mock donations are unavailable when `NODE_ENV=production`;
+local sign-in messages are written to `apps/website/.data/emails.jsonl` instead of being
 sent through Resend. The log is ignored by Git and may contain passcodes.
+
+Oxlint and Oxfmt are required workspace dependencies, not optional global tools. Use `pnpm lint`,
+`pnpm format`, and `pnpm format:check`. Oxfmt formats supported source files (including Vue);
+Astro files retain the Astro extension's formatter because Oxfmt does not yet format `.astro`.
+Install the recommended Astro, Vue, and Oxc VS Code extensions, or Astro, Vue, and Oxlint support
+in Zed. Both editor configurations disable Deno and use workspace TypeScript and Oxfmt.
+Native file dialogs require the Electron launcher; the standalone editor HTTP server is for testing.
+
+Electron uses a custom draggable title bar with minimize, maximize/restore, and close controls on all
+desktop pages. Window actions use a sandbox-compatible preload bridge restricted to the trusted main
+frame. The title bar stays hidden when the editor is opened in an ordinary browser.
 
 ## Website deployment
 
-The website runs on Deno Deploy and requires PostgreSQL. To start a new database from the current
-schema, apply the initial migration:
+The website uses the standalone Astro Node adapter and requires PostgreSQL. After `pnpm build:website`,
+run `pnpm --filter @writasaurus/website start` with production environment variables. Set
+`HOST=0.0.0.0`, `PORT`, and `NODE_ENV=production` in the deployment environment. The server must have
+write access to its configured session storage. To start a database from the current schema:
 
 ```sh
-deno task db:migrate
+pnpm db:migrate
 ```
 
-`deno task db:reset` is destructive: it drops the existing Writasaurus database tables and applies
+`pnpm db:reset` is destructive: it drops the existing Writasaurus database tables and applies
 the current initial schema. Use it only when intentionally starting over with all database data
 deleted.
 
@@ -77,14 +93,14 @@ Install Docker Compose, copy `.env.example` to `.env`, then start the local data
 schema:
 
 ```sh
-deno task db:dev:up
-deno task db:migrate
-deno task dev:website
+pnpm db:dev:up
+pnpm db:migrate
+pnpm dev:website
 ```
 
-To discard local data and recreate the current schema, run `deno task db:reset`. The local database
+To discard local data and recreate the current schema, run `pnpm db:reset`. The local database
 credentials in `.env.example` are only for development. The Compose service stores data in a
-persistent Docker volume; stop it with `deno task db:dev:down`. Use separate credentials and a
+persistent Docker volume; stop it with `pnpm db:dev:down`. Use separate credentials and a
 separate database for staging or production.
 
 ## Free desktop downloads and donations
@@ -109,19 +125,30 @@ HTTPS custom domain (or enable its public `r2.dev` URL for development). Do not 
 `r2.cloudflarestorage.com` S3 API endpoint as `WRITASAURUS_R2_PUBLIC_BASE_URL`. For local
 publishing, copy `.env.example` to `.env` and set the R2 account ID, access key ID, secret access
 key, bucket name, and public base URL for that domain. Keep R2 credentials local; they are only used
-by the release command. Build and publish an immutable semantic version:
+by the publishing command. Electron packages must be built on their matching native OS:
 
 ```sh
-deno task release:desktop 1.2.3
+pnpm release:desktop 1.2.3 --build-platform linux    # Linux x64 runner
+pnpm release:desktop 1.2.3 --build-platform macos    # macOS Apple Silicon runner
+pnpm release:desktop 1.2.3 --build-platform windows  # Windows x64 runner
 ```
 
-The release task builds the Linux AppImage, Apple Silicon macOS archive, and Windows MSI; validates
-the package signatures; generates a `SHA256SUMS.txt`; and uploads the artifacts and versioned
+Combine the outputs under `desktop/linux/`, `desktop/macos/`, and `desktop/windows/` on the publishing
+machine, then preview and publish:
+
+```sh
+pnpm release:desktop 1.2.3 --skip-build --dry-run
+pnpm release:desktop 1.2.3 --skip-build
+```
+
+CI checks build all three formats on native runners and upload them as workflow artifacts.
+The publishing task validates the Linux AppImage, Apple Silicon macOS archive, and Windows MSI;
+generates a `SHA256SUMS.txt`; and uploads the artifacts and versioned
 metadata to R2. Uploads are verified and version paths cannot be overwritten. After all versioned
 objects are verified, the task updates `latest.json` at the bucket root with the release manifest
 and public artifact URLs. Downloads use the new release immediately, without a website deployment.
 The latest pointer is revalidated rather than cached, and conditional writes prevent concurrent
-releases from overwriting a newer pointer. Use `--dry-run` to build, validate, and preview the
+releases from overwriting a newer pointer. Use `--skip-build --dry-run` to validate and preview the
 release metadata without reading R2 credentials or uploading. Existing immutable version paths
 cannot be republished.
 

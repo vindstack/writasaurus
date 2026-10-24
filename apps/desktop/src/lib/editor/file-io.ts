@@ -94,7 +94,7 @@ export function saveEpubToDisk(): Promise<void> {
 
 export async function openProject(): Promise<void> {
   if (editorMode.peek() === "outline" && outlineHasUnsavedChanges.peek()) {
-    if (!await saveOutlineToDisk()) return;
+    if (!(await saveOutlineToDisk())) return;
   }
   if (editorMode.peek() === "outline" && hasUnsavedChanges.peek()) {
     await saveToDisk();

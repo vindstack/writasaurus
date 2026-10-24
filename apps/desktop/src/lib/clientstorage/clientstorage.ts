@@ -34,10 +34,7 @@
 
 type StorageType = "localStorage" | "sessionStorage";
 
-export const createStorage = (
-  prefix: string,
-  type: StorageType = "sessionStorage",
-) => {
+export const createStorage = (prefix: string, type: StorageType = "sessionStorage") => {
   const store = type === "localStorage" ? globalThis.localStorage : globalThis.sessionStorage;
 
   const getKey = (key: string) => `${prefix}${key}`;

@@ -1,5 +1,7 @@
-import { fetchApp } from "./app.ts";
+import { createServer } from "./app.ts";
 
-const port = Number(Deno.env.get("PORT") ?? 8000);
+const port = Number(process.env.PORT ?? 8000);
 
-Deno.serve({ port }, fetchApp);
+createServer().listen(port, "127.0.0.1", () => {
+  console.log(`Writasaurus is listening on http://127.0.0.1:${port}`);
+});

@@ -16,10 +16,8 @@
  * `<input>` (using `value`), and is safe to call repeatedly (e.g. on input or
  * resize events).
  */
-export function syncTruncationTooltip(
-  element: HTMLElement | HTMLInputElement,
-): void {
-  const text = "value" in element ? element.value : element.textContent ?? "";
+export function syncTruncationTooltip(element: HTMLElement | HTMLInputElement): void {
+  const text = "value" in element ? element.value : (element.textContent ?? "");
   const isTruncated = element.scrollWidth > element.clientWidth;
 
   if (isTruncated && text) {

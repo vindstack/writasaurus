@@ -1,6 +1,5 @@
 .data/
 /desktop
-deno.lock
 ignore/
 dist/
 .astro/
@@ -10,3 +9,6 @@ node_modules/
 /apps/*/dist/
 /apps/*/.astro/
 /apps/desktop/desktop/
+dist-electron/
+dist-test/
+coverage/

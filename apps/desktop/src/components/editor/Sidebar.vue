@@ -77,7 +77,7 @@ async function chooseDraft(number: number): Promise<void> {
   if (number === activeDraft.value) return;
   draftBusy.value = true;
   try {
-    if (!await saveBeforeDraftChange()) return;
+    if (!(await saveBeforeDraftChange())) return;
     const response = await fetch("/api/editor/drafts", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -115,7 +115,7 @@ async function createNewDraft(): Promise<void> {
   draftBusy.value = true;
   draftError.value = "";
   try {
-    if (!await saveBeforeDraftChange()) {
+    if (!(await saveBeforeDraftChange())) {
       draftError.value = "Save the current draft before creating another.";
       return;
     }
@@ -153,7 +153,7 @@ watch(
   [loadVersion, () => manuscriptState.value.filename],
   async (_value, _previous, onCleanup) => {
     let current = true;
-    onCleanup(() => current = false);
+    onCleanup(() => (current = false));
     drafts.value = [];
     activeDraft.value = 1;
     draftError.value = "";
@@ -180,7 +180,13 @@ watch(
 </script>
 
 <template>
-  <SlideoutPanel :open="isOpen" side="left" label="Book sections" class="sidebar" data-testid="chapters-sidebar">
+  <SlideoutPanel
+    :open="isOpen"
+    side="left"
+    label="Book sections"
+    class="sidebar"
+    data-testid="chapters-sidebar"
+  >
     <div class="draft-controls">
       <div class="draft-toolbar">
         <DropdownMenu
@@ -226,7 +232,9 @@ watch(
             </button>
           </div>
         </DropdownMenu>
-        <span class="draft-count" data-draft-count>{{ drafts.length }} draft{{ drafts.length === 1 ? "" : "s" }}</span>
+        <span class="draft-count" data-draft-count
+          >{{ drafts.length }} draft{{ drafts.length === 1 ? "" : "s" }}</span
+        >
       </div>
       <p v-if="draftError && !createDraftOpen" class="draft-error" role="alert">{{ draftError }}</p>
     </div>
@@ -238,7 +246,8 @@ watch(
           data-generated-section="toc"
           aria-label="Table of contents, generated for EPUB"
           title="The EPUB table of contents is generated from book sections"
-        >TOC</span>
+          >TOC</span
+        >
         <DropdownMenu
           placement="bottom-end"
           :open="addMenuOpen"
@@ -246,12 +255,7 @@ watch(
           @keydown.esc="addMenuOpen = false"
         >
           <template #trigger>
-            <Button
-              variant="quiet"
-              size="small"
-              aria-haspopup="menu"
-              :aria-expanded="addMenuOpen"
-            >
+            <Button variant="quiet" size="small" aria-haspopup="menu" :aria-expanded="addMenuOpen">
               Add
             </Button>
           </template>
@@ -271,12 +275,23 @@ watch(
       </div>
     </div>
     <ol id="chapter-list" class="list" ref="list">
-      <li v-for="(chapter, index) in manuscriptState.chapters" :key="chapter.id"
-        :class="['item', index === activeIndex && 'active']" data-drag-item
+      <li
+        v-for="(chapter, index) in manuscriptState.chapters"
+        :key="chapter.id"
+        :class="['item', index === activeIndex && 'active']"
+        data-drag-item
         @click="choose(index)"
-        :aria-current="index === activeIndex ? 'true' : undefined">
-        <button type="button" class="handle" data-drag-handle :aria-label="`Reorder ${chapter.title}`"
-          aria-keyshortcuts="ArrowUp ArrowDown" title="Drag to reorder" @click.stop>
+        :aria-current="index === activeIndex ? 'true' : undefined"
+      >
+        <button
+          type="button"
+          class="handle"
+          data-drag-handle
+          :aria-label="`Reorder ${chapter.title}`"
+          aria-keyshortcuts="ArrowUp ArrowDown"
+          title="Drag to reorder"
+          @click.stop
+        >
           ⋮
         </button>
         <span data-chapter-title>
@@ -288,14 +303,21 @@ watch(
         <Chip variant="outline" class="chip">
           <small>{{ chapter.wordCount.toLocaleString() }}w</small>
         </Chip>
-        <button type="button" class="delete button--small" :aria-label="`Delete ${chapter.title}`"
-          title="Delete chapter" @click.stop="deleteChapter(index)">
+        <button
+          type="button"
+          class="delete button--small"
+          :aria-label="`Delete ${chapter.title}`"
+          title="Delete chapter"
+          @click.stop="deleteChapter(index)"
+        >
           Delete
         </button>
       </li>
     </ol>
     <span id="sidebar-stats" class="stats">
-      {{ manuscriptState.chapters.length }} chapter{{ manuscriptState.chapters.length === 1 ? "" : "s" }}
+      {{ manuscriptState.chapters.length }} chapter{{
+        manuscriptState.chapters.length === 1 ? "" : "s"
+      }}
     </span>
     <Dialog
       id="create-draft-dialog"
@@ -494,7 +516,7 @@ watch(
   background: var(--surface-sunken);
 }
 
-.item>span {
+.item > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

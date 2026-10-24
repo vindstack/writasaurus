@@ -1,0 +1,38 @@
+{
+  "name": "writasaurus-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:website": "pnpm --filter @writasaurus/website build",
+    "build:desktop": "pnpm --filter @writasaurus/desktop build",
+    "dev:website": "pnpm --filter @writasaurus/website dev",
+    "dev:desktop": "pnpm --filter @writasaurus/desktop dev:electron",
+    "desktop": "pnpm --filter @writasaurus/desktop electron:build",
+    "test": "pnpm --filter @writasaurus/desktop test && pnpm --filter @writasaurus/website test",
+    "lint": "oxlint .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "type-check": "pnpm -r type-check && tsc -p tsconfig.scripts.json",
+    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm test",
+    "db:dev:up": "docker compose up -d --wait postgres",
+    "db:dev:down": "docker compose stop postgres",
+    "db:migrate": "node --env-file-if-exists=.env scripts/db-migrate.ts",
+    "db:reset": "node --env-file-if-exists=.env scripts/db-migrate.ts --reset",
+    "release:desktop": "node --env-file-if-exists=.env scripts/release-desktop.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pg": "^8.11.6",
+    "esbuild": "^0.27.0",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "pg": "^8.11.3",
+    "playwright": "^1.63.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

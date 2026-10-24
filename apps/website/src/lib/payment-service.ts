@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { type DonationInput, type DonationRecord, getWebsiteStore } from "./donation-store.ts";
 import {
   createStripeCheckoutSession,
@@ -11,7 +12,7 @@ export const STRIPE_MIN_DONATION_CENTS = 50;
 export const DONATION_CURRENCY = "usd";
 export const DOWNLOAD_PLATFORMS = ["linux", "macos", "windows"] as const;
 
-export type DownloadPlatform = typeof DOWNLOAD_PLATFORMS[number];
+export type DownloadPlatform = (typeof DOWNLOAD_PLATFORMS)[number];
 export interface ConfirmedDonation {
   donation: DonationRecord;
   platform: DownloadPlatform;
@@ -20,8 +21,7 @@ export interface ConfirmedDonation {
 const mockDonationPlatforms = new Map<string, DownloadPlatform>();
 
 export function isLocalMockEnabled(): boolean {
-  return Deno.env.get("PAYMENT_PROVIDER") === "mock" &&
-    Deno.env.get("DENO_DEPLOYMENT_ID") === undefined;
+  return process.env.PAYMENT_PROVIDER === "mock" && env.NODE_ENV !== "production";
 }
 
 export function isValidEmail(value: string): boolean {
@@ -55,7 +55,7 @@ export function parseDonationAmount(choice: unknown, customAmount: unknown): num
 function paymentIntentId(session: StripeCheckoutSession): string | null {
   return typeof session.payment_intent === "string"
     ? session.payment_intent
-    : session.payment_intent?.id ?? null;
+    : (session.payment_intent?.id ?? null);
 }
 
 function sessionMetadata(session: StripeCheckoutSession): Record<string, string> {
@@ -79,9 +79,14 @@ async function recordPaidSession(
   const expectedAmount = Number(metadata.amountCents);
   const intentId = paymentIntentId(session);
   if (
-    session.payment_status !== "paid" || session.currency !== DONATION_CURRENCY ||
-    !email || !isValidEmail(email) || !session.id || !intentId ||
-    typeof amountTotal !== "number" || !Number.isSafeInteger(amountTotal) ||
+    session.payment_status !== "paid" ||
+    session.currency !== DONATION_CURRENCY ||
+    !email ||
+    !isValidEmail(email) ||
+    !session.id ||
+    !intentId ||
+    typeof amountTotal !== "number" ||
+    !Number.isSafeInteger(amountTotal) ||
     amountTotal !== expectedAmount ||
     amountTotal < STRIPE_MIN_DONATION_CENTS
   ) {

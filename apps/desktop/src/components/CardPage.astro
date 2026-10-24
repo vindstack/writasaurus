@@ -34,7 +34,7 @@ const { size, brandHref, roomy = false, prose = false } = Astro.props;
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: 100vh;
+  min-height: calc(100vh - var(--window-titlebar-height, 0px));
   padding: 1.5rem;
 }
 

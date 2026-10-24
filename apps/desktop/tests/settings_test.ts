@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import {
   applyFontPreference,
   DEFAULT_DAILY_WORD_GOAL,
@@ -11,21 +12,19 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
   if (!condition) throw new Error(message);
 }
 
-Deno.test("settings: font options include system, serif, and sans-serif choices", () => {
+test("settings: font options include system, serif, and sans-serif choices", () => {
   const ids = FONT_OPTIONS.map((font) => font.id);
-  for (
-    const id of [
-      "alegreya",
-      "system",
-      "serif",
-      "sans-serif",
-      "georgia",
-      "times",
-      "arial",
-      "helvetica",
-    ]
-  ) {
-    assert(ids.includes(id as typeof ids[number]));
+  for (const id of [
+    "alegreya",
+    "system",
+    "serif",
+    "sans-serif",
+    "georgia",
+    "times",
+    "arial",
+    "helvetica",
+  ]) {
+    assert(ids.includes(id as (typeof ids)[number]));
   }
 
   assert(DEFAULT_FONT === "alegreya");
@@ -38,7 +37,7 @@ Deno.test("settings: font options include system, serif, and sans-serif choices"
   assert(FONT_MAP["sans-serif"].family.includes("sans-serif"));
 });
 
-Deno.test("settings: applying a font preference is safe without a DOM", () => {
+test("settings: applying a font preference is safe without a DOM", () => {
   applyFontPreference("system");
   applyFontPreference("serif");
 });

@@ -7,7 +7,7 @@ export interface TestApp {
   request(url: string, init?: RequestInit): Promise<Response>;
 }
 
-/** Exercises the built Desktop Astro server in-process. Requires `deno task build`. */
+/** Exercises the built Desktop Astro server in-process. Requires a desktop build. */
 export function createTestApp(platform: Partial<Platform> = {}): TestApp {
   return {
     fetch(request) {

@@ -1,5 +1,6 @@
 ---
 import "../styles/global.css";
+import TitleBar from "../components/TitleBar.astro";
 
 interface Props {
   title: string;
@@ -25,6 +26,17 @@ const { title } = Astro.props;
     <title>{title}</title>
   </head>
   <body>
+    <TitleBar />
     <slot />
   </body>
 </html>
+
+<style>
+  :global(html[data-desktop-window]) {
+    --window-titlebar-height: 36px;
+  }
+
+  :global(html[data-desktop-window] body) {
+    padding-top: var(--window-titlebar-height);
+  }
+</style>

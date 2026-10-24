@@ -2,25 +2,24 @@
 
 ## Commands
 
-This is a Deno 2 project built on Astro and Vue. Use Deno tasks and import-map dependencies; never
-use Node.js or npm commands.
+This is a Node.js 24 project built on Astro and Vue, with an Electron desktop application.
+Use pnpm tasks and workspace dependencies, not npm or Deno commands.
 
-- `deno task dev:website` starts the website Astro server at `http://localhost:8000` with HMR.
-- `deno task build:website` builds the website into `apps/website/dist/`.
-- `deno task build:desktop` builds the desktop app into `apps/desktop/dist/`.
-- `deno task dev:desktop` runs Astro's development server in a Deno Desktop window.
-- `deno task desktop` builds the native application for the current platform into `desktop/`.
-- `deno task check` runs formatting checks, linting, type checks, and the full test suite.
+- `pnpm dev:website` starts the website Astro server at `http://localhost:8000` with HMR.
+- `pnpm build:website` builds the website into `apps/website/dist/`.
+- `pnpm build:desktop` builds the desktop app and Electron main process.
+- `pnpm dev:desktop` runs Astro's development server inside Electron with HMR.
+- `pnpm desktop` packages the native application for the current platform into `desktop/`.
+- `pnpm check` runs Oxfmt checks, Oxlint, type checks, and the full test suite.
 
 Only run tests after making changes; never run tests preemptively before changes have been made.
-Always run tests using `deno task test` only. It builds first and includes the Playwright browser
+Always run tests using `pnpm test` (or a package-filtered `pnpm test`). It builds first and includes Playwright browser
 tests.
 
-When granting permissions, specify the minimal `--allow-*` flags needed rather than defaulting to
-`-A`. Use `deno <subcommand> --help` to verify flags and `deno doc <specifier>` to inspect library
-APIs. Always check `deno desktop --help` before searching the web for Deno Desktop help.
+Keep Electron renderers sandboxed with Node integration disabled and context isolation enabled.
+Native dialogs and exit behavior are injected through `setPlatform` in the main process.
 
-Formatting is configured for 100-column lines, semicolons, and double quotes.
+Oxfmt uses 100-column lines, semicolons, and double quotes. Astro files use the Astro editor formatter.
 
 Never commit code; leave committing to the user.
 
@@ -28,9 +27,9 @@ Never commit code; leave committing to the user.
 
 Writasaurus is a local-first manuscript editor with an Astro app and two launch modes:
 
-- `astro.config.ts` configures Astro SSR with the Deno adapter and Vue integration. `app.ts` serves
-  the generated server and static assets; `server.ts` is the web entry point. `desktop.ts` and
-  `desktop.dev.ts` launch production and development Desktop windows with explicit window sizing.
+- Each app's `astro.config.ts` configures Astro SSR with the Node adapter and Vue integration.
+  The website uses standalone mode. Desktop uses middleware mode; `app.ts` and `server.ts` host
+  it in Node for tests, while `main.ts` launches the server and Electron window in production/dev.
 - `src/pages/` contains Astro pages and JSON APIs under `src/pages/api/editor/`. `src/layouts/`
   provides the shared document shell, and `src/middleware.ts` enforces same-origin requests and a
   nonce-based CSP.
@@ -47,8 +46,7 @@ Editor behavior notes:
   active chapter changes so the caret never moves; do not make it a controlled component.
 - Manuscript session state persists in `sessionStorage` to survive same-tab reloads. EPUBs are the
   manuscript file format; the Desktop app uses `/api/editor/*` routes for native file operations.
-- Deno Desktop's webview is WebKitGTK; `::highlight()` does not paint on text in anonymous block
-  boxes, so the editor normalizes content into block elements.
+- The editor normalizes content into block elements so highlights paint consistently across browsers.
 
 ## Conventions
 
@@ -57,7 +55,8 @@ Editor behavior notes:
   only for tokens, reset, and document defaults.
 - Prefer `data-*` attributes (not CSS class names) as test hooks because component styles are
   implementation details.
-- Use explicit `.ts`/`.vue` extensions for local imports and import-map aliases from `deno.json`.
+- Use explicit `.ts`/`.vue` extensions for local imports and declare dependencies in each workspace's
+  `package.json`. Node 24 runs utility TypeScript scripts directly.
 - `src/middleware.ts` enforces same-origin CSRF checks based on `Sec-Fetch-Site` and `Origin`, and
   attaches the CSP nonce. Client `fetch` calls need no manual headers. Browser POST tests should
   send `origin: "http://localhost"`.

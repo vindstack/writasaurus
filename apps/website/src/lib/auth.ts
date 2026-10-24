@@ -1,3 +1,4 @@
+import { env } from "node:process";
 import { getWebsiteStore } from "./donation-store.ts";
 import { normalizedEmail } from "./normalized-email.ts";
 
@@ -13,7 +14,7 @@ function encodeBase64Url(bytes: Uint8Array): string {
 }
 
 function sessionSecret(): string {
-  const value = Deno.env.get("SESSION_SECRET")?.trim();
+  const value = process.env.SESSION_SECRET?.trim();
   if (!value || value.length < 32) {
     throw new Error("SESSION_SECRET must contain at least 32 characters.");
   }
@@ -38,8 +39,7 @@ export async function hashAuthCode(email: string, code: string): Promise<string>
 }
 
 function secureCookie(): string {
-  return Deno.env.get("DENO_DEPLOYMENT_ID") ||
-      Deno.env.get("PUBLIC_SITE_URL")?.startsWith("https://")
+  return env.NODE_ENV === "production" || process.env.PUBLIC_SITE_URL?.startsWith("https://")
     ? "; Secure"
     : "";
 }
@@ -67,7 +67,9 @@ function constantTimeEqual(left: string, right: string): boolean {
 }
 
 function cookieValue(request: Request, name: string): string | null {
-  const pair = request.headers.get("cookie")?.split(";")
+  const pair = request.headers
+    .get("cookie")
+    ?.split(";")
     .map((part) => part.trim())
     .find((part) => part.startsWith(`${name}=`));
   return pair ? pair.slice(name.length + 1) : null;
@@ -95,8 +97,12 @@ export async function revokeSession(request: Request): Promise<void> {
   if (!value) return;
   const [token, signed, extra] = value.split(".");
   if (
-    !token || !signed || extra !== undefined || !constantTimeEqual(await signature(token), signed)
-  ) return;
+    !token ||
+    !signed ||
+    extra !== undefined ||
+    !constantTimeEqual(await signature(token), signed)
+  )
+    return;
   await getWebsiteStore().deleteSession(await hashText(token));
 }
 

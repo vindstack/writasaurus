@@ -1,6 +1,7 @@
+import { test } from "vitest";
 import { detectDownloadPlatform } from "../src/lib/download-platform.ts";
 
-Deno.test("download platform detection recognizes desktops and excludes unsupported devices", () => {
+test("download platform detection recognizes desktops and excludes unsupported devices", () => {
   const cases = [
     { platform: "Win32", userAgent: "Windows NT 10.0", expected: "windows" },
     { platform: "MacIntel", userAgent: "Macintosh", expected: "macos" },
@@ -16,7 +17,9 @@ Deno.test("download platform detection recognizes desktops and excludes unsuppor
   for (const { platform, userAgent, touchPoints, expected } of cases) {
     const actual = detectDownloadPlatform(platform, userAgent, touchPoints);
     if (actual !== expected) {
-      throw new Error(`Expected ${platform} / ${userAgent} to resolve to "${expected}", got "${actual}"`);
+      throw new Error(
+        `Expected ${platform} / ${userAgent} to resolve to "${expected}", got "${actual}"`,
+      );
     }
   }
 });

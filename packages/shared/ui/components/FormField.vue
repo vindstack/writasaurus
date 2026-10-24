@@ -8,11 +8,11 @@ const props = defineProps<{
   error?: string;
 }>();
 
-const describedBy = computed(() =>
-  [
-    props.hint ? `${props.id}-hint` : undefined,
-    props.error ? `${props.id}-error` : undefined,
-  ].filter(Boolean).join(" ") || undefined
+const describedBy = computed(
+  () =>
+    [props.hint ? `${props.id}-hint` : undefined, props.error ? `${props.id}-error` : undefined]
+      .filter(Boolean)
+      .join(" ") || undefined,
 );
 </script>
 

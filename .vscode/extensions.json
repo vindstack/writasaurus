@@ -1,0 +1,4 @@
+{
+  "recommendations": ["astro-build.astro-vscode", "Vue.volar", "oxc.oxc-vscode"],
+  "unwantedRecommendations": ["denoland.vscode-deno"]
+}

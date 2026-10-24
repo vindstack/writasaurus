@@ -75,8 +75,8 @@ function collectText(editor: HTMLElement): { source: string; segments: TextSegme
 }
 
 function sourceRange(warning: WritingWarning): Range | null {
-  const segment = segments.find((candidate) =>
-    warning.start >= candidate.start && warning.end <= candidate.end
+  const segment = segments.find(
+    (candidate) => warning.start >= candidate.start && warning.end <= candidate.end,
   );
   if (!segment) return null;
   const range = document.createRange();
@@ -156,19 +156,21 @@ async function analyze(): Promise<void> {
       for (const lint of lints) lint.free();
       return;
     }
-    const warnings = lints.map((lint) => {
-      const span = lint.span();
-      const warning: WritingWarning = {
-        kind: lint.lint_kind(),
-        message: lint.message(),
-        problem: lint.get_problem_text(),
-        start: Number(span.start),
-        end: Number(span.end),
-        suggestions: lint.suggestions().map((suggestion) => suggestion.get_replacement_text()),
-      };
-      lint.free();
-      return warning;
-    }).filter((warning) => !ignored.has(warningKey(warning)));
+    const warnings = lints
+      .map((lint) => {
+        const span = lint.span();
+        const warning: WritingWarning = {
+          kind: lint.lint_kind(),
+          message: lint.message(),
+          problem: lint.get_problem_text(),
+          start: Number(span.start),
+          end: Number(span.end),
+          suggestions: lint.suggestions().map((suggestion) => suggestion.get_replacement_text()),
+        };
+        lint.free();
+        return warning;
+      })
+      .filter((warning) => !ignored.has(warningKey(warning)));
     batch(() => {
       assistanceWarnings.value = warnings;
       assistanceActiveIndex.value = -1;

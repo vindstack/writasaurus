@@ -1,14 +1,15 @@
+import { test } from "vitest";
 import type { Browser } from "playwright";
 import { launchBrowser } from "../../../packages/shared/test/browser.ts";
-import { handle } from "./helpers.ts";
+import { startWebsiteServer } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-Deno.test("browser: native download forms follow public R2 redirects with and without JavaScript", async () => {
+test("browser: native download forms follow public R2 redirects with and without JavaScript", async () => {
   const names = ["PUBLIC_SITE_URL", "WRITASAURUS_R2_PUBLIC_BASE_URL"];
-  const original = new Map(names.map((name) => [name, Deno.env.get(name)]));
+  const original = new Map(names.map((name) => [name, process.env[name]]));
   const originalFetch = globalThis.fetch;
   const downloadOrigin = "https://downloads.example.com";
   const platforms = {
@@ -40,24 +41,10 @@ Deno.test("browser: native download forms follow public R2 redirects with and wi
       sha256: "b".repeat(64),
     },
   };
-  const server = Deno.serve(
-    { hostname: "127.0.0.1", port: 0, onListen() {} },
-    async (request) => {
-      const path = new URL(request.url).pathname;
-      if (/^\/_astro\/[\w.-]+\.(?:js|css)$/.test(path)) {
-        const body = await Deno.readFile(new URL(`../dist/client${path}`, import.meta.url));
-        return new Response(body, {
-          headers: {
-            "content-type": path.endsWith(".css") ? "text/css" : "application/javascript",
-          },
-        });
-      }
-      return handle(request);
-    },
-  );
-  const origin = `http://127.0.0.1:${server.addr.port}`;
-  Deno.env.delete("PUBLIC_SITE_URL");
-  Deno.env.set("WRITASAURUS_R2_PUBLIC_BASE_URL", downloadOrigin);
+  const server = await startWebsiteServer();
+  const { origin } = server;
+  delete process.env.PUBLIC_SITE_URL;
+  process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = downloadOrigin;
   globalThis.fetch = (input, init) => {
     if (String(input) === `${downloadOrigin}/latest.json`) {
       assert(init?.cache === "no-store");
@@ -92,11 +79,11 @@ Deno.test("browser: native download forms follow public R2 redirects with and wi
           }
           await form.locator('select[name="platform"]').selectOption(platform);
           const consent = form.locator("[data-terms-consent]");
-          assert(!await consent.isChecked(), "Terms acceptance must not be preselected.");
+          assert(!(await consent.isChecked()), "Terms acceptance must not be preselected.");
           await form.getByRole("button").click();
           assert(
-            await consent.evaluate((input) =>
-              input instanceof HTMLInputElement && input.validity.valueMissing
+            await consent.evaluate(
+              (input) => input instanceof HTMLInputElement && input.validity.valueMissing,
             ),
             "Native form validation must require terms acceptance.",
           );
@@ -107,7 +94,7 @@ Deno.test("browser: native download forms follow public R2 redirects with and wi
           const download = await pendingDownload;
           assert(download.url() === `${downloadOrigin}/${prefix}${fileName}`);
           assert(download.suggestedFilename() === fileName);
-          assert(await download.failure() === null);
+          assert((await download.failure()) === null);
           await download.delete();
         }
       }
@@ -118,8 +105,8 @@ Deno.test("browser: native download forms follow public R2 redirects with and wi
     await browser?.close();
     await server.shutdown();
     for (const [name, value] of original) {
-      if (value === undefined) Deno.env.delete(name);
-      else Deno.env.set(name, value);
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
     }
   }
-});
+}, 60_000);

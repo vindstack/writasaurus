@@ -1,0 +1,136 @@
+<header data-window-titlebar hidden aria-label="Window title bar">
+  <span data-window-title>Writasaurus</span>
+  <div class="controls">
+    <button type="button" data-window-minimize aria-label="Minimize window" title="Minimize">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M1 6h10" />
+      </svg>
+    </button>
+    <button type="button" data-window-maximize aria-label="Maximize window" title="Maximize">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path data-maximize-icon d="M1.5 1.5h9v9h-9z" />
+      </svg>
+    </button>
+    <button type="button" data-window-close aria-label="Close window" title="Close">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="m1 1 10 10M1 11 11 1" />
+      </svg>
+    </button>
+  </div>
+</header>
+
+<script>
+  import type { WindowState } from "../lib/window-controls.ts";
+
+  const controls = window.windowControls;
+  const bar = document.querySelector<HTMLElement>("[data-window-titlebar]");
+  if (controls && bar) {
+    document.documentElement.setAttribute("data-desktop-window", "");
+    bar.hidden = false;
+    const maximize = bar.querySelector<HTMLButtonElement>("[data-window-maximize]")!;
+    const title = bar.querySelector<HTMLElement>("[data-window-title]")!;
+    const updateTitle = () => {
+      title.textContent = document.title;
+    };
+    updateTitle();
+    const observer = new MutationObserver(updateTitle);
+    observer.observe(document.querySelector("title")!, { childList: true });
+    const updateState = ({ maximized }: WindowState) => {
+      const label = maximized ? "Restore window" : "Maximize window";
+      maximize.setAttribute("aria-label", label);
+      maximize.title = maximized ? "Restore" : "Maximize";
+      maximize.querySelector("[data-maximize-icon]")!.setAttribute(
+        "d",
+        maximized ? "M1.5 3.5h7v7h-7zM3.5 3.5v-2h7v7h-2" : "M1.5 1.5h9v9h-9z",
+      );
+    };
+    const reportError = (error: unknown) => console.error("Window control failed.", error);
+    const unsubscribe = controls.onStateChange(updateState);
+    void controls.getState().then(updateState).catch(reportError);
+    bar.querySelector("[data-window-minimize]")!.addEventListener("click", () => {
+      void controls.minimize().catch(reportError);
+    });
+    maximize.addEventListener("click", () => {
+      void controls.toggleMaximize().catch(reportError);
+    });
+    bar.querySelector("[data-window-close]")!.addEventListener("click", () => {
+      void controls.close().catch(reportError);
+    });
+    bar.addEventListener("dblclick", (event) => {
+      if (!(event.target instanceof Element) || !event.target.closest("button")) {
+        void controls.toggleMaximize().catch(reportError);
+      }
+    });
+    window.addEventListener("pagehide", () => {
+      observer.disconnect();
+      unsubscribe();
+    }, { once: true });
+  }
+</script>
+
+<style>
+  header {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 1000;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 0.75rem;
+    background: var(--surface);
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    font: 0.8rem var(--font-system);
+    user-select: none;
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  header[hidden] {
+    display: none;
+  }
+
+  [data-window-title] {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .controls {
+    display: flex;
+    height: 100%;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  button {
+    width: 44px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+    display: grid;
+    place-items: center;
+  }
+
+  button:hover {
+    background: color-mix(in srgb, var(--text) 12%, transparent);
+  }
+
+  button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -3px;
+  }
+
+  [data-window-close]:hover {
+    background: var(--danger);
+    color: white;
+  }
+
+  svg {
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1;
+  }
+</style>

@@ -1,5 +1,8 @@
-import type { Page } from "playwright";
-import { launchBrowser } from "../../../../packages/shared/test/browser.ts";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import type { Browser, Page } from "playwright";
+import { test } from "vitest";
+import { launchBrowser, serveTestApp } from "../../../../packages/shared/test/browser.ts";
 import { createTestApp } from "../helpers.ts";
 import { closeActiveFile, getActivePath, setActivePath } from "../../src/lib/editor-session.ts";
 import { loadLastFilePath } from "../../src/lib/desktop.ts";
@@ -13,7 +16,7 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
 
 async function openSidebar(page: Page): Promise<void> {
   const sidebar = page.getByTestId("chapters-sidebar");
-  if (await sidebar.getAttribute("data-collapsed") === "true") {
+  if ((await sidebar.getAttribute("data-collapsed")) === "true") {
     await page.getByRole("button", { name: "Toggle chapters panel" }).click();
   }
 }
@@ -65,18 +68,7 @@ const PANEL = '[data-testid="assistance-panel"]';
 const ISSUES = `${PANEL} li[data-category="spelling"]`;
 
 function browserTest(name: string, fn: () => Promise<void>): void {
-  Deno.test({
-    name,
-    fn,
-    permissions: {
-      read: true,
-      write: true,
-      env: true,
-      net: true,
-      run: true,
-      sys: ["homedir", "osRelease"],
-    },
-  });
+  test(name, fn, 120_000);
 }
 
 interface EditorTestOptions {
@@ -87,15 +79,13 @@ interface EditorTestOptions {
   dailyHistory?: { date: string; words: number; goal: number }[];
 }
 
-function editorTestHandler(
-  {
-    projectSettingsAvailable = false,
-    useDesktopStatus = false,
-    fakeLoadedProject = false,
-    fakeWordCount = 40_000,
-    dailyHistory = [],
-  }: EditorTestOptions = {},
-): (request: Request) => Response | Promise<Response> {
+function editorTestHandler({
+  projectSettingsAvailable = false,
+  useDesktopStatus = false,
+  fakeLoadedProject = false,
+  fakeWordCount = 40_000,
+  dailyHistory = [],
+}: EditorTestOptions = {}): (request: Request) => Response | Promise<Response> {
   const app = createTestApp().fetch;
   const browserManuscript = blankManuscript("Browser Test Manuscript");
   browserManuscript.chapters[0].wordCount = fakeWordCount;
@@ -127,7 +117,7 @@ function editorTestHandler(
       if (fakeLoadedProject) {
         return Response.json({
           activeFile: "draft_1.epub",
-          activePath: "/tmp/writasaurus-browser-project/draft_1.epub",
+          activePath: `${resolve(".writasaurus-browser-project")}/draft_1.epub`,
           manuscript: browserManuscript,
         });
       }
@@ -165,8 +155,8 @@ function editorTestHandler(
         if (dailyWritingProgress.date !== date) {
           dailyWritingProgress = { date, startingWords: {} };
         }
-        const starting = dailyWritingProgress.startingWords[payload.manuscriptId] ??
-          payload.totalWords;
+        const starting =
+          dailyWritingProgress.startingWords[payload.manuscriptId] ?? payload.totalWords;
         dailyWritingProgress.startingWords[payload.manuscriptId] = starting;
         const writtenWords = Math.max(payload.totalWords - starting, 0);
         const entry = dailyWritingHistory.find((item) => item.date === date);
@@ -210,15 +200,11 @@ async function withEditorPage(
   test: (page: Page) => Promise<void>,
   options: EditorTestOptions = {},
 ): Promise<void> {
-  const server = Deno.serve(
-    { hostname: "127.0.0.1", port: 0, onListen() {} },
-    editorTestHandler(options),
-  );
-  const address = server.addr as Deno.NetAddr;
-  const browser = await launchBrowser();
-  const page = await browser.newPage();
-
+  const server = await serveTestApp(editorTestHandler(options));
+  let browser: Browser | undefined;
   try {
+    browser = await launchBrowser();
+    const page = await browser.newPage();
     await page.addInitScript(() => {
       if (sessionStorage.getItem("__writasaurus-test-initialized") !== "true") {
         sessionStorage.removeItem("writasaurus-manuscript-v1:state");
@@ -226,12 +212,19 @@ async function withEditorPage(
       }
       sessionStorage.setItem("writasaurus-session:skip-welcome", "true");
     });
-    await page.goto(`http://${address.hostname}:${address.port}/`);
+    await page.goto(`${server.url}/`);
     await page.waitForSelector('[data-ready="true"]');
+    assert(
+      !(await page.locator("[data-window-titlebar]").isVisible()),
+      "Native window controls must stay hidden in a regular browser",
+    );
     await test(page);
   } finally {
-    await browser.close();
-    await server.shutdown();
+    try {
+      await browser?.close();
+    } finally {
+      await server.shutdown();
+    }
   }
 }
 
@@ -253,32 +246,30 @@ for (const previousDraftsFail of [false, true]) {
         const oldResponse = previousDraftsFail
           ? { status: 500, body: "Could not read project drafts." }
           : {
-            json: {
-              drafts: [
-                { number: 1, filename: "draft_1.epub" },
-                { number: 2, filename: "draft_2.epub" },
-              ],
-              activeDraft: 1,
-            },
-          };
+              json: {
+                drafts: [
+                  { number: 1, filename: "draft_1.epub" },
+                  { number: 2, filename: "draft_2.epub" },
+                ],
+                activeDraft: 1,
+              },
+            };
         const releaseOldRequest = Promise.withResolvers<void>();
         const oldRequestStarted = Promise.withResolvers<void>();
         let draftRequests = 0;
         await page.route("**/api/editor/status", (route) =>
           route.fulfill({
             json: { activeFile: "draft_1.epub", manuscript: oldManuscript },
-          }));
-        await page.route(
-          "**/api/editor/project/location",
-          (route) => route.fulfill({ json: { parentPath: "/tmp" } }),
+          }),
         );
-        await page.route(
-          "**/api/editor/project/new",
-          (route) => route.fulfill({ json: { ok: true, manuscript: newManuscript } }),
+        await page.route("**/api/editor/project/location", (route) =>
+          route.fulfill({ json: { parentPath: "/projects" } }),
         );
-        await page.route(
-          "**/api/editor/project/open",
-          (route) => route.fulfill({ json: { ok: true, manuscript: oldManuscript } }),
+        await page.route("**/api/editor/project/new", (route) =>
+          route.fulfill({ json: { ok: true, manuscript: newManuscript } }),
+        );
+        await page.route("**/api/editor/project/open", (route) =>
+          route.fulfill({ json: { ok: true, manuscript: oldManuscript } }),
         );
         await page.route("**/api/editor/drafts", async (route) => {
           const requestNumber = ++draftRequests;
@@ -287,12 +278,14 @@ for (const previousDraftsFail of [false, true]) {
             await releaseOldRequest.promise;
           }
           await route.fulfill(
-            requestNumber === 1 || requestNumber === 3 ? oldResponse : {
-              json: {
-                drafts: [{ number: 1, filename: "draft_1.epub" }],
-                activeDraft: 1,
-              },
-            },
+            requestNumber === 1 || requestNumber === 3
+              ? oldResponse
+              : {
+                  json: {
+                    drafts: [{ number: 1, filename: "draft_1.epub" }],
+                    activeDraft: 1,
+                  },
+                },
           );
         });
 
@@ -302,15 +295,20 @@ for (const previousDraftsFail of [false, true]) {
           await page.locator("#choose-project-location").click();
           await page.getByTestId("project-parent-path").waitFor();
           await page.locator("#create-project-submit").click();
-          await page.waitForFunction(() =>
-            (document.querySelector("#manuscript-title") as HTMLInputElement)?.value ===
-              "New Project"
+          await page.waitForFunction(
+            () =>
+              (document.querySelector("#manuscript-title") as HTMLInputElement)?.value ===
+              "New Project",
           );
-          await page.waitForFunction(() =>
-            document.querySelector("[data-draft-count]")?.textContent?.trim() === "1 draft" &&
-            !(document.querySelector("[data-draft-selector]") as HTMLButtonElement)?.disabled
+          await page.waitForFunction(
+            () =>
+              document.querySelector("[data-draft-count]")?.textContent?.trim() === "1 draft" &&
+              !(document.querySelector("[data-draft-selector]") as HTMLButtonElement)?.disabled,
           );
-          assert(await page.getByRole("alert").count() === 0, "Expected old draft errors to clear");
+          assert(
+            (await page.getByRole("alert").count()) === 0,
+            "Expected old draft errors to clear",
+          );
         }
 
         try {
@@ -318,11 +316,14 @@ for (const previousDraftsFail of [false, true]) {
           await page.waitForSelector('[data-ready="true"]');
           await openSidebar(page);
           if (previousDraftsFail) {
-            await page.getByRole("alert").filter({ hasText: "Could not read project drafts." })
+            await page
+              .getByRole("alert")
+              .filter({ hasText: "Could not read project drafts." })
               .waitFor();
           } else {
-            await page.waitForFunction(() =>
-              document.querySelector("[data-draft-count]")?.textContent?.trim() === "2 drafts"
+            await page.waitForFunction(
+              () =>
+                document.querySelector("[data-draft-count]")?.textContent?.trim() === "2 drafts",
             );
           }
           await createProject();
@@ -331,20 +332,21 @@ for (const previousDraftsFail of [false, true]) {
           await oldRequestStarted.promise;
           await createProject();
           const lateResponse = page.waitForResponse((response) =>
-            response.url().endsWith("/api/editor/drafts")
+            response.url().endsWith("/api/editor/drafts"),
           );
           releaseOldRequest.resolve();
           await (await lateResponse).finished();
-          await page.evaluate(() =>
-            new Promise<void>((resolve) =>
-              requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
-            )
+          await page.evaluate(
+            () =>
+              new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              ),
           );
           assert(
             (await page.locator("[data-draft-count]").textContent())?.trim() === "1 draft",
             "Expected a late response from the previous project not to replace the new draft list",
           );
-          assert(await page.getByRole("alert").count() === 0, "Expected no stale draft error");
+          assert((await page.getByRole("alert").count()) === 0, "Expected no stale draft error");
           assert(draftRequests === 4, `Expected four draft refreshes, got ${draftRequests}`);
         } finally {
           releaseOldRequest.resolve();
@@ -389,9 +391,16 @@ browserTest("browser: chapters and assistance panels use compact spacing", async
       const chip = section?.querySelector(".chip");
       const remove = section?.querySelector(".delete");
       if (
-        !chapters || !assistance || !chaptersHeading || !assistanceHeading || !section ||
-        !handle || !chip || !remove
-      ) return null;
+        !chapters ||
+        !assistance ||
+        !chaptersHeading ||
+        !assistanceHeading ||
+        !section ||
+        !handle ||
+        !chip ||
+        !remove
+      )
+        return null;
       return {
         chaptersPadding: getComputedStyle(chapters).padding,
         assistancePadding: getComputedStyle(assistance).padding,
@@ -414,8 +423,10 @@ browserTest("browser: chapters and assistance panels use compact spacing", async
       `Expected compact header and section spacing, got ${spacing.chaptersHeadingPadding} and ${spacing.assistanceGap}`,
     );
     assert(
-      spacing.chapterHeight === "36px" && spacing.chapterPadding === "4.8px 6.4px" &&
-        spacing.reorderHeight === "24px" && spacing.deleteHeight === "24px",
+      spacing.chapterHeight === "36px" &&
+        spacing.chapterPadding === "4.8px 6.4px" &&
+        spacing.reorderHeight === "24px" &&
+        spacing.deleteHeight === "24px",
       `Expected compact section rows and controls, got ${JSON.stringify(spacing)}`,
     );
   });
@@ -432,18 +443,20 @@ browserTest("browser: editor app renders its shell and adds a chapter", async ()
     assert(initialChapters > 0, "Expected the editor to render at least one chapter");
 
     await page.getByTestId("chapters-sidebar").getByRole("button", { name: "Add" }).click();
-    assert(await items.count() === initialChapters, "Opening Add must not create a section");
+    assert((await items.count()) === initialChapters, "Opening Add must not create a section");
     await page.getByRole("menuitem", { name: "Chapter", exact: true }).click();
     await page.waitForFunction(
       (count) => document.querySelectorAll("[data-drag-item]").length === count + 1,
       initialChapters,
     );
 
-    await page.waitForFunction(
-      (expected) =>
-        (document.querySelector("#chapter-title") as HTMLInputElement).value === expected,
-      `Chapter ${initialChapters + 1}`,
-    ).catch(() => {});
+    await page
+      .waitForFunction(
+        (expected) =>
+          (document.querySelector("#chapter-title") as HTMLInputElement).value === expected,
+        `Chapter ${initialChapters + 1}`,
+      )
+      .catch(() => {});
     const chapterTitle = await page.locator("#chapter-title").inputValue();
     assert(
       chapterTitle === `Chapter ${initialChapters + 1}`,
@@ -473,8 +486,8 @@ browserTest("browser: editor thesaurus works offline and replacement can be undo
 
     const dialog = page.getByRole("dialog", { name: "Synonyms for happy" });
     await dialog.waitFor({ state: "visible" });
-    await page.waitForFunction(() =>
-      document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null
+    await page.waitForFunction(
+      () => document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null,
     );
     assert(
       requests.includes("/data/oewn-2025-synonyms.json"),
@@ -491,21 +504,21 @@ browserTest("browser: editor thesaurus works offline and replacement can be undo
     await page.getByRole("menuitem", { name: "Thesaurus" }).click();
     const reopenedDialog = page.getByRole("dialog", { name: "Synonyms for happy" });
     await reopenedDialog.waitFor({ state: "visible" });
-    await page.waitForFunction(() =>
-      document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null
+    await page.waitForFunction(
+      () => document.querySelector('[data-thesaurus-suggestions] [data-synonym="glad"]') !== null,
     );
     await reopenedDialog.locator('[data-synonym="glad"]').first().click();
-    await page.waitForFunction(() =>
-      document.querySelector("#editor")?.textContent === "A glad writer."
+    await page.waitForFunction(
+      () => document.querySelector("#editor")?.textContent === "A glad writer.",
     );
 
     await page.keyboard.press("Control+z");
-    await page.waitForFunction(() =>
-      document.querySelector("#editor")?.textContent === "A happy writer."
+    await page.waitForFunction(
+      () => document.querySelector("#editor")?.textContent === "A happy writer.",
     );
     await page.keyboard.press("Control+y");
-    await page.waitForFunction(() =>
-      document.querySelector("#editor")?.textContent === "A glad writer."
+    await page.waitForFunction(
+      () => document.querySelector("#editor")?.textContent === "A glad writer.",
     );
   });
 });
@@ -518,7 +531,7 @@ browserTest("browser: editor context menu supports clipboard actions and select 
         configurable: true,
         value: {
           readText: async () => clipboardText,
-          writeText: async (text: string) => clipboardText = text,
+          writeText: async (text: string) => (clipboardText = text),
         },
       });
       Object.defineProperty(window, "__testClipboardText", {
@@ -532,8 +545,8 @@ browserTest("browser: editor context menu supports clipboard actions and select 
     await selectEditorText(page, "copy");
     await rightClickEditorText(page, "copy");
     await page.getByRole("menuitem", { name: "Copy" }).click();
-    const copiedText = await page.evaluate(() =>
-      (window as Window & { __testClipboardText?: string }).__testClipboardText
+    const copiedText = await page.evaluate(
+      () => (window as Window & { __testClipboardText?: string }).__testClipboardText,
     );
     assert(copiedText === "copy", `Expected "copy" on the clipboard, got "${copiedText}"`);
 
@@ -545,14 +558,14 @@ browserTest("browser: editor context menu supports clipboard actions and select 
     await rightClickEditorText(page, "this");
     await page.getByRole("menuitem", { name: "Paste" }).click();
     await page.waitForFunction(() =>
-      document.querySelector("#editor")?.textContent?.includes("copy")
+      document.querySelector("#editor")?.textContent?.includes("copy"),
     );
 
     await rightClickEditorText(page, "copy");
     await page.getByRole("menuitem", { name: "Select all" }).click();
     const selectedText = await page.evaluate(() => document.getSelection()?.toString());
     assert(
-      selectedText === await editor.innerText(),
+      selectedText === (await editor.innerText()),
       `Expected Select all to select editor text, got "${selectedText}"`,
     );
   });
@@ -565,10 +578,10 @@ browserTest("browser: clicking anywhere in a section row selects it", async () =
     await sidebar.getByRole("button", { name: "Add" }).click();
     await page.getByRole("menuitem", { name: "Chapter", exact: true }).click();
     const rows = page.locator("[data-drag-item]");
-    assert(await rows.count() > 1, "Expected multiple sections to select");
+    assert((await rows.count()) > 1, "Expected multiple sections to select");
 
     const currentIndex = await rows.evaluateAll((items) =>
-      items.findIndex((item) => item.getAttribute("aria-current") === "true")
+      items.findIndex((item) => item.getAttribute("aria-current") === "true"),
     );
     const targetIndex = currentIndex === 0 ? 1 : 0;
     const target = rows.nth(targetIndex);
@@ -578,8 +591,8 @@ browserTest("browser: clicking anywhere in a section row selects it", async () =
     await page.mouse.click(rowBounds.x + rowBounds.width - 2, rowBounds.y + rowBounds.height / 2);
     await page.waitForFunction(
       (index) =>
-        document.querySelectorAll("[data-drag-item]")[index]
-          ?.getAttribute("aria-current") === "true",
+        document.querySelectorAll("[data-drag-item]")[index]?.getAttribute("aria-current") ===
+        "true",
       targetIndex,
     );
   });
@@ -626,8 +639,8 @@ browserTest("browser: end-of-chapter action opens the next chapter or creates on
         borderBottomStyle: buttonStyle.borderBottomStyle,
         borderBottomWidth: buttonStyle.borderBottomWidth,
         navigationRight: navigation.getBoundingClientRect().right,
-        viewportContentRight: viewport.getBoundingClientRect().left + viewport.clientLeft +
-          viewport.clientWidth,
+        viewportContentRight:
+          viewport.getBoundingClientRect().left + viewport.clientLeft + viewport.clientWidth,
         small: button.classList.contains("button--small"),
         quietOutline: button.classList.contains("button--quiet-outline"),
         textDecorationLine: buttonStyle.textDecorationLine,
@@ -641,21 +654,29 @@ browserTest("browser: end-of-chapter action opens the next chapter or creates on
     });
     assert(layout, "Expected chapter navigation layout");
     assert(
-      layout.small && layout.quietOutline && layout.borderBottomStyle === "solid" &&
-        layout.borderBottomWidth === "1px" && layout.textDecorationLine === "none" &&
+      layout.small &&
+        layout.quietOutline &&
+        layout.borderBottomStyle === "solid" &&
+        layout.borderBottomWidth === "1px" &&
+        layout.textDecorationLine === "none" &&
         Math.abs(layout.buttonHeight - layout.referenceHeight) < 2 &&
-        layout.fontSize === "12px" && layout.fontSize === layout.referenceFontSize &&
+        layout.fontSize === "12px" &&
+        layout.fontSize === layout.referenceFontSize &&
         layout.minHeight === "28px" &&
-        layout.padding === "4px 8px" && layout.shortcutText === "Ctrl+Shift+N" &&
+        layout.padding === "4px 8px" &&
+        layout.shortcutText === "Ctrl+Shift+N" &&
         Math.abs(layout.navigationRight - layout.viewportContentRight) < 2 &&
         Math.abs(layout.navigationRight - layout.buttonRight - 16) < 2,
-      `Expected the button--small quiet-outline action at the editor viewport's lower-right edge: ${
-        JSON.stringify(layout)
-      }`,
+      `Expected the button--small quiet-outline action at the editor viewport's lower-right edge: ${JSON.stringify(
+        layout,
+      )}`,
     );
     const actionLabel = await action.evaluate((button) =>
-      Array.from(button.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE)
-        .map((node) => node.textContent).join("").trim()
+      Array.from(button.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join("")
+        .trim(),
     );
     assert(actionLabel === "Go to Chapter 2", "Expected the end action to offer the next chapter");
     await action.click();
@@ -665,8 +686,11 @@ browserTest("browser: end-of-chapter action opens the next chapter or creates on
 
     await action.scrollIntoViewIfNeeded();
     const createActionLabel = await action.evaluate((button) =>
-      Array.from(button.childNodes).filter((node) => node.nodeType === Node.TEXT_NODE)
-        .map((node) => node.textContent).join("").trim()
+      Array.from(button.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join("")
+        .trim(),
     );
     assert(
       createActionLabel === "Create Next Chapter",
@@ -679,7 +703,7 @@ browserTest("browser: end-of-chapter action opens the next chapter or creates on
       initialCount,
     );
     assert(
-      await page.locator("#chapter-title").inputValue() === "Chapter 3",
+      (await page.locator("#chapter-title").inputValue()) === "Chapter 3",
       "Expected the created chapter title to be focused",
     );
     await page.locator("[data-drag-item] [data-chapter-title]").first().click();
@@ -698,7 +722,7 @@ browserTest("browser: end-of-chapter action opens the next chapter or creates on
       countBeforeShortcutCreate,
     );
     assert(
-      await page.locator("#chapter-title").inputValue() === "Chapter 4",
+      (await page.locator("#chapter-title").inputValue()) === "Chapter 4",
       "Expected Ctrl+Shift+N to create the next chapter at the end",
     );
   });
@@ -711,9 +735,9 @@ browserTest("browser: Add opens a menu and selecting a type adds it in reading o
     const add = sidebar.getByRole("button", { name: "Add" });
     const items = page.locator("[data-drag-item]");
     const initialSections = await items.count();
-    assert(await add.count() === 1, "Expected a single Add button");
+    assert((await add.count()) === 1, "Expected a single Add button");
     assert(
-      await sidebar.locator(".draft-form select").count() === 1,
+      (await sidebar.locator(".draft-form select").count()) === 1,
       "Expected the draft source selector to be contained in the creation dialog",
     );
     const draftSelector = sidebar.locator("[data-draft-selector]");
@@ -732,24 +756,23 @@ browserTest("browser: Add opens a menu and selecting a type adds it in reading o
     assert(await draftDialog.getByRole("radio", { name: "Start from scratch" }).isVisible());
     await draftDialog.getByRole("button", { name: "Cancel" }).click();
     assert(
-      await sidebar.getByRole("button", { name: "Type", exact: true }).count() === 0,
+      (await sidebar.getByRole("button", { name: "Type", exact: true }).count()) === 0,
       "Expected no separate Type button",
     );
     assert(await page.locator('[data-generated-section="toc"]').isVisible());
 
     await add.click();
-    assert(await items.count() === initialSections, "Opening Add must not create a section");
+    assert((await items.count()) === initialSections, "Opening Add must not create a section");
     await page.getByRole("menuitem", { name: "Prologue", exact: true }).click();
-    assert(await items.count() === initialSections + 1, "Expected exactly one prologue added");
-    assert(await add.getAttribute("aria-expanded") === "false", "Expected Add menu to close");
-    assert(await page.locator("#chapter-title").inputValue() === "Prologue");
+    assert((await items.count()) === initialSections + 1, "Expected exactly one prologue added");
+    assert((await add.getAttribute("aria-expanded")) === "false", "Expected Add menu to close");
+    assert((await page.locator("#chapter-title").inputValue()) === "Prologue");
     await add.click();
     await page.getByRole("menuitem", { name: "Epilogue", exact: true }).click();
-    assert(await items.count() === initialSections + 2, "Expected exactly one epilogue added");
-    assert(await add.getAttribute("aria-expanded") === "false", "Expected Add menu to close");
+    assert((await items.count()) === initialSections + 2, "Expected exactly one epilogue added");
+    assert((await add.getAttribute("aria-expanded")) === "false", "Expected Add menu to close");
 
-    const labels = await page.locator("[data-drag-item] [data-chapter-title]")
-      .allTextContents();
+    const labels = await page.locator("[data-drag-item] [data-chapter-title]").allTextContents();
     assert(labels[0]?.includes("Prologue"), "Expected the prologue before chapters");
     assert(labels.at(-1)?.includes("Epilogue"), "Expected the epilogue after chapters");
   });
@@ -833,7 +856,7 @@ browserTest("browser: chapter delete control renders visible neutral text", asyn
 
     assert(await deleteButton.isVisible(), "Expected the chapter delete button to be visible");
     assert(
-      await deleteButton.getAttribute("aria-label") === "Delete Chapter 1",
+      (await deleteButton.getAttribute("aria-label")) === "Delete Chapter 1",
       "Expected an accessible delete label",
     );
     assert(
@@ -858,9 +881,9 @@ browserTest("browser: save status shows the saved indicator", async () => {
     assert((await status.textContent())?.includes("Saved"), "Expected the Saved message");
     const fontSize = await status.evaluate((element) => getComputedStyle(element).fontSize);
     assert(fontSize === "11.52px", `Expected small save-status text, got ${fontSize}`);
-    const color = await status.locator("[data-indicator]").evaluate((element) =>
-      getComputedStyle(element).backgroundColor
-    );
+    const color = await status
+      .locator("[data-indicator]")
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
     assert(color === "rgb(77, 104, 75)", `Expected saved indicator color, got ${color}`);
   });
 });
@@ -871,7 +894,7 @@ browserTest("browser: unsaved changes do not block leaving the editor", async ()
     await page.keyboard.press("End");
     await page.keyboard.type(" unsaved text");
     await page.waitForFunction(() =>
-      document.querySelector("#save-status")?.textContent?.includes("Unsaved changes")
+      document.querySelector("#save-status")?.textContent?.includes("Unsaved changes"),
     );
 
     const prevented = await page.evaluate(() => {
@@ -884,7 +907,7 @@ browserTest("browser: unsaved changes do not block leaving the editor", async ()
 });
 
 async function chapterWords(page: Page): Promise<number> {
-  const text = await page.locator(`${CHAPTER_STATS} .statValue`).first().textContent() ?? "";
+  const text = (await page.locator(`${CHAPTER_STATS} .statValue`).first().textContent()) ?? "";
   return Number(text.replace(/,/g, "") || -1);
 }
 
@@ -900,7 +923,7 @@ browserTest("browser: status bar renders live stats from the editor store", asyn
     await page.waitForFunction(
       ([selector, expected]) =>
         document.querySelector(selector as string)?.querySelector(".statValue")?.textContent ===
-          expected.toLocaleString(),
+        expected.toLocaleString(),
       [CHAPTER_STATS, before + 4] as const,
     );
     assert(
@@ -909,7 +932,7 @@ browserTest("browser: status bar renders live stats from the editor store", asyn
       "Expected total manuscript stats to update with the chapter",
     );
 
-    const saveStatus = await page.locator("#save-status").textContent() ?? "";
+    const saveStatus = (await page.locator("#save-status").textContent()) ?? "";
     assert(
       saveStatus.includes("Unsaved changes"),
       `Expected the topbar to show unsaved changes, got ${saveStatus}`,
@@ -941,7 +964,7 @@ browserTest("browser: status bar shows chapter and total stats together", async 
 
     await page.getByLabel("Chapter title").fill("Prologue");
     await page.waitForFunction(() =>
-      document.querySelector('[data-stat="chapter"]')?.textContent?.startsWith("Prologue:")
+      document.querySelector('[data-stat="chapter"]')?.textContent?.startsWith("Prologue:"),
     );
     assert(
       (await chapterStats.textContent())?.startsWith("Prologue:"),
@@ -957,13 +980,16 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
     await page.locator("#editor").fill("This is teh cat.");
     await page.waitForTimeout(750);
     assert(
-      !await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling")),
+      !(await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling"))),
       "Expected writing assistance to remain inactive while its panel is closed",
     );
 
-    await page.locator("footer").getByRole("button", {
-      name: "Toggle writing assistance panel",
-    }).click();
+    await page
+      .locator("footer")
+      .getByRole("button", {
+        name: "Toggle writing assistance panel",
+      })
+      .click();
     await page.waitForFunction(() => {
       const panel = document.querySelector('[data-testid="assistance-panel"]');
       if (!panel || panel.getAttribute("data-collapsed") === "true") return false;
@@ -973,9 +999,9 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
     try {
       await page.waitForFunction(
         () =>
-          document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes(
-            "1 issue",
-          ),
+          document
+            .querySelector('[data-testid="assistance-panel"]')
+            ?.textContent?.includes("1 issue"),
         undefined,
         { timeout: 60_000 },
       );
@@ -990,30 +1016,32 @@ browserTest("browser: Desktop writing assistance corrects a local spelling warni
     );
 
     await page.keyboard.press("Control+Shift+a");
-    await page.waitForFunction(() =>
-      document.querySelector('[data-testid="assistance-panel"]')?.getAttribute("data-collapsed") ===
-        "true"
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="assistance-panel"]')
+          ?.getAttribute("data-collapsed") === "true",
     );
     assert(
-      !await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling")),
+      !(await page.evaluate(() => CSS.highlights.has("writing-assistance-spelling"))),
       "Expected closing writing assistance to clear its highlights",
     );
     await page.keyboard.press("Control+Shift+a");
     await page.waitForFunction(() =>
-      document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes("1 issue")
+      document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes("1 issue"),
     );
 
     await panel.getByRole("button", { name: "Replace with “the”" }).click();
-    await page.waitForFunction(() =>
-      document.querySelector("#editor")?.textContent === "This is the cat."
+    await page.waitForFunction(
+      () => document.querySelector("#editor")?.textContent === "This is the cat.",
     );
 
     await page.locator("#editor").fill("They is here.");
     await page.waitForFunction(
       () =>
-        document.querySelector('[data-testid="assistance-panel"]')?.textContent?.includes(
-          "Make the verb agree with its subject.",
-        ) === true,
+        document
+          .querySelector('[data-testid="assistance-panel"]')
+          ?.textContent?.includes("Make the verb agree with its subject.") === true,
     );
     assert(
       await page.evaluate(() => CSS.highlights.has("writing-assistance-grammar")),
@@ -1039,8 +1067,7 @@ browserTest(
       const issue = page.locator(`${ISSUES} [data-issue]`);
       await issue.waitFor({ state: "visible", timeout: 60_000 });
       assert(
-        (await page.locator(`${ISSUES} [data-kind]`)
-          .textContent())?.trim() === "Spelling",
+        (await page.locator(`${ISSUES} [data-kind]`).textContent())?.trim() === "Spelling",
         "Expected the issue to be labelled with its category",
       );
 
@@ -1061,23 +1088,24 @@ browserTest(
       assert(colors.danger.length > 0, "Expected a danger color token to be defined");
 
       assert(
-        !await page.evaluate(() => CSS.highlights.has("writing-assistance-active")),
+        !(await page.evaluate(() => CSS.highlights.has("writing-assistance-active"))),
         "Expected no active highlight before an issue is selected",
       );
 
       await issue.click();
       await page.waitForFunction(() => CSS.highlights.has("writing-assistance-active"));
-      await page.waitForFunction(() =>
-        document.querySelector('[data-testid="assistance-panel"] li[data-category="spelling"]')
-          ?.getAttribute("data-active") === "true"
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="assistance-panel"] li[data-category="spelling"]')
+            ?.getAttribute("data-active") === "true",
       );
       assert(
-        await page.locator(`${ISSUES} [data-issue]`)
-          .getAttribute("aria-current") === "true",
+        (await page.locator(`${ISSUES} [data-issue]`).getAttribute("aria-current")) === "true",
         "Expected the selected issue to be marked as current",
       );
-      await page.waitForFunction(() =>
-        (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0
+      await page.waitForFunction(
+        () => (document.querySelector("[data-editor-viewport]")?.scrollTop ?? 0) > 0,
       );
     });
   },
@@ -1147,9 +1175,9 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
         toolbarPosition.borderBottomWidth === "1px" &&
         toolbarPosition.borderBottomLeftRadius === "0px" &&
         toolbarPosition.borderBottomRightRadius === "0px",
-      `Expected the toolbar to be full-width with a bottom border and square corners: ${
-        JSON.stringify(toolbarPosition)
-      }`,
+      `Expected the toolbar to be full-width with a bottom border and square corners: ${JSON.stringify(
+        toolbarPosition,
+      )}`,
     );
 
     await page.locator("#editor").evaluate((element) => {
@@ -1169,81 +1197,86 @@ browserTest("browser: toolbar has its own row and can format headings", async ()
 });
 
 browserTest("browser: daily writing progress completes with a goal celebration", async () => {
-  await withEditorPage(async (page) => {
-    await page.evaluate(async () => {
-      await fetch("/api/editor/project-settings", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ user_settings: { dailyWordGoal: 2 } }),
+  await withEditorPage(
+    async (page) => {
+      await page.evaluate(async () => {
+        await fetch("/api/editor/project-settings", {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ user_settings: { dailyWordGoal: 2 } }),
+        });
       });
-    });
-    await page.reload();
-    await page.waitForSelector('[data-ready="true"]');
+      await page.reload();
+      await page.waitForSelector('[data-ready="true"]');
 
-    const progress = page.getByRole("progressbar", { name: "Daily writing goal" });
-    await page.locator("#editor").fill("one two");
-    await page.waitForSelector(".fireworks");
+      const progress = page.getByRole("progressbar", { name: "Daily writing goal" });
+      await page.locator("#editor").fill("one two");
+      await page.waitForSelector(".fireworks");
 
-    const values = await progress.evaluate((element) => {
-      const bar = element as HTMLProgressElement;
-      return { value: bar.value, max: bar.max };
-    });
-    assert(values.value === 2 && values.max === 2, "Expected the daily goal progress to be full");
-    assert(
-      await page.locator(".fireworks .spark").count() === 9,
-      "Expected a firework burst when the daily goal is reached",
-    );
-    assert(
-      (await page.locator(".goalNotice").textContent())?.trim() === "Daily goal reached!",
-      "Expected a visible goal-reached message",
-    );
-    assert(
-      (await page.locator(".screenReaderOnly").textContent())?.trim() ===
-        "Daily writing goal reached!",
-      "Expected an announcement when the daily goal is reached",
-    );
-
-    const manuscriptId = await page.evaluate(() => {
-      const saved = JSON.parse(
-        sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+      const values = await progress.evaluate((element) => {
+        const bar = element as HTMLProgressElement;
+        return { value: bar.value, max: bar.max };
+      });
+      assert(values.value === 2 && values.max === 2, "Expected the daily goal progress to be full");
+      assert(
+        (await page.locator(".fireworks .spark").count()) === 9,
+        "Expected a firework burst when the daily goal is reached",
       );
-      return saved?.manuscript?.frontmatter?.writasaurusId;
-    });
-    assert(typeof manuscriptId === "string", "Expected the manuscript to have a stable identity");
-
-    await page.goto(new URL("/settings", page.url()).toString());
-    await page.goto(new URL("/", page.url()).toString());
-    await page.waitForSelector('[data-ready="true"]');
-    await page.waitForFunction((expectedId) => {
-      const saved = JSON.parse(
-        sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+      assert(
+        (await page.locator(".goalNotice").textContent())?.trim() === "Daily goal reached!",
+        "Expected a visible goal-reached message",
       );
-      return saved?.manuscript?.frontmatter?.writasaurusId === expectedId &&
-        saved.manuscript.chapters.reduce(
+      assert(
+        (await page.locator(".screenReaderOnly").textContent())?.trim() ===
+          "Daily writing goal reached!",
+        "Expected an announcement when the daily goal is reached",
+      );
+
+      const manuscriptId = await page.evaluate(() => {
+        const saved = JSON.parse(
+          sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+        );
+        return saved?.manuscript?.frontmatter?.writasaurusId;
+      });
+      assert(typeof manuscriptId === "string", "Expected the manuscript to have a stable identity");
+
+      await page.goto(new URL("/settings", page.url()).toString());
+      await page.goto(new URL("/", page.url()).toString());
+      await page.waitForSelector('[data-ready="true"]');
+      await page.waitForFunction((expectedId) => {
+        const saved = JSON.parse(
+          sessionStorage.getItem("writasaurus-manuscript-v1:state") ?? "null",
+        );
+        return (
+          saved?.manuscript?.frontmatter?.writasaurusId === expectedId &&
+          saved.manuscript.chapters.reduce(
             (total: number, chapter: { wordCount: number }) => total + chapter.wordCount,
             0,
-          ) === 2;
-    }, manuscriptId);
-    await page.waitForFunction(() => {
-      const progress = document.querySelector(
-        '[aria-label="Daily writing goal"]',
-      ) as HTMLProgressElement | null;
-      return progress?.value === progress?.max;
-    });
+          ) === 2
+        );
+      }, manuscriptId);
+      await page.waitForFunction(() => {
+        const progress = document.querySelector(
+          '[aria-label="Daily writing goal"]',
+        ) as HTMLProgressElement | null;
+        return progress?.value === progress?.max;
+      });
 
-    const restoredProgress = await page.evaluate(async () => {
-      const bar = document.querySelector(
-        '[aria-label="Daily writing goal"]',
-      ) as HTMLProgressElement | null;
-      return { value: bar?.value, max: bar?.max };
-    });
-    assert(
-      restoredProgress.value === 2 && restoredProgress.max === 2,
-      `Expected daily progress to remain complete after leaving and returning to the editor: ${
-        JSON.stringify(restoredProgress)
-      }`,
-    );
-  }, { projectSettingsAvailable: true });
+      const restoredProgress = await page.evaluate(async () => {
+        const bar = document.querySelector(
+          '[aria-label="Daily writing goal"]',
+        ) as HTMLProgressElement | null;
+        return { value: bar?.value, max: bar?.max };
+      });
+      assert(
+        restoredProgress.value === 2 && restoredProgress.max === 2,
+        `Expected daily progress to remain complete after leaving and returning to the editor: ${JSON.stringify(
+          restoredProgress,
+        )}`,
+      );
+    },
+    { projectSettingsAvailable: true },
+  );
 });
 
 browserTest("browser: app preferences persist through the settings API", async () => {
@@ -1252,13 +1285,17 @@ browserTest("browser: app preferences persist through the settings API", async (
     const font = page.locator("#font-select");
     await font.selectOption("georgia");
     await page.waitForFunction(() =>
-      document.querySelector("#settings-status")?.textContent?.includes("Font preference saved.")
+      document.querySelector("#settings-status")?.textContent?.includes("Font preference saved."),
     );
 
     await page.reload();
 
-    assert(await page.locator("#font-select").inputValue() === "georgia");
-    assert(await page.locator("#daily-word-goal-input").count() === 0);
+    await page.waitForFunction(
+      () =>
+        (document.querySelector("#font-select") as HTMLSelectElement | null)?.value === "georgia",
+    );
+    assert((await page.locator("#font-select").inputValue()) === "georgia");
+    assert((await page.locator("#daily-word-goal-input").count()) === 0);
   });
 });
 
@@ -1282,15 +1319,17 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
     async (page) => {
       await page.getByRole("button", { name: "Menu" }).click();
       assert(await page.getByRole("menuitem", { name: "Project Settings" }).isVisible());
-      assert(await page.getByRole("menuitem", { name: "Manuscript Goal" }).count() === 0);
+      assert((await page.getByRole("menuitem", { name: "Manuscript Goal" }).count()) === 0);
       const goalsLink = page.getByTestId("manuscript-goals-link");
       await goalsLink.waitFor();
-      const initialProgress = await goalsLink.getByRole("progressbar", {
-        name: "Manuscript word-goal progress",
-      }).evaluate((element) => {
-        const bar = element as HTMLProgressElement;
-        return { value: bar.value, max: bar.max };
-      });
+      const initialProgress = await goalsLink
+        .getByRole("progressbar", {
+          name: "Manuscript word-goal progress",
+        })
+        .evaluate((element) => {
+          const bar = element as HTMLProgressElement;
+          return { value: bar.value, max: bar.max };
+        });
       assert(
         initialProgress.value === 40_000 && initialProgress.max === 80_000,
         "Expected the Goals button to show progress toward the current manuscript goal",
@@ -1300,14 +1339,14 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
           const modeSwitch = link.parentElement?.querySelector(".modeSwitch");
           return Boolean(
             modeSwitch &&
-              (link.compareDocumentPosition(modeSwitch) & Node.DOCUMENT_POSITION_FOLLOWING),
+            link.compareDocumentPosition(modeSwitch) & Node.DOCUMENT_POSITION_FOLLOWING,
           );
         }),
         "Expected the Goals button immediately before the Manuscript/Outline toggle",
       );
 
       await page.goto(new URL("/project-settings", page.url()).toString());
-      assert(await page.locator("#daily-word-goal").inputValue() === "1500");
+      assert((await page.locator("#daily-word-goal").inputValue()) === "1500");
       const saveResponsePromise = page.waitForResponse(
         (response) =>
           response.url().includes("/api/editor/project-settings") &&
@@ -1316,20 +1355,24 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
       );
       await page.locator("#manuscript-word-goal").fill("90000");
       await page.locator("#daily-word-goal").fill("2000");
-      assert(await page.getByRole("button", { name: "Save Goal" }).count() === 0);
-      assert(await page.getByRole("link", { name: "View Goal Progress" }).count() === 0);
+      assert((await page.getByRole("button", { name: "Save Goal" }).count()) === 0);
+      assert((await page.getByRole("link", { name: "View Goal Progress" }).count()) === 0);
       assert(
-        await page.locator(".card a[href='/']").evaluate((link) =>
-          link.classList.contains("button--primary")
-        ),
+        await page
+          .locator(".card a[href='/']")
+          .evaluate((link) => link.classList.contains("button--primary")),
         "Expected the in-card Return to Editor button to be primary",
       );
       assert(
-        await page.locator("[data-testid='layout-return-to-editor']").evaluate((link) =>
-          !link.closest(".card") && getComputedStyle(link.parentElement!).position === "fixed" &&
-          getComputedStyle(link.parentElement!).bottom !== "auto" &&
-          getComputedStyle(link.parentElement!).right !== "auto"
-        ),
+        await page
+          .locator("[data-testid='layout-return-to-editor']")
+          .evaluate(
+            (link) =>
+              !link.closest(".card") &&
+              getComputedStyle(link.parentElement!).position === "fixed" &&
+              getComputedStyle(link.parentElement!).bottom !== "auto" &&
+              getComputedStyle(link.parentElement!).right !== "auto",
+          ),
         "Expected a bottom-right Return to Editor link outside the settings card",
       );
       const saveResponse = await saveResponsePromise;
@@ -1342,22 +1385,24 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
       await page.goto(new URL("/goal", page.url()).toString());
       await page.getByText("Browser Test Manuscript").waitFor();
       assert(
-        await page.locator(".goal .title").evaluate((title) =>
-          getComputedStyle(title).textTransform === "capitalize"
-        ),
+        await page
+          .locator(".goal .title")
+          .evaluate((title) => getComputedStyle(title).textTransform === "capitalize"),
         "Expected the manuscript title on the Goals page to be capitalized",
       );
       const editGoalLink = page.getByRole("link", { name: "Edit", exact: true });
       assert(await editGoalLink.isVisible(), "Expected an inline Edit link beside the goal count");
       assert(
-        await editGoalLink.evaluate((link) =>
-          link.closest(".counts") !== null && link.classList.contains("button--small") &&
-          !link.classList.contains("button--primary")
+        await editGoalLink.evaluate(
+          (link) =>
+            link.closest(".counts") !== null &&
+            link.classList.contains("button--small") &&
+            !link.classList.contains("button--primary"),
         ),
         "Expected the goal edit link to use the small default button style inline with the goal count",
       );
       assert(
-        await page.locator(".card a[href='/']").count() === 0,
+        (await page.locator(".card a[href='/']").count()) === 0,
         "Expected no in-card Return to Editor link on the Goal page",
       );
       assert(
@@ -1371,21 +1416,22 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
       });
       assert(
         values.value === 40_000 && values.max === 90_000,
-        `Expected active manuscript progress to use the saved project goal: ${
-          JSON.stringify(values)
-        }`,
+        `Expected active manuscript progress to use the saved project goal: ${JSON.stringify(
+          values,
+        )}`,
       );
       assert(
         await page.getByText("50,000 words to go (44.4% complete).").isVisible(),
         "Expected the remaining manuscript word count to be displayed",
       );
       assert(await page.getByText("Last 30 days").isVisible());
-      assert(await page.locator(".history li").count() === 30);
+      assert((await page.locator(".history li").count()) === 30);
       const streaks = await page.locator(".streaks dd").allTextContents();
       assert(streaks[0] === "3 days", `Expected a three-day writing streak, got ${streaks[0]}`);
       assert(streaks[1] === "2 days", `Expected a two-day goal streak, got ${streaks[1]}`);
       assert(
-        await page.getByText(/At your average of 1,050 words per day over 4 tracked days/)
+        await page
+          .getByText(/At your average of 1,050 words per day over 4 tracked days/)
           .isVisible(),
         "Expected the completion estimate to use the available 30-day calendar history",
       );
@@ -1393,12 +1439,14 @@ browserTest("browser: project settings configure manuscript goal progress", asyn
       await page.goto(new URL("/", page.url()).toString());
       const updatedGoals = page.getByTestId("manuscript-goals-link");
       await updatedGoals.waitFor();
-      const updatedProgress = await updatedGoals.getByRole("progressbar", {
-        name: "Manuscript word-goal progress",
-      }).evaluate((element) => {
-        const bar = element as HTMLProgressElement;
-        return { value: bar.value, max: bar.max };
-      });
+      const updatedProgress = await updatedGoals
+        .getByRole("progressbar", {
+          name: "Manuscript word-goal progress",
+        })
+        .evaluate((element) => {
+          const bar = element as HTMLProgressElement;
+          return { value: bar.value, max: bar.max };
+        });
       assert(
         updatedProgress.value === 40_000 && updatedProgress.max === 90_000,
         "Expected the Goals button to use the updated project goal after returning to the editor",
@@ -1413,9 +1461,7 @@ browserTest("browser: project settings and goal explain when no project is open"
     await page.getByRole("button", { name: "Menu" }).click();
     await page.getByRole("menuitem", { name: "Project Settings" }).click();
     await page.locator("[data-project-required]").waitFor();
-    assert(
-      await page.getByText("Open a project to configure its word goals.").isVisible(),
-    );
+    assert(await page.getByText("Open a project to configure its word goals.").isVisible());
 
     await page.goto(new URL("/goal", page.url()).toString());
     await page.locator("[data-project-required]").waitFor();
@@ -1435,18 +1481,15 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       const saveStatus = document.querySelector("#save-status");
       const titleGroup = document.querySelector(".titleGroup");
       const menu = document.querySelector(".right");
-      if (
-        !header || !toolbar || !footer || !title || !saveStatus || !titleGroup ||
-        !menu
-      ) {
+      if (!header || !toolbar || !footer || !title || !saveStatus || !titleGroup || !menu) {
         return null;
       }
       const titleRect = title.getBoundingClientRect();
       const saveStatusRect = saveStatus.getBoundingClientRect();
       const headerBackground = getComputedStyle(header).backgroundColor;
       const toolbarBackground = getComputedStyle(toolbar).backgroundColor;
-      const toolbarButtons = [...toolbar.querySelectorAll("button")].filter((button) =>
-        button.getClientRects().length > 0
+      const toolbarButtons = [...toolbar.querySelectorAll("button")].filter(
+        (button) => button.getClientRects().length > 0,
       );
       return {
         headerHeight: header.getBoundingClientRect().height,
@@ -1477,7 +1520,8 @@ browserTest("browser: editor header and footer are compact and equally sized", a
         quietButtonsAreSmall: [...document.querySelectorAll(".app button.button--quiet")].every(
           (button) => button.classList.contains("button--small"),
         ),
-        toolbarButtonsAreSmall: toolbarButtons.length > 0 &&
+        toolbarButtonsAreSmall:
+          toolbarButtons.length > 0 &&
           toolbarButtons.every((button) => button.classList.contains("button--small")),
       };
     });
@@ -1525,7 +1569,7 @@ browserTest("browser: editor header and footer are compact and equally sized", a
       "Expected the title and save status to be inline and vertically aligned",
     );
     assert(
-      await page.locator("#filename").count() === 0,
+      (await page.locator("#filename").count()) === 0,
       "Expected the EPUB filename to be hidden from the editor header",
     );
   });
@@ -1554,23 +1598,26 @@ browserTest("browser: manuscript title uses a text cursor without a focus outlin
 
 browserTest("browser: quiet buttons underline and status stats emphasize counts", async () => {
   await withEditorPage(async (page) => {
-    const styles = await page.locator(".statusbar button.button--quiet").first().evaluate(
-      (button) => {
+    const styles = await page
+      .locator(".statusbar button.button--quiet")
+      .first()
+      .evaluate((button) => {
         const keyboardShortcut = button.querySelector("kbd");
         return {
           buttonDecoration: getComputedStyle(button).textDecorationLine,
           keyboardShortcutDisplay: keyboardShortcut && getComputedStyle(keyboardShortcut).display,
-          keyboardShortcutDecoration: keyboardShortcut &&
-            getComputedStyle(keyboardShortcut).textDecorationLine,
+          keyboardShortcutDecoration:
+            keyboardShortcut && getComputedStyle(keyboardShortcut).textDecorationLine,
           statsUseTabularNumbers: (() => {
             const value = document.querySelector(".statusbar .statValue");
-            return value !== null &&
+            return (
+              value !== null &&
               getComputedStyle(value).fontVariantNumeric.includes("tabular-nums") &&
-              Number(getComputedStyle(value).fontWeight) >= 600;
+              Number(getComputedStyle(value).fontWeight) >= 600
+            );
           })(),
         };
-      },
-    );
+      });
     assert(
       styles.buttonDecoration.includes("underline"),
       `Expected quiet-button underline, got ${styles.buttonDecoration}`,
@@ -1586,8 +1633,8 @@ browserTest("browser: quiet buttons underline and status stats emphasize counts"
 browserTest("browser: menu opens projects without standalone manuscript actions", async () => {
   await withEditorPage(async (page) => {
     await page.locator("#menu-toggle").click();
-    await page.waitForFunction(() =>
-      document.querySelector("#app-menu")?.getAttribute("data-open") === "true"
+    await page.waitForFunction(
+      () => document.querySelector("#app-menu")?.getAttribute("data-open") === "true",
     );
     const menu = page.locator("#app-menu");
     assert(
@@ -1610,10 +1657,10 @@ browserTest("browser: menu opens projects without standalone manuscript actions"
       (await menu.locator("#menu-open-project kbd").textContent())?.trim() === "Ctrl+O",
       "Expected Open Project shortcut hint",
     );
-    assert(await menu.locator("#menu-new-manuscript").count() === 0);
-    assert(await menu.locator("#menu-open-manuscript").count() === 0);
+    assert((await menu.locator("#menu-new-manuscript").count()) === 0);
+    assert((await menu.locator("#menu-open-manuscript").count()) === 0);
     assert(
-      await page.locator('input[type="file"]').count() === 0,
+      (await page.locator('input[type="file"]').count()) === 0,
       "Expected no browser file picker",
     );
   });
@@ -1631,17 +1678,17 @@ browserTest("browser: hamburger menu toggles toolbar and reports its state", asy
       "Expected toolbar visibility to be conveyed by the menu text alone",
     );
     assert(
-      await menuItem.evaluate((item) => item.previousElementSibling?.textContent?.trim()) ===
+      (await menuItem.evaluate((item) => item.previousElementSibling?.textContent?.trim())) ===
         "Project Settings",
       "Expected toolbar toggle directly below Project Settings",
     );
     await menuItem.click();
-    assert(await toolbar.count() === 0, "Expected toolbar to hide");
+    assert((await toolbar.count()) === 0, "Expected toolbar to hide");
 
     await toggle.click();
     assert((await menuItem.textContent())?.includes("Show toolbar"), "Expected show action");
     await menuItem.click();
-    assert(await toolbar.count() === 1, "Expected toolbar to show");
+    assert((await toolbar.count()) === 1, "Expected toolbar to show");
   });
 });
 
@@ -1651,7 +1698,7 @@ browserTest("browser: Desktop menu and F11 toggle fullscreen", async () => {
       let fullscreen = false;
       Object.defineProperty(document, "fullscreenElement", {
         configurable: true,
-        get: () => fullscreen ? document.documentElement : null,
+        get: () => (fullscreen ? document.documentElement : null),
       });
       Object.defineProperty(document.documentElement, "requestFullscreen", {
         configurable: true,
@@ -1684,7 +1731,7 @@ browserTest("browser: Desktop menu and F11 toggle fullscreen", async () => {
     await page.keyboard.press("F11");
     await page.waitForFunction(() => document.documentElement.dataset.testFullscreen !== "true");
     assert(
-      await page.locator("#app-menu").getAttribute("data-open") === "false",
+      (await page.locator("#app-menu").getAttribute("data-open")) === "false",
       "Expected F11 to work while the menu is open and close the menu",
     );
   });
@@ -1704,8 +1751,8 @@ browserTest("browser: editor content never mixes text with block siblings", asyn
       element.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
-    await page.waitForFunction(() =>
-      document.querySelectorAll('[data-testid="assistance-panel"] li').length >= 3
+    await page.waitForFunction(
+      () => document.querySelectorAll('[data-testid="assistance-panel"] li').length >= 3,
     );
 
     const stray = await page.locator("#editor").evaluate((element) => {
@@ -1741,13 +1788,13 @@ browserTest("browser: editor content never mixes text with block siblings", asyn
       const offenders: string[] = [];
       const visit = (node: Element) => {
         const children = Array.from(node.childNodes);
-        const hasBlock = children.some((child) =>
-          child.nodeType === Node.ELEMENT_NODE && blocks.has((child as Element).tagName)
+        const hasBlock = children.some(
+          (child) => child.nodeType === Node.ELEMENT_NODE && blocks.has((child as Element).tagName),
         );
         if (hasBlock) {
           for (const child of children) {
-            const isBlock = child.nodeType === Node.ELEMENT_NODE &&
-              blocks.has((child as Element).tagName);
+            const isBlock =
+              child.nodeType === Node.ELEMENT_NODE && blocks.has((child as Element).tagName);
             if (!isBlock) offenders.push(`${node.tagName}>${child.nodeName}`);
           }
         }
@@ -1803,7 +1850,7 @@ browserTest(
         await page.waitForFunction(
           () =>
             getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() ===
-              "#242321",
+            "#242321",
         );
       }
     });
@@ -1815,8 +1862,8 @@ browserTest("browser: welcome page offers a clear styled project creation dialog
     await page.goto(new URL("/welcome", page.url()).href);
     assert(await page.locator("#welcome-project-open").isVisible());
     assert(await page.locator("#welcome-project-new").isVisible());
-    assert(await page.locator("#welcome-new").count() === 0);
-    assert(await page.locator("#welcome-sample").count() === 0);
+    assert((await page.locator("#welcome-new").count()) === 0);
+    assert((await page.locator("#welcome-sample").count()) === 0);
 
     await page.locator("#welcome-project-new").click();
     const dialog = page.locator("#create-project-dialog");
@@ -1833,26 +1880,25 @@ browserTest("browser: welcome page offers a clear styled project creation dialog
   });
 });
 
-browserTest(
-  "browser: outline mode creates, autosaves, and replaces project Markdown",
-  async () => {
-    const directory = await Deno.makeTempDir();
-    const previousActivePath = getActivePath();
-    const previousSavedPath = await loadLastFilePath();
-    const epubPath = `${directory}/story.epub`;
+browserTest("browser: outline mode creates, autosaves, and replaces project Markdown", async () => {
+  const directory = await mkdtemp(resolve(".writasaurus-outline-"));
+  const previousActivePath = getActivePath();
+  const previousSavedPath = await loadLastFilePath();
+  const epubPath = `${directory}/draft_1.epub`;
 
-    try {
-      await Deno.writeFile(epubPath, await generateEpub(blankManuscript("Story")));
-      await setActivePath(epubPath);
-      await withEditorPage(async (page) => {
+  try {
+    await writeFile(epubPath, await generateEpub(blankManuscript("Story")));
+    await setActivePath(epubPath);
+    await withEditorPage(
+      async (page) => {
         const modeSwitch = page.getByRole("group", { name: "Project view" });
         const manuscriptOption = page.locator('[data-project-mode="manuscript"]');
         const outlineOption = page.locator('[data-project-mode="outline"]');
         assert(await manuscriptOption.isDisabled(), "Expected Manuscript to be selected");
         assert(!(await outlineOption.isDisabled()), "Expected Outline to be available");
         assert(
-          await manuscriptOption.getAttribute("aria-pressed") === "true" &&
-            await outlineOption.getAttribute("aria-pressed") === "false",
+          (await manuscriptOption.getAttribute("aria-pressed")) === "true" &&
+            (await outlineOption.getAttribute("aria-pressed")) === "false",
           "Expected Manuscript to be visibly selected in the mode switch",
         );
         assert(await modeSwitch.isVisible(), "Expected the always-visible project mode switch");
@@ -1860,24 +1906,24 @@ browserTest(
         await outlineOption.click();
         await page.waitForFunction(() => !document.querySelector("#chapter-title"));
         assert(
-          await outlineOption.getAttribute("aria-pressed") === "true",
+          (await outlineOption.getAttribute("aria-pressed")) === "true",
           "Expected Outline to become selected",
         );
         await page.keyboard.press("Control+g");
         await page.waitForSelector("#chapter-title");
         assert(
-          await manuscriptOption.getAttribute("aria-pressed") === "true",
+          (await manuscriptOption.getAttribute("aria-pressed")) === "true",
           "Expected Ctrl+G to switch from Outline to Manuscript",
         );
         await page.keyboard.press("Control+g");
         await page.waitForFunction(() => !document.querySelector("#chapter-title"));
         assert(
-          await outlineOption.getAttribute("aria-pressed") === "true",
+          (await outlineOption.getAttribute("aria-pressed")) === "true",
           "Expected Ctrl+G to switch from Manuscript to Outline",
         );
         assert(await page.getByRole("textbox", { name: "Outline text" }).isVisible());
-        assert(await page.locator('[data-testid="chapters-sidebar"]').count() === 0);
-        assert(await page.locator('[data-testid="assistance-panel"]').count() === 0);
+        assert((await page.locator('[data-testid="chapters-sidebar"]').count()) === 0);
+        assert((await page.locator('[data-testid="assistance-panel"]').count()) === 0);
         assert(await page.locator("[data-outline-template-trigger]").isVisible());
         assert(
           await page.getByRole("button", { name: "Change Template" }).isVisible(),
@@ -1899,8 +1945,8 @@ browserTest(
         });
         assert(templatePosition, "Expected template selector and toolbar");
         assert(
-          templatePosition.otherToolbarButtonRights.every((right) =>
-            right <= templatePosition.triggerRight
+          templatePosition.otherToolbarButtonRights.every(
+            (right) => right <= templatePosition.triggerRight,
           ) && templatePosition.triggerRight <= templatePosition.toolbarRight,
           "Expected the template selector to align after the other toolbar controls",
         );
@@ -1941,24 +1987,23 @@ browserTest(
           "Expected outline headings to be separated and guidance notes to have a distinct treatment",
         );
         assert(
-          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("# Act I - Setup"),
+          (await readFile(`${directory}/Outline.md`, "utf8")).includes("# Act I - Setup"),
           "Expected selecting Outline to immediately create the default template",
         );
 
         const editor = page.locator("#editor");
         await editor.fill("Custom outline content");
         await page.waitForFunction(() =>
-          document.querySelector("#editor")?.textContent?.includes("Custom outline content")
+          document.querySelector("#editor")?.textContent?.includes("Custom outline content"),
         );
         for (let attempt = 0; attempt < 40; attempt++) {
           try {
             if (
-              (await Deno.readTextFile(`${directory}/Outline.md`)).includes(
-                "Custom outline content",
-              )
-            ) break;
+              (await readFile(`${directory}/Outline.md`, "utf8")).includes("Custom outline content")
+            )
+              break;
           } catch (error) {
-            if (!(error instanceof Deno.errors.NotFound)) throw error;
+            if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
           }
           if (attempt === 39) throw new Error("Outline edits were not autosaved.");
           await new Promise((resolve) => setTimeout(resolve, 100));
@@ -1970,7 +2015,7 @@ browserTest(
         assert(await confirmation.isVisible(), "Expected template replacement confirmation");
         await confirmation.getByRole("button", { name: "Cancel" }).click();
         assert(
-          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("Custom outline content"),
+          (await readFile(`${directory}/Outline.md`, "utf8")).includes("Custom outline content"),
           "Canceling template replacement must retain the current outline",
         );
 
@@ -1984,17 +2029,18 @@ browserTest(
 
         await page.locator('[data-project-mode="manuscript"]').click();
         await page.waitForSelector("#chapter-title");
-        assert(await page.locator('[data-testid="chapters-sidebar"]').count() === 1);
+        assert((await page.locator('[data-testid="chapters-sidebar"]').count()) === 1);
         assert(
-          (await Deno.readTextFile(`${directory}/Outline.md`)).includes("Act IV - Resolution"),
+          (await readFile(`${directory}/Outline.md`, "utf8")).includes("Act IV - Resolution"),
           "Expected the replaced outline template to autosave before switching modes",
         );
-      }, { useDesktopStatus: true });
-    } finally {
-      if (previousActivePath) await setActivePath(previousActivePath);
-      else if (previousSavedPath) await setActivePath(previousSavedPath);
-      else await closeActiveFile();
-      await Deno.remove(directory, { recursive: true });
-    }
-  },
-);
+      },
+      { useDesktopStatus: true },
+    );
+  } finally {
+    if (previousActivePath) await setActivePath(previousActivePath);
+    else if (previousSavedPath) await setActivePath(previousSavedPath);
+    else await closeActiveFile();
+    await rm(directory, { recursive: true });
+  }
+});

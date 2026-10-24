@@ -1,16 +1,10 @@
 {
-    "deno.enable": true,
-    "editor.formatOnSave": true,
-    "[typescript]": {
-        "editor.defaultFormatter": "denoland.vscode-deno"
-    },
-    "[typescriptreact]": {
-        "editor.defaultFormatter": "denoland.vscode-deno"
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "denoland.vscode-deno"
-    },
-    "[javascriptreact]": {
-        "editor.defaultFormatter": "denoland.vscode-deno"
-    }
+  "deno.enable": false,
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "oxc.oxc-vscode",
+  "oxc.enable": true,
+  "oxc.enable.oxfmt": true,
+  "[astro]": { "editor.defaultFormatter": "astro-build.astro-vscode" },
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "typescript.tsdk": "node_modules/typescript/lib"
 }

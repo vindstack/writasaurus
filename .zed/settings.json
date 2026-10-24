@@ -1,40 +1,26 @@
 {
   "format_on_save": "on",
-  "lsp": {
-    "deno": {
-      "settings": {
-        "deno": {
-          "enable": true
-        }
-      }
+  "formatter": {
+    "external": {
+      "command": "pnpm",
+      "arguments": ["exec", "oxfmt", "--stdin-filepath", "{buffer_path}"]
     }
   },
   "languages": {
     "JavaScript": {
-      "language_servers": [
-        "deno",
-        "!typescript-language-server",
-        "!vtsls",
-        "!eslint"
-      ],
-      "formatter": "language_server"
+      "language_servers": ["vtsls", "oxlint", "!deno", "..."]
     },
     "TypeScript": {
-      "language_servers": [
-        "deno",
-        "!typescript-language-server",
-        "!vtsls",
-        "!eslint"
-      ],
-      "formatter": "language_server"
+      "language_servers": ["vtsls", "oxlint", "!deno", "..."]
     },
     "TSX": {
-      "language_servers": [
-        "deno",
-        "!typescript-language-server",
-        "!vtsls",
-        "!eslint"
-      ],
+      "language_servers": ["vtsls", "oxlint", "!deno", "..."]
+    },
+    "Vue.js": {
+      "language_servers": ["vue-language-server", "oxlint", "!deno", "..."]
+    },
+    "Astro": {
+      "language_servers": ["astro-language-server", "!deno", "..."],
       "formatter": "language_server"
     }
   }

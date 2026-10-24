@@ -59,7 +59,8 @@ export function replaceRangeInEditor(range: Range, replacement: string): boolean
     !surface ||
     !surface.editor.contains(range.startContainer) ||
     !surface.editor.contains(range.endContainer)
-  ) return false;
+  )
+    return false;
 
   const { editor, title } = surface;
   const titleValue = title?.value ?? "";

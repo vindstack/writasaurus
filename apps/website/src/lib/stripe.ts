@@ -19,7 +19,7 @@ export interface StripeEvent {
 }
 
 function requiredEnv(name: string): string {
-  const value = Deno.env.get(name)?.trim();
+  const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not configured.`);
   return value;
 }
@@ -50,11 +50,16 @@ async function stripeRequest<T>(
     throw new Error(`Stripe returned a non-JSON response (${response.status}).`);
   }
   if (!response.ok) {
-    const code = typeof payload === "object" && payload !== null &&
-        "error" in payload && typeof payload.error === "object" && payload.error !== null &&
-        "code" in payload.error && typeof payload.error.code === "string"
-      ? payload.error.code
-      : `HTTP ${response.status}`;
+    const code =
+      typeof payload === "object" &&
+      payload !== null &&
+      "error" in payload &&
+      typeof payload.error === "object" &&
+      payload.error !== null &&
+      "code" in payload.error &&
+      typeof payload.error.code === "string"
+        ? payload.error.code
+        : `HTTP ${response.status}`;
     throw new Error(`Stripe request failed (${code}).`);
   }
   return payload as T;
@@ -79,14 +84,12 @@ export async function createStripeCheckoutSession(
   params.set("line_items[0][quantity]", "1");
   params.set("success_url", `${siteUrl}/donation/success?session_id={CHECKOUT_SESSION_ID}`);
   params.set("cancel_url", `${siteUrl}/download?cancelled=1`);
-  for (
-    const [key, value] of Object.entries({
-      donation: "true",
-      email,
-      amountCents: String(amountCents),
-      platform,
-    })
-  ) {
+  for (const [key, value] of Object.entries({
+    donation: "true",
+    email,
+    amountCents: String(amountCents),
+    platform,
+  })) {
     params.set(`metadata[${key}]`, value);
     params.set(`payment_intent_data[metadata][${key}]`, value);
   }
@@ -105,9 +108,7 @@ export async function retrieveStripeCheckoutSession(
 export async function retrieveStripeReceiptUrl(paymentIntentId: string): Promise<string | null> {
   const intent = await stripeRequest<{
     latest_charge?: string | { receipt_url?: string | null } | null;
-  }>(
-    `payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`,
-  );
+  }>(`payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`);
   const charge = intent.latest_charge;
   const receiptUrl = typeof charge === "object" && charge !== null ? charge.receipt_url : null;
   return typeof receiptUrl === "string" && receiptUrl.startsWith("https://") ? receiptUrl : null;
@@ -143,7 +144,7 @@ async function webhookSignature(secret: string, value: string): Promise<string> 
 export async function verifyStripeWebhook(
   rawBody: string,
   signatureHeader: string | null,
-  secret = Deno.env.get("STRIPE_WEBHOOK_SECRET"),
+  secret = process.env.STRIPE_WEBHOOK_SECRET,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): Promise<StripeEvent> {
   if (!secret) throw new Error("STRIPE_WEBHOOK_SECRET is not configured.");
@@ -155,12 +156,16 @@ export async function verifyStripeWebhook(
     }),
   );
   const timestamp = Number(values.get("t"));
-  const signatures = signatureHeader.split(",").filter((entry) => entry.startsWith("v1="))
+  const signatures = signatureHeader
+    .split(",")
+    .filter((entry) => entry.startsWith("v1="))
     .map((entry) => entry.slice(3));
   if (
-    !Number.isSafeInteger(timestamp) || Math.abs(nowSeconds - timestamp) > 300 ||
+    !Number.isSafeInteger(timestamp) ||
+    Math.abs(nowSeconds - timestamp) > 300 ||
     !signatures.length
-  ) throw new Error("Stripe webhook signature is invalid or expired.");
+  )
+    throw new Error("Stripe webhook signature is invalid or expired.");
   const expected = await webhookSignature(secret, `${timestamp}.${rawBody}`);
   if (!signatures.some((value) => constantTimeEqual(value, expected))) {
     throw new Error("Stripe webhook signature is invalid.");
@@ -172,10 +177,19 @@ export async function verifyStripeWebhook(
     throw new Error("Stripe webhook body is invalid JSON.");
   }
   if (
-    typeof event !== "object" || event === null || !("id" in event) ||
-    typeof event.id !== "string" || !("type" in event) || typeof event.type !== "string" ||
-    !("data" in event) || typeof event.data !== "object" || event.data === null ||
-    !("object" in event.data) || typeof event.data.object !== "object" || event.data.object === null
-  ) throw new Error("Stripe webhook payload is malformed.");
+    typeof event !== "object" ||
+    event === null ||
+    !("id" in event) ||
+    typeof event.id !== "string" ||
+    !("type" in event) ||
+    typeof event.type !== "string" ||
+    !("data" in event) ||
+    typeof event.data !== "object" ||
+    event.data === null ||
+    !("object" in event.data) ||
+    typeof event.data.object !== "object" ||
+    event.data.object === null
+  )
+    throw new Error("Stripe webhook payload is malformed.");
   return event as StripeEvent;
 }

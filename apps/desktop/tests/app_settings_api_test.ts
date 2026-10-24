@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import { POST as updateDailyProgress } from "../src/pages/api/editor/daily-progress.ts";
 import { PATCH as updateSettings } from "../src/pages/api/editor/settings.ts";
 
@@ -5,7 +6,7 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
   if (!condition) throw new Error(message);
 }
 
-Deno.test("app settings API: rejects invalid settings and progress input", async () => {
+test("app settings API: rejects invalid settings and progress input", async () => {
   const settingsResponse = await updateSettings({
     request: new Request("http://localhost/api/editor/settings", {
       method: "PATCH",

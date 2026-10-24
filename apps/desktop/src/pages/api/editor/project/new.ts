@@ -15,7 +15,7 @@ export async function POST({ request }: { request: Request }): Promise<Response>
     const manuscript = await createProject(payload.projectName);
     return Response.json({ ok: true, projectName: payload.projectName.trim(), manuscript });
   } catch (error) {
-    if (error instanceof Deno.errors.AlreadyExists) {
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "EEXIST") {
       return new Response(
         "A project with that folder name already exists in the selected directory.",
         {

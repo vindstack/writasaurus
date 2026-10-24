@@ -12,8 +12,7 @@ The bundled index is generated from the
 To refresh it, unpack a release archive and run:
 
 ```sh
-deno run --allow-read=<unpacked-wordnet> --allow-write=apps/desktop/public/data \
-  apps/desktop/scripts/build-wordnet-index.ts <unpacked-wordnet> \
+node apps/desktop/scripts/build-wordnet-index.ts <unpacked-wordnet> \
   apps/desktop/public/data/oewn-2025-synonyms.json
 ```
 

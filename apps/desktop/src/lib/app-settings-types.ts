@@ -9,11 +9,5 @@ export interface AppSettings {
 }
 
 export type AppSettingsUpdate = Partial<
-  Pick<
-    AppSettings,
-    | "font"
-    | "wordsPerPage"
-    | "writingAssistanceWords"
-    | "writingAssistanceIgnores"
-  >
+  Pick<AppSettings, "font" | "wordsPerPage" | "writingAssistanceWords" | "writingAssistanceIgnores">
 >;

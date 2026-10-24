@@ -6,7 +6,7 @@ const CRC_TABLE = new Uint32Array(256);
 for (let i = 0; i < 256; i++) {
   let c = i;
   for (let k = 0; k < 8; k++) {
-    c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+    c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
   }
   CRC_TABLE[i] = c >>> 0;
 }
@@ -20,13 +20,13 @@ export function crc32(data: Uint8Array): number {
 }
 
 function toDosDateTime(date: Date): { time: number; date: number } {
-  const dosTime = ((date.getHours() & 0x1f) << 11) |
+  const dosTime =
+    ((date.getHours() & 0x1f) << 11) |
     ((date.getMinutes() & 0x3f) << 5) |
     (Math.floor(date.getSeconds() / 2) & 0x1f);
   const year = Math.max(1980, date.getFullYear());
-  const dosDate = (((year - 1980) & 0x7f) << 9) |
-    (((date.getMonth() + 1) & 0xf) << 5) |
-    (date.getDate() & 0x1f);
+  const dosDate =
+    (((year - 1980) & 0x7f) << 9) | (((date.getMonth() + 1) & 0xf) << 5) | (date.getDate() & 0x1f);
   return { time: dosTime, date: dosDate };
 }
 
@@ -165,9 +165,7 @@ export async function createZip(entries: ZipFileEntry[]): Promise<Uint8Array> {
   return buffer;
 }
 
-export async function unzip(
-  zipData: Uint8Array,
-): Promise<Map<string, Uint8Array>> {
+export async function unzip(zipData: Uint8Array): Promise<Map<string, Uint8Array>> {
   const view = new DataView(zipData.buffer, zipData.byteOffset, zipData.byteLength);
   const entries = new Map<string, Uint8Array>();
   let offset = 0;
@@ -502,9 +500,12 @@ export async function generateEpub(manuscript: Manuscript): Promise<Uint8Array> 
   });
 
   // 5. OEBPS/nav.xhtml (EPUB 3 Navigation Document)
-  const navItems = manuscript.chapters.map((chapter, i) =>
-    `      <li><a href="chapter-${i + 1}.xhtml">${escapeXml(chapter.title)}</a></li>`
-  ).join("\n");
+  const navItems = manuscript.chapters
+    .map(
+      (chapter, i) =>
+        `      <li><a href="chapter-${i + 1}.xhtml">${escapeXml(chapter.title)}</a></li>`,
+    )
+    .join("\n");
   const navXhtml = `<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en" lang="en">
@@ -528,14 +529,17 @@ ${navItems}
   });
 
   // 6. OEBPS/toc.ncx (EPUB 2 backward compatibility)
-  const ncxNavPoints = manuscript.chapters.map((chapter, i) =>
-    `    <navPoint id="navPoint-${i + 1}" playOrder="${i + 1}">
+  const ncxNavPoints = manuscript.chapters
+    .map(
+      (chapter, i) =>
+        `    <navPoint id="navPoint-${i + 1}" playOrder="${i + 1}">
       <navLabel>
         <text>${escapeXml(chapter.title)}</text>
       </navLabel>
       <content src="chapter-${i + 1}.xhtml"/>
-    </navPoint>`
-  ).join("\n");
+    </navPoint>`,
+    )
+    .join("\n");
   const tocNcx = `<?xml version="1.0" encoding="utf-8"?>
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
@@ -571,11 +575,11 @@ ${ncxNavPoints}
 </head>
 <body class="chapter" style="page-break-before: always; break-before: page;">
   <section epub:type="${type}"${
-      role ? ` role="${role}"` : ""
-    } class="chapter-content" style="page-break-before: always; break-before: page;">
-    <h1 class="chapter-title section-title" style="page-break-before: always; break-before: page;">${
-      escapeXml(chapter.title)
-    }</h1>
+    role ? ` role="${role}"` : ""
+  } class="chapter-content" style="page-break-before: always; break-before: page;">
+    <h1 class="chapter-title section-title" style="page-break-before: always; break-before: page;">${escapeXml(
+      chapter.title,
+    )}</h1>
     ${chapterBody}
   </section>
 </body>
@@ -592,10 +596,11 @@ ${ncxNavPoints}
     '    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>',
     '    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
     '    <item id="titlepage" href="title.xhtml" media-type="application/xhtml+xml"/>',
-    ...manuscript.chapters.map((_, i) =>
-      `    <item id="chapter-${i + 1}" href="chapter-${
-        i + 1
-      }.xhtml" media-type="application/xhtml+xml"/>`
+    ...manuscript.chapters.map(
+      (_, i) =>
+        `    <item id="chapter-${i + 1}" href="chapter-${
+          i + 1
+        }.xhtml" media-type="application/xhtml+xml"/>`,
     ),
   ].join("\n");
 
@@ -659,8 +664,8 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
   const identifierMatch = opfText.match(/<dc:identifier[^>]*>([\s\S]*?)<\/dc:identifier>/i);
   const title = titleMatch ? unescapeXml(titleMatch[1].trim()) : filename.replace(/\.[^.]+$/, "");
   const author = authorMatch ? unescapeXml(authorMatch[1].trim()) : "";
-  const stableId = identifierMatch?.[1].trim().match(/^urn:uuid:([0-9a-f-]{36})$/i)?.[1] ??
-    crypto.randomUUID();
+  const stableId =
+    identifierMatch?.[1].trim().match(/^urn:uuid:([0-9a-f-]{36})$/i)?.[1] ?? crypto.randomUUID();
 
   const manifest = new Map<string, string>();
   const itemRegex = /<item\b([^>]+)\/?>/gi;
@@ -710,12 +715,13 @@ export async function parseEpub(bytes: Uint8Array, filename: string): Promise<Ma
 
     const sectionMatch = docText.match(/<section[^>]*>([\s\S]*?)<\/section>/i);
     const bodyMatch = docText.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const rawContent = sectionMatch ? sectionMatch[1] : (bodyMatch ? bodyMatch[1] : docText);
+    const rawContent = sectionMatch ? sectionMatch[1] : bodyMatch ? bodyMatch[1] : docText;
 
     let contentHtml = rawContent.replace(/^\s*<h1[^>]*>[\s\S]*?<\/h1>\s*/i, "").trim();
     if (!contentHtml) contentHtml = "<p></p>";
 
-    const sectionTypeValue = docText.match(/<section\b[^>]*\bepub:type=["']([^"']+)["']/i)?.[1]
+    const sectionTypeValue = docText
+      .match(/<section\b[^>]*\bepub:type=["']([^"']+)["']/i)?.[1]
       ?.split(/\s+/)
       .find((value) => SECTION_TYPES.includes(value as SectionType));
     const type = sectionTypeValue as SectionType | undefined;

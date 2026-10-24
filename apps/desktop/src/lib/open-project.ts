@@ -1,8 +1,6 @@
 import type { Manuscript } from "./editor/types.ts";
 
-export type ProjectRequest =
-  | { kind: "cancelled" }
-  | { kind: "opened"; manuscript: Manuscript };
+export type ProjectRequest = { kind: "cancelled" } | { kind: "opened"; manuscript: Manuscript };
 
 async function readManuscript(response: Response): Promise<Manuscript> {
   if (!response.ok) {

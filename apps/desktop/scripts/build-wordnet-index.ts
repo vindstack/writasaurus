@@ -1,3 +1,6 @@
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
 interface SourceSynset {
   definition?: unknown;
   members?: unknown;
@@ -10,11 +13,10 @@ interface SynonymGroup {
   words: string[];
 }
 
-const [sourceDirectory, outputPath] = Deno.args;
+const [sourceDirectory, outputPath] = process.argv.slice(2);
 if (!sourceDirectory || !outputPath) {
   throw new Error(
-    "Usage: deno run --allow-read=<unpacked-wordnet> --allow-write=<output> " +
-      "apps/desktop/scripts/build-wordnet-index.ts <unpacked-wordnet> <output>",
+    "Usage: node " + "apps/desktop/scripts/build-wordnet-index.ts <unpacked-wordnet> <output>",
   );
 }
 
@@ -30,8 +32,8 @@ const groups: SynonymGroup[] = [];
 const wordGroups = new Map<string, number[]>();
 const sourceFiles: string[] = [];
 
-for await (const entry of Deno.readDir(sourceDirectory)) {
-  if (entry.isFile && entry.name.endsWith(".json") && !entry.name.startsWith("entries-")) {
+for (const entry of await readdir(sourceDirectory, { withFileTypes: true })) {
+  if (entry.isFile() && entry.name.endsWith(".json") && !entry.name.startsWith("entries-")) {
     sourceFiles.push(entry.name);
   }
 }
@@ -42,9 +44,10 @@ if (sourceFiles.length === 0) {
 }
 
 for (const filename of sourceFiles) {
-  const source = JSON.parse(
-    await Deno.readTextFile(`${sourceDirectory}/${filename}`),
-  ) as Record<string, SourceSynset>;
+  const source = JSON.parse(await readFile(join(sourceDirectory, filename), "utf8")) as Record<
+    string,
+    SourceSynset
+  >;
   for (const [id, synset] of Object.entries(source)) {
     if (!Array.isArray(synset.members)) continue;
     const wordsByKey = new Map<string, string>();
@@ -83,7 +86,7 @@ const result = {
   words: index,
 };
 
-await Deno.writeTextFile(outputPath, JSON.stringify(result));
+await writeFile(outputPath, JSON.stringify(result));
 console.log(
   `Indexed ${groups.length} synonym sets across ${wordGroups.size} terms into ${outputPath}.`,
 );

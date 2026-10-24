@@ -1,0 +1,70 @@
+name: Check
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: xvfb-run -a pnpm check
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            flag: --linux
+            target: AppImage
+            arch: --x64
+            configPlatform: linux
+            fileName: Writasaurus.AppImage
+          - os: windows-latest
+            platform: windows
+            flag: --win
+            target: msi
+            arch: --x64
+            configPlatform: win
+            fileName: Writasaurus.msi
+          - os: macos-latest
+            platform: macos
+            flag: --mac
+            target: tar.gz
+            arch: --arm64
+            configPlatform: mac
+            fileName: Writasaurus-macos.tar.gz
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:desktop
+      - run: >-
+          pnpm --filter @writasaurus/desktop exec electron-builder
+          ${{ matrix.flag }} ${{ matrix.target }} ${{ matrix.arch }} --publish never
+          --config.directories.output=../../desktop/${{ matrix.platform }}
+          --config.${{ matrix.configPlatform }}.artifactName=${{ matrix.fileName }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop-${{ matrix.platform }}
+          path: desktop/${{ matrix.platform }}/${{ matrix.fileName }}

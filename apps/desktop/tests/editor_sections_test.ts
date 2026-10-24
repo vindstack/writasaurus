@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import { parseManuscript, serialize } from "../src/lib/editor/data.ts";
 import { DEFAULT_OUTLINE, OUTLINE_TEMPLATES } from "../src/lib/editor/outline-templates.ts";
 import {
@@ -18,7 +19,7 @@ function assertEquals<T>(actual: T, expected: T): void {
   }
 }
 
-Deno.test("outline templates: default is 3-Act and all requested structures are available", () => {
+test("outline templates: default is 3-Act and all requested structures are available", () => {
   assertEquals(OUTLINE_TEMPLATES.length, 6);
   assertEquals(OUTLINE_TEMPLATES[0].id, "three-act");
   assertEquals(DEFAULT_OUTLINE, OUTLINE_TEMPLATES[0].content);
@@ -29,7 +30,7 @@ Deno.test("outline templates: default is 3-Act and all requested structures are 
   assertEquals(OUTLINE_TEMPLATES.find((item) => item.id === "blank")?.content, "");
 });
 
-Deno.test("outline templates: each section includes an editable explanation", () => {
+test("outline templates: each section includes an editable explanation", () => {
   for (const template of OUTLINE_TEMPLATES) {
     if (template.id === "blank") continue;
 
@@ -38,14 +39,17 @@ Deno.test("outline templates: each section includes an editable explanation", ()
       const lines = template.content.split("\n");
       const index = lines.indexOf(heading);
       assert(
-        lines.slice(index + 1).find((line) => line.trim())?.startsWith("> "),
+        lines
+          .slice(index + 1)
+          .find((line) => line.trim())
+          ?.startsWith("> "),
         `Expected an explanation after "${heading}" in ${template.label}`,
       );
     }
   }
 });
 
-Deno.test("editor sections: Markdown preserves section types", () => {
+test("editor sections: Markdown preserves section types", () => {
   const manuscript: Manuscript = {
     filename: "sections.md",
     frontmatter: { title: "Sections" },
@@ -88,7 +92,7 @@ Deno.test("editor sections: Markdown preserves section types", () => {
   assert(parsed.chapters[0].content.includes("Before the story."));
 });
 
-Deno.test("editor sections: legacy headings recognize common section types", () => {
+test("editor sections: legacy headings recognize common section types", () => {
   const parsed = parseManuscript(
     "# Prologue\n\nBefore.\n\n# Chapter 1: Start\n\nBegin.",
     "book.md",
@@ -97,20 +101,22 @@ Deno.test("editor sections: legacy headings recognize common section types", () 
   assertEquals(parsed.chapters[1].type, "chapter");
 });
 
-Deno.test("editor sections: new sections use front, body, and back matter placement", () => {
+test("editor sections: new sections use front, body, and back matter placement", () => {
   const previous = manuscript.value;
   try {
     replaceManuscript({
       filename: "sections.epub",
       frontmatter: { title: "Sections" },
-      chapters: [{
-        id: "chapter",
-        type: "chapter",
-        title: "Chapter 1",
-        content: "<p></p>",
-        wordCount: 0,
-        charCount: 0,
-      }],
+      chapters: [
+        {
+          id: "chapter",
+          type: "chapter",
+          title: "Chapter 1",
+          content: "<p></p>",
+          wordCount: 0,
+          charCount: 0,
+        },
+      ],
     });
 
     addChapter("prologue");

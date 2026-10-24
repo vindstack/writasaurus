@@ -84,7 +84,10 @@ export function parseManuscript(source: string, filename: string): Manuscript {
   let lines: string[] = [];
   const flush = () => {
     if (!lines.some((line) => line.trim()) && chapters.length) return;
-    let markdown = lines.join("\n").replace(/^[\r\n]+/, "").replace(/[\r\n]+$/, "");
+    let markdown = lines
+      .join("\n")
+      .replace(/^[\r\n]+/, "")
+      .replace(/[\r\n]+$/, "");
     const heading = markdown.match(/^#\s+(.+)\r?\n?/);
     if (heading?.[1]?.trim() === title.trim()) {
       markdown = markdown.slice(heading[0].length).replace(/^[\r\n]+/, "");
@@ -92,15 +95,15 @@ export function parseManuscript(source: string, filename: string): Manuscript {
     chapters.push(chapter(title, markdownToHtml(markdown), sectionType));
   };
   for (const line of body.split(/\r?\n/)) {
-    const marker = line.trim().match(
-      /^(?:<!--\s*chapter:?\s*(.*?)\s*-->|---chapter:?\s*(.*?)\s*---)$/i,
-    );
-    const sectionMarker = line.trim().match(
-      /^<!--\s*section:\s*([\w-]+)\s*\|\s*(.*?)\s*-->$/i,
-    );
-    const heading = line.trim().match(
-      /^#{1,2}\s+(chapter\b.*|part\b.*|prologue|epilogue|introduction|foreword|preface|dedication|epigraph|acknowledgments|afterword|appendix\b.*|glossary|bibliography|index|colophon|copyright page)$/i,
-    );
+    const marker = line
+      .trim()
+      .match(/^(?:<!--\s*chapter:?\s*(.*?)\s*-->|---chapter:?\s*(.*?)\s*---)$/i);
+    const sectionMarker = line.trim().match(/^<!--\s*section:\s*([\w-]+)\s*\|\s*(.*?)\s*-->$/i);
+    const heading = line
+      .trim()
+      .match(
+        /^#{1,2}\s+(chapter\b.*|part\b.*|prologue|epilogue|introduction|foreword|preface|dedication|epigraph|acknowledgments|afterword|appendix\b.*|glossary|bibliography|index|colophon|copyright page)$/i,
+      );
     const markedType = sectionMarker?.[1].toLowerCase();
     if (sectionMarker && SECTION_TYPES.includes(markedType as SectionType)) {
       if (lines.some((part) => part.trim())) flush();
@@ -116,12 +119,13 @@ export function parseManuscript(source: string, filename: string): Manuscript {
       const normalizedTitle = markerTitle.trim().toLowerCase();
       sectionType = marker
         ? "chapter"
-        : SECTION_TYPES.find((type) =>
-          normalizedTitle === SECTION_TYPE_LABELS[type].toLowerCase() ||
-          (type === "chapter" && normalizedTitle.startsWith("chapter ")) ||
-          (type === "part" && normalizedTitle.startsWith("part ")) ||
-          (type === "appendix" && normalizedTitle.startsWith("appendix "))
-        ) ?? "chapter";
+        : (SECTION_TYPES.find(
+            (type) =>
+              normalizedTitle === SECTION_TYPE_LABELS[type].toLowerCase() ||
+              (type === "chapter" && normalizedTitle.startsWith("chapter ")) ||
+              (type === "part" && normalizedTitle.startsWith("part ")) ||
+              (type === "appendix" && normalizedTitle.startsWith("appendix ")),
+          ) ?? "chapter");
       lines = [];
     } else if (line.trim() || lines.length) {
       lines.push(line);
@@ -144,9 +148,10 @@ export function serialize(manuscript: Manuscript): string {
   };
   const chapters = manuscript.chapters.map((item) => {
     const title = item.title.replace(/-->/g, "");
-    const marker = item.type === undefined || item.type === "chapter"
-      ? `<!-- chapter: ${title} -->`
-      : `<!-- section: ${item.type} | ${title} -->`;
+    const marker =
+      item.type === undefined || item.type === "chapter"
+        ? `<!-- chapter: ${title} -->`
+        : `<!-- section: ${item.type} | ${title} -->`;
     return `${marker}\n\n${htmlToMarkdown(item.content)}`;
   });
   return `---\n${JSON.stringify(metadata, null, 2)}\n---\n\n${chapters.join("\n\n")}\n`;

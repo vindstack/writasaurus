@@ -1,3 +1,4 @@
+import { test } from "vitest";
 import { createTestApp } from "./helpers.ts";
 
 function assert(condition: unknown): asserts condition {
@@ -6,7 +7,7 @@ function assert(condition: unknown): asserts condition {
 
 const app = createTestApp();
 
-Deno.test("hydrates the desktop editor on the root route as one island", async () => {
+test("hydrates the desktop editor on the root route as one island", async () => {
   const response = await app.request("/");
   assert(response.status === 200);
   const page = await response.text();
@@ -17,7 +18,7 @@ Deno.test("hydrates the desktop editor on the root route as one island", async (
   assert(!page.includes("style="));
 });
 
-Deno.test("renders welcome page with project options and return to editor link", async () => {
+test("renders welcome page with project options and return to editor link", async () => {
   const response = await app.request("/welcome");
   assert(response.status === 200);
   const page = await response.text();
@@ -43,7 +44,7 @@ Deno.test("renders welcome page with project options and return to editor link",
   assert(aliasPage.includes("Your Projects"));
 });
 
-Deno.test("renders about page with description and return to editor link", async () => {
+test("renders about page with description and return to editor link", async () => {
   const response = await app.request("/about");
   assert(response.status === 200);
   const page = await response.text();
@@ -54,7 +55,7 @@ Deno.test("renders about page with description and return to editor link", async
   assert(page.includes("<title>About — Writasaurus</title>"));
 });
 
-Deno.test("renders settings page with font options and return to editor link", async () => {
+test("renders settings page with font options and return to editor link", async () => {
   const response = await app.request("/settings");
   assert(response.status === 200);
   const page = await response.text();
@@ -74,7 +75,7 @@ Deno.test("renders settings page with font options and return to editor link", a
   assert(!page.includes("writing-assistance-input"));
 });
 
-Deno.test("renders project settings and manuscript goal pages with shared editor footer", async () => {
+test("renders project settings and manuscript goal pages with shared editor footer", async () => {
   const projectSettingsResponse = await app.request("/project-settings");
   assert(projectSettingsResponse.status === 200);
   const projectSettingsPage = await projectSettingsResponse.text();
@@ -93,7 +94,7 @@ Deno.test("renders project settings and manuscript goal pages with shared editor
   assert(goalPage.includes('data-testid="layout-return-to-editor"'));
 });
 
-Deno.test("pages are protected by a nonce-based content security policy", async () => {
+test("pages are protected by a nonce-based content security policy", async () => {
   const response = await app.request("/about");
   const policy = response.headers.get("content-security-policy") ?? "";
   const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
@@ -105,7 +106,7 @@ Deno.test("pages are protected by a nonce-based content security policy", async 
   assert(!page.includes("style="));
 });
 
-Deno.test("stylesheets include view transition rules for smooth page fades", async () => {
+test("stylesheets include view transition rules for smooth page fades", async () => {
   const response = await app.request("/");
   const page = await response.text();
   const hrefs = [...page.matchAll(/href="(\/[^"]+\.css[^"]*)"/g)].map((match) => match[1]);
@@ -122,7 +123,7 @@ Deno.test("stylesheets include view transition rules for smooth page fades", asy
   assert(css.includes(":disabled"));
 });
 
-Deno.test("returns 404 for missing routes and protected manifest", async () => {
+test("returns 404 for missing routes and protected manifest", async () => {
   const missing = await app.request("/not-found");
   assert(missing.status === 404);
 

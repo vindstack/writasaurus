@@ -24,12 +24,12 @@ export const menuOpen = signal(false);
 /** Incremented to ask the writing area to select the chapter title field. */
 export const titleFocusRequest = signal(0);
 
-export const activeChapter = computed<Chapter | undefined>(() =>
-  manuscript.value.chapters[activeChapterIndex.value]
+export const activeChapter = computed<Chapter | undefined>(
+  () => manuscript.value.chapters[activeChapterIndex.value],
 );
 
 export const totalWords = computed(() =>
-  manuscript.value.chapters.reduce((total, item) => total + item.wordCount, 0)
+  manuscript.value.chapters.reduce((total, item) => total + item.wordCount, 0),
 );
 
 const NUMBERED_SECTION_TYPES = new Set<SectionType>(["chapter", "part", "appendix"]);
@@ -86,7 +86,7 @@ function updateChapter(index: number, change: (chapter: Chapter) => Chapter): vo
   if (!current.chapters[index]) return;
   manuscript.value = {
     ...current,
-    chapters: current.chapters.map((item, position) => position === index ? change(item) : item),
+    chapters: current.chapters.map((item, position) => (position === index ? change(item) : item)),
   };
 }
 
@@ -143,16 +143,17 @@ export function addChapter(type: SectionType = "chapter"): void {
     current.chapters.filter((item) => (item.type ?? "chapter") === type).length + 1;
   const newChapter = createChapter(defaultSectionTitle(type, sectionNumber), "<p></p>", type);
   const targetPlacement = placement(type);
-  const firstLaterSection = current.chapters.findIndex((item) =>
-    placement(item.type ?? "chapter") > targetPlacement
+  const firstLaterSection = current.chapters.findIndex(
+    (item) => placement(item.type ?? "chapter") > targetPlacement,
   );
   const lastSamePlacement = current.chapters.reduce(
-    (last, item, index) => placement(item.type ?? "chapter") === targetPlacement ? index : last,
+    (last, item, index) => (placement(item.type ?? "chapter") === targetPlacement ? index : last),
     -1,
   );
-  const insertionIndex = firstLaterSection >= 0
-    ? firstLaterSection
-    : Math.max(lastSamePlacement + 1, current.chapters.length);
+  const insertionIndex =
+    firstLaterSection >= 0
+      ? firstLaterSection
+      : Math.max(lastSamePlacement + 1, current.chapters.length);
   const chapters = [...current.chapters];
   chapters.splice(insertionIndex, 0, newChapter);
   batch(() => {
@@ -238,9 +239,9 @@ export function renameChapter(title: string): void {
   const current = manuscript.peek();
   const item = current.chapters[index];
   const type = item?.type ?? "chapter";
-  const sectionNumber =
-    current.chapters.slice(0, index + 1).filter((chapter) => (chapter.type ?? "chapter") === type)
-      .length;
+  const sectionNumber = current.chapters
+    .slice(0, index + 1)
+    .filter((chapter) => (chapter.type ?? "chapter") === type).length;
   updateChapter(index, (chapter) => ({
     ...chapter,
     title: title.trim() || defaultSectionTitle(type, sectionNumber),

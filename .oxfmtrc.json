@@ -1,0 +1,17 @@
+{
+  "printWidth": 100,
+  "semi": true,
+  "singleQuote": false,
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/dist-electron/**",
+    "**/dist-test/**",
+    "**/.astro/**",
+    "**/.data/**",
+    "**/.vite/**",
+    "desktop/**",
+    "pnpm-lock.yaml",
+    "apps/desktop/public/data/*.json",
+    "plan.md"
+  ]
+}

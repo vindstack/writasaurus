@@ -5,9 +5,12 @@ export const prerender = false;
 export async function POST({ request }: { request: Request }): Promise<Response> {
   const payload: unknown = await request.json().catch(() => null);
   if (
-    typeof payload !== "object" || payload === null ||
-    !("manuscriptId" in payload) || typeof payload.manuscriptId !== "string" ||
-    !("totalWords" in payload) || typeof payload.totalWords !== "number"
+    typeof payload !== "object" ||
+    payload === null ||
+    !("manuscriptId" in payload) ||
+    typeof payload.manuscriptId !== "string" ||
+    !("totalWords" in payload) ||
+    typeof payload.totalWords !== "number"
   ) {
     return new Response("Invalid daily writing progress request.", { status: 400 });
   }

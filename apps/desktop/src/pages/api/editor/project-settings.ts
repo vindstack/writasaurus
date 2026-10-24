@@ -20,10 +20,10 @@ export async function GET(): Promise<Response> {
 
 export async function PATCH({ request }: { request: Request }): Promise<Response> {
   const payload: unknown = await request.json().catch(() => null);
-  const update = payload && typeof payload === "object" && !Array.isArray(payload) &&
-      "user_settings" in payload
-    ? payload.user_settings
-    : null;
+  const update =
+    payload && typeof payload === "object" && !Array.isArray(payload) && "user_settings" in payload
+      ? payload.user_settings
+      : null;
   try {
     const settings = await updateActiveProjectSettings(update);
     if (!settings) {

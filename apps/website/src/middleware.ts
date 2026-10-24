@@ -23,7 +23,7 @@ function isSameOriginRequest(request: Request): boolean {
 
 function contentSecurityPolicy(nonce: string): string {
   const dev = import.meta.env.DEV;
-  const downloadBase = Deno.env.get("WRITASAURUS_R2_PUBLIC_BASE_URL")?.trim();
+  const downloadBase = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL?.trim();
   const formOrigins = ["'self'", "https://checkout.stripe.com"];
   if (downloadBase) {
     if (!isPublicHttpsUrl(downloadBase)) {
@@ -69,10 +69,10 @@ async function addNonce(response: Response, nonce: string): Promise<Response> {
 export const onRequest = defineMiddleware(async (context, next) => {
   const nonce = makeNonce();
   context.locals.cspNonce = nonce;
-  const response = !SAFE_METHODS.has(context.request.method) &&
-      !isSameOriginRequest(context.request)
-    ? new Response("Forbidden", { status: 403 })
-    : await next();
+  const response =
+    !SAFE_METHODS.has(context.request.method) && !isSameOriginRequest(context.request)
+      ? new Response("Forbidden", { status: 403 })
+      : await next();
   const secured = new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

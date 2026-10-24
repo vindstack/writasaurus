@@ -65,10 +65,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   context.locals.cspNonce = nonce;
 
   let response: Response;
-  if (
-    !SAFE_METHODS.has(context.request.method) &&
-    !isSameOriginRequest(context.request)
-  ) {
+  if (!SAFE_METHODS.has(context.request.method) && !isSameOriginRequest(context.request)) {
     response = new Response("Forbidden", { status: 403 });
   } else {
     response = await next();

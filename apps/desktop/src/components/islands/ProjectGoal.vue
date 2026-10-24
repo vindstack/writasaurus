@@ -10,7 +10,7 @@ const error = ref("");
 const project = ref<ActiveProjectDetails | null>(null);
 const goal = computed(() => project.value?.settings.user_settings.manuscriptWordGoal ?? 0);
 const words = computed(() => project.value?.manuscript.totalWords ?? 0);
-const percent = computed(() => goal.value ? Math.min(words.value / goal.value * 100, 100) : 0);
+const percent = computed(() => (goal.value ? Math.min((words.value / goal.value) * 100, 100) : 0));
 const remaining = computed(() => Math.max(goal.value - words.value, 0));
 
 function dateKey(date: Date): string {
@@ -26,9 +26,7 @@ const historyDays = computed(() => {
   if (!activeProject) return [];
 
   const userSettings = activeProject.settings.user_settings;
-  const history = new Map(
-    userSettings.dailyWritingHistory.map((entry) => [entry.date, entry]),
-  );
+  const history = new Map(userSettings.dailyWritingHistory.map((entry) => [entry.date, entry]));
   const today = dateKey(new Date());
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -54,8 +52,15 @@ const historyDays = computed(() => {
     const entry = history.get(key);
     const known = key >= userSettings.dailyWritingTrackingStarted;
     const dayWords = entry?.words ?? 0;
-    const dayGoal = key === today ? userSettings.dailyWordGoal : entry?.goal ?? userSettings.dailyWordGoal;
-    const activity = !known ? "unknown" : dayWords >= dayGoal ? "goal" : dayWords > 0 ? "writing" : "none";
+    const dayGoal =
+      key === today ? userSettings.dailyWordGoal : (entry?.goal ?? userSettings.dailyWordGoal);
+    const activity = !known
+      ? "unknown"
+      : dayWords >= dayGoal
+        ? "goal"
+        : dayWords > 0
+          ? "writing"
+          : "none";
     return {
       date: key,
       day: date.toLocaleDateString(undefined, { day: "numeric" }),
@@ -66,8 +71,8 @@ const historyDays = computed(() => {
       description: !known
         ? `${date.toLocaleDateString()}: tracking not started`
         : `${date.toLocaleDateString()}: ${dayWords.toLocaleString()} words${
-          dayWords >= dayGoal ? ", daily goal completed" : ""
-        }`,
+            dayWords >= dayGoal ? ", daily goal completed" : ""
+          }`,
     };
   });
 });
@@ -83,12 +88,8 @@ function streakLength(completed: (day: (typeof historyDays.value)[number]) => bo
   return count;
 }
 
-const writingStreak = computed(() =>
-  streakLength((day) => day.words > 0)
-);
-const goalStreak = computed(() =>
-  streakLength((day) => day.words >= day.goal)
-);
+const writingStreak = computed(() => streakLength((day) => day.words > 0));
+const goalStreak = computed(() => streakLength((day) => day.words >= day.goal));
 const todayWords = computed(() => historyDays.value.at(-1)?.words ?? 0);
 const estimate = computed(() => {
   const trackedDays = historyDays.value.filter((day) => day.known);
@@ -177,9 +178,10 @@ onMounted(async () => {
         </li>
       </ol>
       <p v-if="estimate" class="estimate">
-        At your average of {{ estimate.average }} words per day over {{ estimate.trackedDays }}
-        tracked {{ estimate.trackedDays === 1 ? "day" : "days" }}, the draft may be complete by
-        <strong>{{ estimate.date }}</strong>.
+        At your average of {{ estimate.average }} words per day over
+        {{ estimate.trackedDays }} tracked {{ estimate.trackedDays === 1 ? "day" : "days" }}, the
+        draft may be complete by <strong>{{ estimate.date }}</strong
+        >.
       </p>
       <p v-else-if="remaining" class="estimate">
         A completion estimate will appear once you have writing history.
@@ -211,6 +213,10 @@ onMounted(async () => {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0;
+}
+
+.title {
+  text-transform: capitalize;
 }
 
 .counts strong {

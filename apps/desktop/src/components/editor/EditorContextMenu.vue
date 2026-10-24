@@ -38,13 +38,15 @@ const thesaurusLoading = ref(false);
 const thesaurusError = ref("");
 const synonymGroups = ref<SynonymGroup[]>([]);
 const groupsWithSuggestions = computed<SuggestionGroup[]>(() =>
-  synonymGroups.value.map((group, id) => ({
-    id,
-    definition: group.definition,
-    suggestions: group.words
-      .map((word) => word.replaceAll("_", " "))
-      .filter((word) => normalizeWord(word) !== normalizeWord(thesaurusWord.value)),
-  })).filter((group) => group.suggestions.length > 0)
+  synonymGroups.value
+    .map((group, id) => ({
+      id,
+      definition: group.definition,
+      suggestions: group.words
+        .map((word) => word.replaceAll("_", " "))
+        .filter((word) => normalizeWord(word) !== normalizeWord(thesaurusWord.value)),
+    }))
+    .filter((group) => group.suggestions.length > 0),
 );
 const canCopy = computed(() => Boolean(selectedText.value || clickedWord.value));
 
@@ -63,23 +65,23 @@ function isWordCharacter(character: string): boolean {
 }
 
 function isWordConnector(text: string, index: number): boolean {
-  return ["'", "’", "-"].includes(text[index]) &&
+  return (
+    ["'", "’", "-"].includes(text[index]) &&
     index > 0 &&
     index + 1 < text.length &&
     isWordCharacter(text[index - 1]) &&
-    isWordCharacter(text[index + 1]);
+    isWordCharacter(text[index + 1])
+  );
 }
 
 function wordRangeAtCaret(editor: HTMLElement, caret: Range): Range | null {
   if (caret.startContainer.nodeType !== Node.TEXT_NODE) return null;
   const caretNode = caret.startContainer as Text;
-  const block = caretNode.parentElement?.closest<HTMLElement>(
-    "p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, div",
-  ) ?? editor;
-  const walker = document.createTreeWalker(
-    block,
-    NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT,
-  );
+  const block =
+    caretNode.parentElement?.closest<HTMLElement>(
+      "p, h1, h2, h3, h4, h5, h6, li, blockquote, pre, div",
+    ) ?? editor;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
   const segments: TextSegment[] = [];
   const characters: string[] = [];
   let textLength = 0;
@@ -111,21 +113,12 @@ function wordRangeAtCaret(editor: HTMLElement, caret: Range): Range | null {
 
   let start = offset;
   let end = offset + 1;
-  while (
-    start > 0 &&
-    (isWordCharacter(text[start - 1]) || isWordConnector(text, start - 1))
-  ) start--;
-  while (
-    end < text.length &&
-    (isWordCharacter(text[end]) || isWordConnector(text, end))
-  ) end++;
+  while (start > 0 && (isWordCharacter(text[start - 1]) || isWordConnector(text, start - 1)))
+    start--;
+  while (end < text.length && (isWordCharacter(text[end]) || isWordConnector(text, end))) end++;
 
-  const startSegment = segments.find((segment) =>
-    start >= segment.start && start < segment.end
-  );
-  const endSegment = segments.find((segment) =>
-    end > segment.start && end <= segment.end
-  );
+  const startSegment = segments.find((segment) => start >= segment.start && start < segment.end);
+  const endSegment = segments.find((segment) => end > segment.start && end <= segment.end);
   if (!startSegment || !endSegment || !editor.contains(startSegment.node)) return null;
   const range = document.createRange();
   range.setStart(startSegment.node, start - startSegment.start);
@@ -146,9 +139,7 @@ function caretRangeAtPoint(x: number, y: number): Range | null {
 }
 
 function rangeIsInEditor(range: Range, editor = getEditor()): boolean {
-  return !!editor &&
-    editor.contains(range.startContainer) &&
-    editor.contains(range.endContainer);
+  return !!editor && editor.contains(range.startContainer) && editor.contains(range.endContainer);
 }
 
 async function showContextMenu(x: number, y: number): Promise<void> {
@@ -172,12 +163,14 @@ function onContextMenu(event: MouseEvent): void {
 
   caretRange = caretRangeAtPoint(event.clientX, event.clientY);
   const selection = document.getSelection();
-  const currentSelection = selection && !selection.isCollapsed && selection.rangeCount > 0
-    ? selection.getRangeAt(0)
-    : null;
-  selectedRange = currentSelection && rangeIsInEditor(currentSelection, editor)
-    ? currentSelection.cloneRange()
-    : null;
+  const currentSelection =
+    selection && !selection.isCollapsed && selection.rangeCount > 0
+      ? selection.getRangeAt(0)
+      : null;
+  selectedRange =
+    currentSelection && rangeIsInEditor(currentSelection, editor)
+      ? currentSelection.cloneRange()
+      : null;
   selectedText.value = selectedRange?.toString() ?? "";
   clickedWordRange = caretRange ? wordRangeAtCaret(editor, caretRange) : null;
   clickedWord.value = clickedWordRange?.toString() ?? "";
@@ -209,9 +202,10 @@ function pasteRange(): Range | null {
 
 function showClipboardError(action: string, error: unknown): void {
   console.error(`Could not ${action} editor text.`, error);
-  clipboardError.value = error instanceof Error
-    ? `Could not ${action}: ${error.message}`
-    : `Could not ${action}. Clipboard access is unavailable.`;
+  clipboardError.value =
+    error instanceof Error
+      ? `Could not ${action}: ${error.message}`
+      : `Could not ${action}. Clipboard access is unavailable.`;
 }
 
 async function copyOrCut(cut: boolean): Promise<void> {
@@ -333,7 +327,8 @@ function applySuggestion(suggestion: string): void {
     !rangeIsInEditor(range, editor) ||
     range.toString() !== thesaurusWord.value
   ) {
-    thesaurusError.value = "The original word is no longer available. Close the dialog and try again.";
+    thesaurusError.value =
+      "The original word is no longer available. Close the dialog and try again.";
     return;
   }
   if (!replaceRangeInEditor(range, matchWordCase(thesaurusWord.value, suggestion))) {
@@ -345,7 +340,8 @@ function applySuggestion(suggestion: string): void {
 
 function onMenuKeyDown(event: KeyboardEvent): void {
   const items = Array.from(
-    contextMenu.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? [],
+    contextMenu.value?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ??
+      [],
   );
   const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement);
   let nextIndex: number | undefined;
@@ -384,20 +380,10 @@ onUnmounted(() => {
       data-editor-context-menu
       @keydown="onMenuKeyDown"
     >
-      <button
-        type="button"
-        role="menuitem"
-        :disabled="!canCopy"
-        @click="copyOrCut(true)"
-      >
+      <button type="button" role="menuitem" :disabled="!canCopy" @click="copyOrCut(true)">
         Cut
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        :disabled="!canCopy"
-        @click="copyOrCut(false)"
-      >
+      <button type="button" role="menuitem" :disabled="!canCopy" @click="copyOrCut(false)">
         Copy
       </button>
       <button type="button" role="menuitem" @click="paste">Paste</button>
@@ -428,11 +414,7 @@ onUnmounted(() => {
         No alternatives were found for “{{ thesaurusWord }}”.
       </p>
       <div v-else class="suggestionList" data-thesaurus-suggestions>
-        <section
-          v-for="group in groupsWithSuggestions"
-          :key="group.id"
-          class="synonymGroup"
-        >
+        <section v-for="group in groupsWithSuggestions" :key="group.id" class="synonymGroup">
           <p class="senseDefinition">{{ group.definition }}</p>
           <div class="suggestionActions">
             <Button
@@ -454,11 +436,12 @@ onUnmounted(() => {
           href="https://github.com/globalwordnet/english-wordnet/releases/tag/2025-edition"
           target="_blank"
           rel="noreferrer"
-        >Open English WordNet 2025</a>
+          >Open English WordNet 2025</a
+        >
         and Princeton WordNet, under
         <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
-          CC BY 4.0
-        </a>.
+          CC BY 4.0 </a
+        >.
       </small>
       <template #footer>
         <Button variant="quiet" size="small" @click="closeThesaurus">Cancel</Button>

@@ -35,10 +35,7 @@ export function restoreLocal(): ManuscriptSessionState | null {
   if (!state?.manuscript?.chapters?.length) return null;
   return {
     manuscript: state.manuscript,
-    activeChapter: Math.min(
-      Number(state.activeChapter) || 0,
-      state.manuscript.chapters.length - 1,
-    ),
+    activeChapter: Math.min(Number(state.activeChapter) || 0, state.manuscript.chapters.length - 1),
     hasUnsavedChanges: Boolean(state.hasUnsavedChanges),
   };
 }

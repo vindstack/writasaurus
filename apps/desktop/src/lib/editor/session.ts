@@ -40,7 +40,7 @@ function restoreSession(): boolean {
  * false when the user should be sent to the welcome page.
  */
 export async function restoreEditor(): Promise<boolean> {
-  const opened = await restoreDesktopFile() || restoreSession();
+  const opened = (await restoreDesktopFile()) || restoreSession();
 
   applyFontPreference(getFontPreference());
   return opened || shouldSkipWelcome();

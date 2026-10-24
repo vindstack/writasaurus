@@ -59,10 +59,7 @@ function tokenizeForDiff(text: string): string[] {
  * Check if a change is substantial enough to record.
  * Filters out trivial edits within a batched keystroke group.
  */
-function isSubstantialChange(
-  prevTokens: string[],
-  newTokens: string[],
-): boolean {
+function isSubstantialChange(prevTokens: string[], newTokens: string[]): boolean {
   if (prevTokens.length === newTokens.length) {
     return false;
   }

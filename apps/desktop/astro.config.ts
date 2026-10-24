@@ -1,5 +1,5 @@
 import { defineConfig } from "astro/config";
-import deno from "@deno/astro-adapter";
+import node from "@astrojs/node";
 import vue from "@astrojs/vue";
 
 export default defineConfig({
@@ -7,13 +7,14 @@ export default defineConfig({
   devToolbar: {
     enabled: false,
   },
-  adapter: deno({ start: false, hostname: "127.0.0.1", port: 8000 }),
+  adapter: node({ mode: "middleware" }),
   integrations: [vue()],
   build: {
     inlineStylesheets: "never",
   },
   security: {
     checkOrigin: false,
+    allowedDomains: [{ hostname: "localhost" }, { hostname: "127.0.0.1" }],
   },
   vite: {
     envDir: "../../",

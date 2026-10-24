@@ -54,9 +54,8 @@ async function chooseLocation(): Promise<void> {
     }
     parentPath.value = result.parentPath;
   } catch (error) {
-    errorMessage.value = error instanceof Error
-      ? error.message
-      : "Could not choose a parent folder.";
+    errorMessage.value =
+      error instanceof Error ? error.message : "Could not choose a parent folder.";
   } finally {
     choosingLocation.value = false;
   }
@@ -87,12 +86,7 @@ async function createProject(): Promise<void> {
 </script>
 
 <template>
-  <Dialog
-    id="create-project-dialog"
-    title="Create New Project"
-    :open="open"
-    @close="emit('close')"
-  >
+  <Dialog id="create-project-dialog" title="Create New Project" :open="open" @close="emit('close')">
     <form class="projectForm" @submit.prevent="createProject">
       <p>
         Choose where to create your project. Writasaurus will make a new folder there and put the
@@ -130,7 +124,13 @@ async function createProject(): Promise<void> {
           :disabled="choosingLocation || creating"
           @click="chooseLocation"
         >
-          {{ choosingLocation ? "Choosing..." : parentPath ? "Change Parent Folder" : "Choose Parent Folder..." }}
+          {{
+            choosingLocation
+              ? "Choosing..."
+              : parentPath
+                ? "Change Parent Folder"
+                : "Choose Parent Folder..."
+          }}
         </Button>
       </section>
       <p v-if="errorMessage" class="error" role="alert">{{ errorMessage }}</p>

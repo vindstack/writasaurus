@@ -1,3 +1,7 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
+import { env } from "node:process";
+
 interface EmailMessage {
   to: string;
   subject: string;
@@ -6,27 +10,28 @@ interface EmailMessage {
 }
 
 function escapeHtml(value: string): string {
-  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 export async function sendEmail(message: EmailMessage): Promise<void> {
-  if (!Deno.env.get("DENO_DEPLOYMENT_ID")) {
-    const logPath = Deno.env.get("EMAIL_LOG_FILE")?.trim() || ".data/emails.jsonl";
-    const separator = logPath.lastIndexOf("/");
-    const logDirectory = separator >= 0 ? logPath.slice(0, separator) || "/" : ".";
-    await Deno.mkdir(logDirectory, { recursive: true });
-    await Deno.writeTextFile(
+  if (env.NODE_ENV !== "production") {
+    const logPath = process.env.EMAIL_LOG_FILE?.trim() || ".data/emails.jsonl";
+    await mkdir(dirname(logPath), { recursive: true });
+    await appendFile(
       logPath,
       `${JSON.stringify({ sentAt: new Date().toISOString(), ...message })}\n`,
-      { append: true, create: true },
     );
     console.info(`Development email written to ${logPath}`);
     return;
   }
 
-  const apiKey = Deno.env.get("RESEND_API_KEY")?.trim();
-  const from = Deno.env.get("RESEND_FROM_EMAIL")?.trim();
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.RESEND_FROM_EMAIL?.trim();
   if (!apiKey || !from) throw new Error("Resend email is not configured.");
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -54,9 +59,7 @@ export async function sendPasscode(email: string, code: string): Promise<void> {
   await sendEmail({
     to: email,
     subject: "Your Writasaurus sign-in code",
-    text:
-      `Your Writasaurus sign-in code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this email.`,
-    html:
-      `<p>Your Writasaurus sign-in code is <strong>${safeCode}</strong>.</p><p>It expires in 10 minutes. If you did not request it, you can ignore this email.</p>`,
+    text: `Your Writasaurus sign-in code is ${code}. It expires in 10 minutes. If you did not request it, you can ignore this email.`,
+    html: `<p>Your Writasaurus sign-in code is <strong>${safeCode}</strong>.</p><p>It expires in 10 minutes. If you did not request it, you can ignore this email.</p>`,
   });
 }

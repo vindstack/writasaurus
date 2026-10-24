@@ -31,24 +31,30 @@ export function inlineMarkdown(text: string): string {
  */
 export function markdownToHtml(markdown: string): string {
   if (!markdown.trim()) return "<p></p>";
-  return markdown.split(/\r?\n\r?\n/).map((part) => {
-    const value = part.replace(/^[\r\n]+/, "").replace(/[\r\n\s]+$/, "");
-    if (!value) return "";
-    const trimmedStart = value.trimStart();
-    if (trimmedStart.startsWith("### ")) return `<h3>${inlineMarkdown(trimmedStart.slice(4))}</h3>`;
-    if (trimmedStart.startsWith("## ")) return `<h2>${inlineMarkdown(trimmedStart.slice(3))}</h2>`;
-    if (trimmedStart.startsWith("# ")) return `<h1>${inlineMarkdown(trimmedStart.slice(2))}</h1>`;
-    if (trimmedStart.startsWith("> ")) {
-      return `<blockquote>${inlineMarkdown(trimmedStart.slice(2))}</blockquote>`;
-    }
-    const lines = value.split(/\r?\n/);
-    if (lines.every((line) => line.trimStart().startsWith("- "))) {
-      return `<ul>${
-        lines.map((line) => `<li>${inlineMarkdown(line.trimStart().slice(2))}</li>`).join("")
-      }</ul>`;
-    }
-    return `<p>${inlineMarkdown(value).replace(/\r?\n/g, "<br>")}</p>`;
-  }).filter(Boolean).join("");
+  return markdown
+    .split(/\r?\n\r?\n/)
+    .map((part) => {
+      const value = part.replace(/^[\r\n]+/, "").replace(/[\r\n\s]+$/, "");
+      if (!value) return "";
+      const trimmedStart = value.trimStart();
+      if (trimmedStart.startsWith("### "))
+        return `<h3>${inlineMarkdown(trimmedStart.slice(4))}</h3>`;
+      if (trimmedStart.startsWith("## "))
+        return `<h2>${inlineMarkdown(trimmedStart.slice(3))}</h2>`;
+      if (trimmedStart.startsWith("# ")) return `<h1>${inlineMarkdown(trimmedStart.slice(2))}</h1>`;
+      if (trimmedStart.startsWith("> ")) {
+        return `<blockquote>${inlineMarkdown(trimmedStart.slice(2))}</blockquote>`;
+      }
+      const lines = value.split(/\r?\n/);
+      if (lines.every((line) => line.trimStart().startsWith("- "))) {
+        return `<ul>${lines
+          .map((line) => `<li>${inlineMarkdown(line.trimStart().slice(2))}</li>`)
+          .join("")}</ul>`;
+      }
+      return `<p>${inlineMarkdown(value).replace(/\r?\n/g, "<br>")}</p>`;
+    })
+    .filter(Boolean)
+    .join("");
 }
 
 /**

@@ -18,7 +18,7 @@ export const SECTION_TYPES = [
   "copyright-page",
 ] as const;
 
-export type SectionType = typeof SECTION_TYPES[number];
+export type SectionType = (typeof SECTION_TYPES)[number];
 
 export const SECTION_TYPE_LABELS: Record<SectionType, string> = {
   chapter: "Chapter",

@@ -56,12 +56,7 @@ onUnmounted(() => stopFocusWatch?.());
       <h2>Writing Assistance</h2>
       <button type="button" class="link" @click="closeAssistance()">Close</button>
     </div>
-    <p
-      class="status"
-      role="status"
-      aria-live="polite"
-      :data-status="status"
-    >
+    <p class="status" role="status" aria-live="polite" :data-status="status">
       <span v-if="status === 'loading'" class="spinner" aria-hidden="true" />
       {{ statusText() }}
     </p>
@@ -87,11 +82,7 @@ onUnmounted(() => stopFocusWatch?.());
           <span>{{ warning.problem }}: {{ warning.message }}</span>
         </button>
         <div class="actions">
-          <button
-            v-if="warning.suggestions[0]"
-            type="button"
-            @click="replaceWarning(warning)"
-          >
+          <button v-if="warning.suggestions[0]" type="button" @click="replaceWarning(warning)">
             Replace with “{{ warning.suggestions[0] }}”
           </button>
           <button
@@ -258,5 +249,4 @@ onUnmounted(() => stopFocusWatch?.());
   font-size: 0.7rem;
   padding: 0.2rem 0.4rem;
 }
-
 </style>

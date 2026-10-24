@@ -1,0 +1,21 @@
+{
+  "name": "@writasaurus/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./mod.ts",
+    "./path": "./path.ts",
+    "./r2": "./r2.ts",
+    "./releases": "./releases.ts",
+    "./settings": "./settings.ts",
+    "./server": "./server.ts"
+  },
+  "dependencies": {
+    "serve-static": "^2.2.0",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@types/serve-static": "^2.2.0"
+  }
+}

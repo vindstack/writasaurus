@@ -16,10 +16,12 @@ let synonymIndexPromise: Promise<SynonymIndex> | undefined;
 function isSynonymGroup(value: unknown): value is SynonymGroup {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<SynonymGroup>;
-  return typeof candidate.definition === "string" &&
+  return (
+    typeof candidate.definition === "string" &&
     typeof candidate.partOfSpeech === "string" &&
     Array.isArray(candidate.words) &&
-    candidate.words.every((word) => typeof word === "string");
+    candidate.words.every((word) => typeof word === "string")
+  );
 }
 
 export function parseSynonymIndex(value: unknown): SynonymIndex {
@@ -33,7 +35,8 @@ export function parseSynonymIndex(value: unknown): SynonymIndex {
     !candidate.groups.every(isSynonymGroup) ||
     !candidate.words ||
     typeof candidate.words !== "object"
-  ) throw new Error("The offline thesaurus data has an invalid format.");
+  )
+    throw new Error("The offline thesaurus data has an invalid format.");
 
   const groups = candidate.groups as SynonymGroup[];
   const words = candidate.words as Record<string, unknown>;
@@ -41,7 +44,8 @@ export function parseSynonymIndex(value: unknown): SynonymIndex {
     if (
       !Array.isArray(indexes) ||
       !indexes.every((index) => Number.isInteger(index) && index >= 0 && index < groups.length)
-    ) throw new Error("The offline thesaurus index has invalid word entries.");
+    )
+      throw new Error("The offline thesaurus index has invalid word entries.");
   }
   return { source: candidate.source, groups, words: words as Record<string, number[]> };
 }
@@ -70,10 +74,13 @@ function normalizeWord(word: string): string {
 
 export function findSynonymGroups(word: string, index: SynonymIndex): SynonymGroup[] {
   const groupIndexes = index.words[normalizeWord(word)] ?? [];
-  return groupIndexes.map((groupIndex) => index.groups[groupIndex]).filter((group) =>
-    group !== undefined &&
-    group.words.some((candidate) => normalizeWord(candidate) !== normalizeWord(word))
-  );
+  return groupIndexes
+    .map((groupIndex) => index.groups[groupIndex])
+    .filter(
+      (group) =>
+        group !== undefined &&
+        group.words.some((candidate) => normalizeWord(candidate) !== normalizeWord(word)),
+    );
 }
 
 export async function lookupSynonymGroups(word: string): Promise<SynonymGroup[]> {

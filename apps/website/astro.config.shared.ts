@@ -11,15 +11,22 @@ export const sharedConfig = {
   },
   security: {
     checkOrigin: false,
+    allowedDomains: [
+      { hostname: "localhost" },
+      { hostname: "127.0.0.1" },
+      ...(process.env.PUBLIC_SITE_URL
+        ? [{ hostname: new URL(process.env.PUBLIC_SITE_URL).hostname }]
+        : []),
+    ],
   },
   vite: {
     build: {
       rolldownOptions: {
-        external: ["@db/postgres"],
+        external: ["pg"],
       },
     },
     ssr: {
-      external: ["@db/postgres"],
+      external: ["pg"],
       noExternal: ["@astrojs/vue"],
     },
   },
