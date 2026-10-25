@@ -12,16 +12,15 @@ export interface ReleaseChecksums {
   objectKey: string;
   downloadUrl: string;
   sha256: string;
+  sizeBytes?: number;
 }
+
+export type ReleasePlatform = "linux" | "macos" | "windows";
 
 export interface ReleaseManifest {
   version: string;
   releasedAt: string;
-  artifacts: {
-    linux: ReleaseArtifact;
-    macos: ReleaseArtifact;
-    windows: ReleaseArtifact;
-  };
+  artifacts: Partial<Record<ReleasePlatform, ReleaseArtifact>>;
   checksums: ReleaseChecksums;
 }
 
@@ -42,6 +41,20 @@ export function isPublicHttpsUrl(value: string): boolean {
 }
 
 function downloadUrlMatchesKey(value: string, key: string): boolean {
+  const fileName = key.split("/").at(-1);
+  const workerPath =
+    fileName === "Writasaurus.AppImage"
+      ? "/api/releases/linux"
+      : fileName === "Writasaurus-macos.tar.gz"
+        ? "/api/releases/macos"
+        : fileName === "Writasaurus.msi"
+          ? "/api/releases/windows"
+          : fileName === "SHA256SUMS.txt" ||
+              /^(linux|macos|windows)-SHA256SUMS\.txt$/.test(fileName ?? "")
+            ? "/api/releases/checksums"
+            : null;
+  if (value === workerPath) return true;
+  if (!isPublicHttpsUrl(value)) return false;
   try {
     const url = new URL(value);
     const suffix = key.split("/").map(encodeURIComponent).join("/");
@@ -62,7 +75,6 @@ function isArtifact(value: unknown): value is ReleaseArtifact {
       artifact.objectKey,
     ) &&
     typeof artifact.downloadUrl === "string" &&
-    isPublicHttpsUrl(artifact.downloadUrl) &&
     downloadUrlMatchesKey(artifact.downloadUrl, artifact.objectKey) &&
     typeof artifact.sizeBytes === "number" &&
     Number.isSafeInteger(artifact.sizeBytes) &&
@@ -89,30 +101,44 @@ export function isReleaseManifest(
     return false;
 
   const artifacts = release.artifacts as Record<string, unknown>;
+  const platformFileNames = {
+    linux: "Writasaurus.AppImage",
+    macos: "Writasaurus-macos.tar.gz",
+    windows: "Writasaurus.msi",
+  } as const;
+  const platforms = Object.keys(platformFileNames) as ReleasePlatform[];
   if (
-    !isArtifact(artifacts.linux) ||
-    !isArtifact(artifacts.macos) ||
-    !isArtifact(artifacts.windows)
-  )
+    !platforms.some((platform) => Object.hasOwn(artifacts, platform)) ||
+    platforms.some((platform) => {
+      if (!Object.hasOwn(artifacts, platform)) return false;
+      const artifact = artifacts[platform];
+      if (!isArtifact(artifact)) return true;
+      return (
+        artifact.fileName !== platformFileNames[platform] ||
+        !new RegExp(
+          `^releases/v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)(?:-[\\w.-]+)?(?:\\+[a-zA-Z0-9.-]+)?/${platformFileNames[platform].replaceAll(".", "\\.")}$`,
+        ).test(artifact.objectKey)
+      );
+    })
+  ) {
     return false;
+  }
   if (expectedVersion !== undefined && release.version !== expectedVersion) return false;
-  const prefix = `releases/v${release.version}/`;
   const checksums = release.checksums as Record<string, unknown> | undefined;
   return (
     !!checksums &&
     checksums.fileName === "SHA256SUMS.txt" &&
     typeof checksums.objectKey === "string" &&
-    checksums.objectKey === `${prefix}SHA256SUMS.txt` &&
+    /^releases\/v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[\w.-]+)?(?:\+[a-zA-Z0-9.-]+)?\/(?:SHA256SUMS\.txt|(?:linux|macos|windows)-SHA256SUMS\.txt)$/.test(
+      checksums.objectKey,
+    ) &&
     typeof checksums.downloadUrl === "string" &&
-    isPublicHttpsUrl(checksums.downloadUrl) &&
     downloadUrlMatchesKey(checksums.downloadUrl, checksums.objectKey) &&
     typeof checksums.sha256 === "string" &&
     /^[a-f0-9]{64}$/.test(checksums.sha256) &&
-    artifacts.linux.objectKey === `${prefix}Writasaurus.AppImage` &&
-    artifacts.linux.fileName === "Writasaurus.AppImage" &&
-    artifacts.macos.objectKey === `${prefix}Writasaurus-macos.tar.gz` &&
-    artifacts.macos.fileName === "Writasaurus-macos.tar.gz" &&
-    artifacts.windows.objectKey === `${prefix}Writasaurus.msi` &&
-    artifacts.windows.fileName === "Writasaurus.msi"
+    (checksums.sizeBytes === undefined ||
+      (typeof checksums.sizeBytes === "number" &&
+        Number.isSafeInteger(checksums.sizeBytes) &&
+        checksums.sizeBytes > 0))
   );
 }

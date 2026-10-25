@@ -2,16 +2,15 @@ import { test } from "vitest";
 import type { Browser } from "playwright";
 import { launchBrowser } from "../../../packages/shared/test/browser.ts";
 import { startWebsiteServer } from "./helpers.ts";
+import { setTestReleaseObjects } from "../src/lib/cloudflare-env.test.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
   if (!condition) throw new Error(message);
 }
 
-test("browser: native download forms follow public R2 redirects with and without JavaScript", async () => {
-  const names = ["PUBLIC_SITE_URL", "WRITASAURUS_R2_PUBLIC_BASE_URL"];
+test("browser: native download forms stream private R2 files with and without JavaScript", async () => {
+  const names = ["PUBLIC_SITE_URL"];
   const original = new Map(names.map((name) => [name, process.env[name]]));
-  const originalFetch = globalThis.fetch;
-  const downloadOrigin = "https://downloads.example.com";
   const platforms = {
     linux: { label: "Linux", fileName: "Writasaurus.AppImage" },
     macos: { label: "macOS", fileName: "Writasaurus-macos.tar.gz" },
@@ -28,8 +27,8 @@ test("browser: native download forms follow public R2 redirects with and without
           label,
           fileName,
           objectKey: `${prefix}${fileName}`,
-          downloadUrl: `${downloadOrigin}/${prefix}${fileName}`,
-          sizeBytes: 1,
+          downloadUrl: `/api/releases/${platform}`,
+          sizeBytes: 13,
           sha256: "a".repeat(64),
         },
       ]),
@@ -37,21 +36,20 @@ test("browser: native download forms follow public R2 redirects with and without
     checksums: {
       fileName: "SHA256SUMS.txt",
       objectKey: `${prefix}SHA256SUMS.txt`,
-      downloadUrl: `${downloadOrigin}/${prefix}SHA256SUMS.txt`,
+      downloadUrl: "/api/releases/checksums",
       sha256: "b".repeat(64),
     },
   };
   const server = await startWebsiteServer();
   const { origin } = server;
   delete process.env.PUBLIC_SITE_URL;
-  process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = downloadOrigin;
-  globalThis.fetch = (input, init) => {
-    if (String(input) === `${downloadOrigin}/latest.json`) {
-      assert(init?.cache === "no-store");
-      return Promise.resolve(Response.json(manifest));
-    }
-    return originalFetch(input, init);
-  };
+  setTestReleaseObjects({
+    "latest.json": new TextEncoder().encode(JSON.stringify(manifest)),
+    [`${prefix}Writasaurus.AppImage`]: new TextEncoder().encode("test artifact"),
+    [`${prefix}Writasaurus-macos.tar.gz`]: new TextEncoder().encode("test artifact"),
+    [`${prefix}Writasaurus.msi`]: new TextEncoder().encode("test artifact"),
+    [`${prefix}SHA256SUMS.txt`]: new TextEncoder().encode("test artifact"),
+  });
   let browser: Browser | undefined;
   try {
     browser = await launchBrowser();
@@ -60,13 +58,6 @@ test("browser: native download forms follow public R2 redirects with and without
       await context.route("**/*", (route) => {
         const url = route.request().url();
         if (url.startsWith(`${origin}/`)) return route.continue();
-        if (url.startsWith(`${downloadOrigin}/${prefix}`)) {
-          return route.fulfill({
-            contentType: "application/octet-stream",
-            headers: { "content-disposition": `attachment; filename="${url.split("/").at(-1)}"` },
-            body: "test artifact",
-          });
-        }
         return route.abort();
       });
       const page = await context.newPage();
@@ -78,6 +69,11 @@ test("browser: native download forms follow public R2 redirects with and without
             await form.locator('input[name="donation"][value="none"]').check();
           }
           await form.locator('select[name="platform"]').selectOption(platform);
+          const linuxHelp = form.locator("[data-linux-help]");
+          assert(
+            (await linuxHelp.isVisible()) === (javaScriptEnabled && platform === "linux"),
+            `Expected Linux troubleshooting details to be visible only for Linux (JavaScript ${javaScriptEnabled}).`,
+          );
           const consent = form.locator("[data-terms-consent]");
           assert(!(await consent.isChecked()), "Terms acceptance must not be preselected.");
           await form.getByRole("button").click();
@@ -92,7 +88,7 @@ test("browser: native download forms follow public R2 redirects with and without
           const pendingDownload = page.waitForEvent("download", { timeout: 10_000 });
           await form.getByRole("button").click();
           const download = await pendingDownload;
-          assert(download.url() === `${downloadOrigin}/${prefix}${fileName}`);
+          assert(download.url() === `${origin}/api/releases/${platform}`);
           assert(download.suggestedFilename() === fileName);
           assert((await download.failure()) === null);
           await download.delete();
@@ -101,7 +97,7 @@ test("browser: native download forms follow public R2 redirects with and without
       await context.close();
     }
   } finally {
-    globalThis.fetch = originalFetch;
+    setTestReleaseObjects(undefined);
     await browser?.close();
     await server.shutdown();
     for (const [name, value] of original) {

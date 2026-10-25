@@ -9,6 +9,7 @@ import {
 } from "../src/lib/payment-service.ts";
 import { MemoryWebsiteStore, setWebsiteStoreForTests } from "../src/lib/donation-store.ts";
 import { verifyStripeWebhook } from "../src/lib/stripe.ts";
+import { setTestReleaseObjects } from "../src/lib/cloudflare-env.test.ts";
 import { removeTestFile, request } from "./helpers.ts";
 
 function assert(condition: unknown, message = "Assertion failed"): asserts condition {
@@ -125,7 +126,6 @@ test("free downloads and optional donations share normal accounts", async () => 
     provider: process.env.PAYMENT_PROVIDER,
     nodeEnv: process.env.NODE_ENV,
     siteUrl: process.env.PUBLIC_SITE_URL,
-    downloadBase: process.env.WRITASAURUS_R2_PUBLIC_BASE_URL,
     emailLogFile: process.env.EMAIL_LOG_FILE,
     sessionSecret: process.env.SESSION_SECRET,
   };
@@ -140,7 +140,7 @@ test("free downloads and optional donations share normal accounts", async () => 
         label: "Linux",
         fileName: "Writasaurus.AppImage",
         objectKey: "releases/v1.2.3/Writasaurus.AppImage",
-        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus.AppImage",
+        downloadUrl: "/api/releases/linux",
         sizeBytes: 1,
         sha256: "a".repeat(64),
       },
@@ -148,7 +148,7 @@ test("free downloads and optional donations share normal accounts", async () => 
         label: "macOS",
         fileName: "Writasaurus-macos.tar.gz",
         objectKey: "releases/v1.2.3/Writasaurus-macos.tar.gz",
-        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus-macos.tar.gz",
+        downloadUrl: "/api/releases/macos",
         sizeBytes: 1,
         sha256: "b".repeat(64),
       },
@@ -156,7 +156,7 @@ test("free downloads and optional donations share normal accounts", async () => 
         label: "Windows",
         fileName: "Writasaurus.msi",
         objectKey: "releases/v1.2.3/Writasaurus.msi",
-        downloadUrl: "https://downloads.example/releases/v1.2.3/Writasaurus.msi",
+        downloadUrl: "/api/releases/windows",
         sizeBytes: 1,
         sha256: "c".repeat(64),
       },
@@ -164,23 +164,24 @@ test("free downloads and optional donations share normal accounts", async () => 
     checksums: {
       fileName: "SHA256SUMS.txt",
       objectKey: "releases/v1.2.3/SHA256SUMS.txt",
-      downloadUrl: "https://downloads.example/releases/v1.2.3/SHA256SUMS.txt",
+      downloadUrl: "/api/releases/checksums",
       sha256: "d".repeat(64),
     },
   };
   process.env.PAYMENT_PROVIDER = "mock";
   process.env.NODE_ENV = "test";
   process.env.PUBLIC_SITE_URL = "https://writasaurus.test";
-  process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = "https://downloads.example/apps/";
   process.env.EMAIL_LOG_FILE = emailLogFile;
   process.env.SESSION_SECRET = "test-session-secret-that-is-at-least-32-characters";
   setWebsiteStoreForTests(store);
+  setTestReleaseObjects({
+    "latest.json": new TextEncoder().encode(JSON.stringify(release)),
+    "releases/v1.2.3/Writasaurus.AppImage": new Uint8Array([1]),
+    "releases/v1.2.3/Writasaurus-macos.tar.gz": new Uint8Array([2]),
+    "releases/v1.2.3/Writasaurus.msi": new Uint8Array([3]),
+    "releases/v1.2.3/SHA256SUMS.txt": new Uint8Array([4]),
+  });
   globalThis.fetch = (input, init) => {
-    if (String(input) === "https://downloads.example/apps/latest.json") {
-      assert(init?.redirect === "error");
-      assert(init?.cache === "no-store");
-      return Promise.resolve(Response.json(release));
-    }
     if (String(input) === "https://api.resend.com/emails") {
       return Promise.reject(new Error("Development emails must not call Resend."));
     }
@@ -198,10 +199,43 @@ test("free downloads and optional donations share normal accounts", async () => 
       body: freeForm,
     });
     assert(freeDownload.status === 303);
-    assert(
-      freeDownload.headers.get("location") ===
-        "https://downloads.example/releases/v1.2.3/Writasaurus.AppImage",
-    );
+    assert(freeDownload.headers.get("location") === "http://localhost/api/releases/linux");
+
+    setTestReleaseObjects({
+      "latest.json": new TextEncoder().encode(
+        JSON.stringify({ ...release, artifacts: { linux: release.artifacts.linux } }),
+      ),
+      "releases/v1.2.3/Writasaurus.AppImage": new Uint8Array([1]),
+      "releases/v1.2.3/SHA256SUMS.txt": new Uint8Array([4]),
+    });
+    const unavailablePlatform = await request("/api/download", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: new URLSearchParams({
+        platform: "windows",
+        donation: "none",
+        termsAccepted: "yes",
+      }),
+    });
+    assert(unavailablePlatform.status === 404);
+    const unavailableDonation = await request("/api/download", {
+      method: "POST",
+      headers: { origin: "http://localhost" },
+      body: new URLSearchParams({
+        platform: "windows",
+        email: "writer@example.com",
+        donation: "10",
+        termsAccepted: "yes",
+      }),
+    });
+    assert(unavailableDonation.status === 404);
+    setTestReleaseObjects({
+      "latest.json": new TextEncoder().encode(JSON.stringify(release)),
+      "releases/v1.2.3/Writasaurus.AppImage": new Uint8Array([1]),
+      "releases/v1.2.3/Writasaurus-macos.tar.gz": new Uint8Array([2]),
+      "releases/v1.2.3/Writasaurus.msi": new Uint8Array([3]),
+      "releases/v1.2.3/SHA256SUMS.txt": new Uint8Array([4]),
+    });
 
     const noEmailForm = new FormData();
     noEmailForm.set("platform", "windows");
@@ -326,13 +360,13 @@ test("free downloads and optional donations share normal accounts", async () => 
     assert((await optedInAccount.text()).includes('name="marketingEmails" value="yes" checked'));
   } finally {
     globalThis.fetch = originalFetch;
+    setTestReleaseObjects(undefined);
     setWebsiteStoreForTests(undefined);
     await removeTestFile(emailLogFile);
     for (const [name, value] of Object.entries({
       PAYMENT_PROVIDER: original.provider,
       NODE_ENV: original.nodeEnv,
       PUBLIC_SITE_URL: original.siteUrl,
-      WRITASAURUS_R2_PUBLIC_BASE_URL: original.downloadBase,
       EMAIL_LOG_FILE: original.emailLogFile,
       SESSION_SECRET: original.sessionSecret,
     })) {

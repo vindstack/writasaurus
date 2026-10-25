@@ -56,19 +56,10 @@ const latestKey = "latest.json";
 
 function usage(): string {
   return (
-    "Usage: pnpm release:desktop <version> --skip-build [--dry-run]\n" +
-    "       pnpm release:desktop <version> --build-platform linux|macos|windows\n\n" +
-    "Build each platform on its native Linux, macOS, or Windows runner. " +
-    "Cross-platform release builds are not supported.\n" +
-    "--build-platform builds and validates only that platform; it never publishes.\n" +
-    "Combine the native runner outputs at:\n" +
-    platforms
-      .map((platform) => `  desktop/${platform}/${desktopTargets[platform].fileName}`)
-      .join("\n") +
-    "\n" +
-    "--skip-build validates all three existing packages without deleting or rebuilding them, " +
-    "then publishes (or writes metadata only with --dry-run).\n" +
-    "Example: pnpm release:desktop 1.2.3 --skip-build --dry-run"
+    "Usage: pnpm release:desktop <version> --build-platform linux|macos|windows [--dry-run]\n" +
+    "       pnpm release:desktop <version> --build-platform linux|macos|windows --skip-build\n\n" +
+    "Builds (unless --skip-build) and publishes only the selected platform. Build on its native OS. " +
+    "Use --dry-run to validate and preview without R2 credentials or uploads."
   );
 }
 
@@ -102,7 +93,7 @@ function parseArguments(args: string[]): {
     positional.some((arg) => arg.startsWith("-")) ||
     positional.length !== 1 ||
     !isSemanticVersion(positional[0]) ||
-    (buildPlatform !== undefined && (skipBuild || dryRun))
+    buildPlatform === undefined
   ) {
     throw new Error(`Invalid release arguments.\n${usage()}`);
   }
@@ -175,34 +166,6 @@ function readCredentials(): R2Credentials {
     throw new Error("WRITASAURUS_R2_BUCKET must be a valid 3–63 character bucket name.");
   }
   return credentials;
-}
-
-function publicBaseUrl(): URL {
-  const value = requiredEnv("WRITASAURUS_R2_PUBLIC_BASE_URL");
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a valid HTTPS URL.");
-  }
-  if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) {
-    throw new Error(
-      "WRITASAURUS_R2_PUBLIC_BASE_URL must be an HTTPS URL without credentials, query, or fragment.",
-    );
-  }
-  if (url.hostname.endsWith(".r2.cloudflarestorage.com")) {
-    throw new Error(
-      "WRITASAURUS_R2_PUBLIC_BASE_URL points to the private R2 S3 API. " +
-        "Use a public custom domain or an enabled r2.dev URL instead.",
-    );
-  }
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/`;
-  return url;
-}
-
-function publicDownloadUrl(base: URL, objectKey: string): string {
-  const suffix = objectKey.split("/").map(encodeURIComponent).join("/");
-  return new URL(suffix, base).toString();
 }
 
 async function runCommand(command: string, args: string[], description: string): Promise<void> {
@@ -283,16 +246,15 @@ function assertNativeBuildPlatform(
 ): asserts platform is ReleasePlatform {
   if (!platform) {
     throw new Error(
-      "A release requires artifacts from native Linux, macOS, and Windows runners. " +
-        "Build each with --build-platform linux|macos|windows, combine their desktop/ outputs, " +
-        "then use --skip-build (optionally --dry-run). No files were deleted or rebuilt.",
+      "Select one platform with --build-platform linux|macos|windows. " +
+        "Each platform can be built and published independently.",
     );
   }
   const nativeHosts = { linux: "linux", macos: "darwin", windows: "win32" } as const;
   if (nativeHosts[platform] !== host) {
     throw new Error(
       `${artifactLabels[platform]} packaging requires a native ${nativeHosts[platform]} runner; ` +
-        `current host is ${host}. Collect native artifacts and publish with --skip-build.`,
+        `current host is ${host}.`,
     );
   }
 }
@@ -318,7 +280,6 @@ function toHex(bytes: ArrayBuffer): string {
 async function describeArtifacts(
   version: string,
   paths: Record<"linux" | "macos" | "windows", string>,
-  publicUrlBase: URL,
   selectedPlatforms: ReleasePlatform[] = platforms,
 ): Promise<BuiltArtifact[]> {
   const artifacts: BuiltArtifact[] = [];
@@ -352,7 +313,7 @@ async function describeArtifacts(
       label: artifactLabels[platform],
       fileName,
       objectKey: key,
-      downloadUrl: publicDownloadUrl(publicUrlBase, key),
+      downloadUrl: `/api/releases/${platform}`,
       sizeBytes: info.size,
       sha256,
       path,
@@ -386,36 +347,45 @@ async function makeManifest(
   version: string,
   artifacts: BuiltArtifact[],
   checksums: string,
-  publicUrlBase: URL,
 ): Promise<ReleaseManifest> {
-  const artifactMap = Object.fromEntries(
-    artifacts.map(({ platform, label, fileName, objectKey, downloadUrl, sizeBytes, sha256 }) => [
-      platform,
-      { label, fileName, objectKey, downloadUrl, sizeBytes, sha256 },
-    ]),
-  ) as ReleaseManifest["artifacts"];
-  const checksumsKey = `${releasePrefix}/v${version}/SHA256SUMS.txt`;
+  if (artifacts.length !== 1) {
+    throw new Error("A platform release must contain exactly one platform artifact.");
+  }
+  const [artifact] = artifacts;
+  const checksumsKey = `${releasePrefix}/v${version}/${artifact.platform}-SHA256SUMS.txt`;
   return {
     version,
     releasedAt: new Date().toISOString(),
-    artifacts: artifactMap,
+    artifacts: {
+      [artifact.platform]: {
+        label: artifact.label,
+        fileName: artifact.fileName,
+        objectKey: artifact.objectKey,
+        downloadUrl: artifact.downloadUrl,
+        sizeBytes: artifact.sizeBytes,
+        sha256: artifact.sha256,
+      },
+    },
     checksums: {
       fileName: "SHA256SUMS.txt",
       objectKey: checksumsKey,
-      downloadUrl: publicDownloadUrl(publicUrlBase, checksumsKey),
+      downloadUrl: "/api/releases/checksums",
+      sizeBytes: new TextEncoder().encode(checksums).byteLength,
       sha256: toHex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(checksums))),
     },
   };
 }
 
-async function verifyNotPublished(version: string, credentials: R2Credentials): Promise<void> {
+async function verifyNotPublished(
+  version: string,
+  platform: ReleasePlatform,
+  credentials: R2Credentials,
+): Promise<void> {
   const versionPrefix = `${releasePrefix}/v${version}/`;
   const keys = [
-    `${versionPrefix}Writasaurus.AppImage`,
-    `${versionPrefix}Writasaurus-macos.tar.gz`,
-    `${versionPrefix}Writasaurus.msi`,
-    `${versionPrefix}SHA256SUMS.txt`,
-    `${versionPrefix}release.json`,
+    `${versionPrefix}${desktopTargets[platform].fileName}`,
+    `${versionPrefix}${platform}-SHA256SUMS.txt`,
+    `${versionPrefix}${platform}-release.json`,
   ];
   const existingKeys: string[] = [];
   for (const key of keys) {
@@ -429,8 +399,12 @@ async function verifyNotPublished(version: string, credentials: R2Credentials): 
   }
 }
 
-async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<void> {
-  const outputDir = `desktop/release-dry-run/v${version}`;
+async function writeDryRun(
+  version: string,
+  platform: ReleasePlatform,
+  manifest: ReleaseManifest,
+): Promise<void> {
+  const outputDir = `desktop/release-dry-run/v${version}/${platform}`;
   await mkdir(resolve(projectRoot, outputDir), { recursive: true });
   const json = `${JSON.stringify(manifest, null, 2)}\n`;
   await writeFile(resolve(projectRoot, outputDir, "release.json"), json);
@@ -443,46 +417,50 @@ async function writeDryRun(version: string, manifest: ReleaseManifest): Promise<
 }
 
 function makeChecksumsFromManifest(manifest: ReleaseManifest): string {
-  return `${(["linux", "macos", "windows"] as const)
-    .map((platform) => {
+  return `${platforms
+    .flatMap((platform) => {
       const artifact = manifest.artifacts[platform];
-      return `${artifact.sha256}  ${artifact.fileName}`;
+      return artifact ? [`${artifact.sha256}  ${artifact.fileName}`] : [];
     })
     .join("\n")}\n`;
 }
 
+function publishedPlatformVersion(
+  manifest: ReleaseManifest,
+  platform: ReleasePlatform,
+): string | null {
+  const objectKey = manifest.artifacts[platform]?.objectKey;
+  return objectKey?.match(/^releases\/v([^/]+)\//)?.[1] ?? null;
+}
+
 async function assertNewReleaseVersion(
   version: string,
+  platform: ReleasePlatform,
   credentials: R2Credentials,
-): Promise<string | null> {
+): Promise<{ etag: string | null; manifest: ReleaseManifest | null }> {
   const response = await requestR2("GET", latestKey, credentials);
   if (response.status === 404) {
     await response.body?.cancel();
-    return null;
+    return { etag: null, manifest: null };
   }
   if (!response.ok) {
     await response.body?.cancel();
     throw new Error(`R2 GET ${latestKey} failed (${response.status}).`);
   }
   const latest: unknown = await response.json();
-  // Only the version is needed here, so older bucket manifest formats can be upgraded.
-  if (
-    typeof latest !== "object" ||
-    latest === null ||
-    !("version" in latest) ||
-    typeof latest.version !== "string" ||
-    !isSemanticVersion(latest.version)
-  ) {
-    throw new Error(`R2 ${latestKey} has an invalid version; refusing to publish.`);
+  if (!isReleaseManifest(latest)) {
+    throw new Error(`R2 ${latestKey} has invalid release metadata; refusing to publish.`);
   }
-  if (compareVersions(version, latest.version) <= 0) {
+  const latestPlatformVersion = publishedPlatformVersion(latest, platform);
+  if (latestPlatformVersion && compareVersions(version, latestPlatformVersion) <= 0) {
     throw new Error(
-      `Version ${version} must be newer than current latest version ${latest.version}.`,
+      `${artifactLabels[platform]} version ${version} must be newer than its current latest ` +
+        `version ${latestPlatformVersion}.`,
     );
   }
   const etag = response.headers.get("etag");
   if (!etag) throw new Error(`R2 ${latestKey} is missing an ETag; refusing to publish.`);
-  return etag;
+  return { etag, manifest: latest };
 }
 
 async function publish(
@@ -490,13 +468,38 @@ async function publish(
   artifacts: BuiltArtifact[],
   credentials: R2Credentials,
 ): Promise<void> {
-  const latestEtag = await assertNewReleaseVersion(manifest.version, credentials);
-  const releaseBytes = new TextEncoder().encode(`${JSON.stringify(manifest, null, 2)}\n`);
-  const checksumBytes = new TextEncoder().encode(makeChecksumsFromManifest(manifest));
+  if (artifacts.length !== 1) {
+    throw new Error("A platform release must contain exactly one platform artifact.");
+  }
+  const [artifact] = artifacts;
+  const { etag: latestEtag, manifest: previousManifest } = await assertNewReleaseVersion(
+    manifest.version,
+    artifact.platform,
+    credentials,
+  );
+  const mergedManifest: ReleaseManifest = {
+    ...manifest,
+    artifacts: { ...previousManifest?.artifacts, ...manifest.artifacts },
+  };
+  const checksumText = makeChecksumsFromManifest(mergedManifest);
+  const checksumBytes = new TextEncoder().encode(checksumText);
+  const checksumSha256 = createHash("sha256").update(checksumBytes).digest("hex");
+  mergedManifest.checksums = {
+    ...manifest.checksums,
+    sizeBytes: checksumBytes.byteLength,
+    sha256: checksumSha256,
+  };
+  if (!isReleaseManifest(mergedManifest, manifest.version)) {
+    throw new Error("Merged release metadata is invalid.");
+  }
+  const releaseBytes = new TextEncoder().encode(`${JSON.stringify(mergedManifest, null, 2)}\n`);
+  const platformReleaseKey = `${releasePrefix}/v${manifest.version}/${artifact.platform}-release.json`;
+  const platformReleaseBytes = releaseBytes;
   const currentStorage = await bucketStorageBytes(credentials);
   const addedBytes =
     artifacts.reduce((sum, artifact) => sum + artifact.sizeBytes, 0) +
-    releaseBytes.byteLength * 2 +
+    releaseBytes.byteLength +
+    platformReleaseBytes.byteLength +
     checksumBytes.byteLength;
   if (currentStorage + addedBytes > R2_FREE_STORAGE_BYTES) {
     throw new Error(
@@ -528,21 +531,20 @@ async function publish(
     console.log(`Verified ${artifact.objectKey}`);
   }
 
-  const releaseKey = `${releasePrefix}/v${manifest.version}/release.json`;
-  await putObject(credentials, manifest.checksums.objectKey, checksumBytes, {
+  await putObject(credentials, mergedManifest.checksums.objectKey, checksumBytes, {
     contentType: contentTypes[".txt"],
-    sha256: manifest.checksums.sha256,
+    sha256: mergedManifest.checksums.sha256,
     immutable: true,
     cacheControl: "public, max-age=31536000, immutable",
   });
-  console.log(`Verified ${manifest.checksums.objectKey}`);
+  console.log(`Verified ${mergedManifest.checksums.objectKey}`);
 
-  await putObject(credentials, releaseKey, releaseBytes, {
+  await putObject(credentials, platformReleaseKey, platformReleaseBytes, {
     contentType: "application/json",
     immutable: true,
     cacheControl: "public, max-age=31536000, immutable",
   });
-  console.log(`Verified ${releaseKey}`);
+  console.log(`Verified ${platformReleaseKey}`);
 
   await putObject(credentials, latestKey, releaseBytes, {
     contentType: "application/json",
@@ -552,37 +554,27 @@ async function publish(
   });
   console.log(`Verified ${latestKey}`);
 
-  console.log(`\nPublished Writasaurus ${manifest.version} to public artifact storage.`);
+  console.log(
+    `\nPublished Writasaurus ${artifactLabels[artifact.platform]} ${manifest.version} to R2.`,
+  );
 }
 
 async function main(): Promise<void> {
   const { version, dryRun, skipBuild, buildPlatform } = parseArguments(process.argv.slice(2));
+  if (!buildPlatform) throw new Error("Select one platform with --build-platform.");
   if (!skipBuild) assertNativeBuildPlatform(buildPlatform);
-  if (buildPlatform) {
-    const paths = await buildDesktopTargets(version, buildPlatform);
-    await describeArtifacts(version, paths, new URL("https://native-build.invalid/"), [
-      buildPlatform,
-    ]);
-    console.log(
-      `Validated ${paths[buildPlatform]}. Collect all native platform outputs, ` +
-        "then publish with --skip-build.",
-    );
-    return;
-  }
-  const publicUrlBase = publicBaseUrl();
+  const paths = skipBuild ? artifactPaths() : await buildDesktopTargets(version, buildPlatform);
+  const artifacts = await describeArtifacts(version, paths, [buildPlatform]);
   let credentials: R2Credentials | undefined;
   if (!dryRun) {
     credentials = readCredentials();
-    await assertNewReleaseVersion(version, credentials);
-    await verifyNotPublished(version, credentials);
+    await verifyNotPublished(version, buildPlatform, credentials);
   } else {
-    console.log("Dry run: remote duplicate-version checks and uploads are skipped.");
+    console.log("Dry run: remote version checks and uploads are skipped.");
   }
 
-  const paths = artifactPaths();
-  const artifacts = await describeArtifacts(version, paths, publicUrlBase);
   const checksums = makeChecksums(artifacts);
-  const manifest = await makeManifest(version, artifacts, checksums, publicUrlBase);
+  const manifest = await makeManifest(version, artifacts, checksums);
   if (!isReleaseManifest(manifest, version)) {
     throw new Error("Generated release metadata does not match the required artifact manifest.");
   }
@@ -594,10 +586,12 @@ async function main(): Promise<void> {
   }
 
   if (dryRun) {
-    await writeDryRun(version, manifest);
+    await writeDryRun(version, buildPlatform, manifest);
   } else {
     await publish(manifest, artifacts, credentials!);
-    console.log(`Updated ${publicDownloadUrl(publicUrlBase, latestKey)}; downloads are live.`);
+    console.log(
+      `Updated ${latestKey}; ${artifactLabels[buildPlatform]} downloads are live through the website Worker.`,
+    );
   }
 }
 
@@ -623,8 +617,6 @@ export {
   parseArguments,
   parseVersion,
   projectPath,
-  publicBaseUrl,
-  publicDownloadUrl,
   publish,
   validateArtifact,
   verifyNotPublished,

@@ -84,6 +84,20 @@ const cancelled = Astro.url.searchParams.get("cancelled") === "1";
           <option value="windows">Windows</option>
         </select>
       </div>
+      <details data-linux-help hidden>
+        <summary>Linux: if the app does not launch</summary>
+        <p>
+          Downloads are not marked executable automatically. In a terminal, run:
+        </p>
+        <pre><code>chmod +x ~/Downloads/Writasaurus.AppImage
+~/Downloads/Writasaurus.AppImage</code></pre>
+        <p>
+          AppImage also needs FUSE 2. On Ubuntu 24.04 or later, install it with
+          <code>sudo apt install libfuse2t64</code>. On older Ubuntu or Debian,
+          use
+          <code>sudo apt install libfuse2</code>.
+        </p>
+      </details>
       <TermsConsent />
       <button type="submit" class="button--primary" data-submit-button
         >Continue to download</button
@@ -97,6 +111,7 @@ const cancelled = Astro.url.searchParams.get("cancelled") === "1";
 
   const flow = document.querySelector<HTMLFormElement>("[data-download-flow]");
   const platform = flow?.querySelector<HTMLSelectElement>("#platform");
+  const linuxHelp = flow?.querySelector<HTMLDetailsElement>("[data-linux-help]");
   if (platform && !platform.value) {
     platform.value = detectDownloadPlatform(
       navigator.platform,
@@ -104,6 +119,13 @@ const cancelled = Astro.url.searchParams.get("cancelled") === "1";
       navigator.maxTouchPoints,
     );
   }
+  function updatePlatformHelp(): void {
+    if (linuxHelp && platform) linuxHelp.hidden = platform.value !== "linux";
+  }
+
+  platform?.addEventListener("change", updatePlatformHelp);
+  updatePlatformHelp();
+
   const donationOptions = flow?.querySelector<HTMLFieldSetElement>(
     "[data-donation-options]",
   );

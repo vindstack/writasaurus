@@ -106,29 +106,16 @@ test("download page presents optional email and donation choices", async () => {
   assert(page.includes('name="marketingEmails"'));
   assert(page.includes('name="marketingEmails" value="yes" checked'));
   assert(page.includes("No email is needed for a free download."));
+  assert(page.includes("Downloads are not marked executable automatically."));
+  assert(page.includes("sudo apt install libfuse2t64"));
+  assert(page.includes("sudo apt install libfuse2"));
+  assert(/<details[^>]*data-linux-help[^>]*hidden/.test(page));
 });
 
-test("form redirects allow only the website, Stripe, and the configured download origin", async () => {
-  const original = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
-  try {
-    for (const base of [undefined, "https://downloads.example.com/apps/"]) {
-      if (base === undefined) delete process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
-      else process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = base;
-      const response = await request("/download");
-      await response.body?.cancel();
-      const policy = response.headers.get("content-security-policy") ?? "";
-      const formAction = policy
-        .split("; ")
-        .find((directive) => directive.startsWith("form-action "));
-      assert(
-        formAction ===
-          `form-action 'self' https://checkout.stripe.com${
-            base ? " https://downloads.example.com" : ""
-          }`,
-      );
-    }
-  } finally {
-    if (original === undefined) delete process.env.WRITASAURUS_R2_PUBLIC_BASE_URL;
-    else process.env.WRITASAURUS_R2_PUBLIC_BASE_URL = original;
-  }
+test("form redirects allow only the website and Stripe", async () => {
+  const response = await request("/download");
+  await response.body?.cancel();
+  const policy = response.headers.get("content-security-policy") ?? "";
+  const formAction = policy.split("; ").find((directive) => directive.startsWith("form-action "));
+  assert(formAction === "form-action 'self' https://checkout.stripe.com");
 });

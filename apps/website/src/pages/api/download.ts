@@ -6,32 +6,15 @@ import {
   parseDonationAmount,
   startDonationCheckout,
 } from "../../lib/payment-service.ts";
-import { isPublicHttpsUrl, isReleaseManifest } from "../../../../../packages/shared/releases.ts";
+import { currentRelease } from "../../lib/releases.ts";
 
 export const prerender = false;
 
-async function currentRelease(): Promise<unknown> {
-  const base = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL?.trim();
-  if (!base) throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL is not configured.");
-  if (!isPublicHttpsUrl(base) || new URL(base).hostname.endsWith(".r2.cloudflarestorage.com")) {
-    throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a public HTTPS URL.");
-  }
-  const response = await fetch(new URL("latest.json", `${base.replace(/\/+$/, "")}/`), {
-    redirect: "error",
-    cache: "no-store",
-    signal: AbortSignal.timeout(10_000),
-  });
-  if (!response.ok) {
-    await response.body?.cancel();
-    throw new Error(`The current release metadata is unavailable (HTTP ${response.status}).`);
-  }
-  return await response.json();
-}
-
-async function download(platform: "linux" | "macos" | "windows"): Promise<Response> {
-  const manifest = await currentRelease();
-  if (!isReleaseManifest(manifest)) throw new Error("Release metadata is invalid.");
-  return Response.redirect(manifest.artifacts[platform].downloadUrl, 303);
+async function download(
+  platform: "linux" | "macos" | "windows",
+  requestUrl: string,
+): Promise<Response> {
+  return Response.redirect(new URL(`/api/releases/${platform}`, requestUrl), 303);
 }
 
 export async function POST(context: { request: Request }): Promise<Response> {
@@ -72,8 +55,12 @@ export async function POST(context: { request: Request }): Promise<Response> {
   }
 
   try {
+    const release = await currentRelease();
+    if (!release.artifacts[platform]) {
+      return new Response("This platform's release is not available yet.", { status: 404 });
+    }
     if (email) await getWebsiteStore().setMarketingPreference(email, marketingOptIn);
-    if (amountCents === 0) return await download(platform);
+    if (amountCents === 0) return await download(platform, context.request.url);
     const checkout = await startDonationCheckout(email, amountCents, platform);
     return Response.redirect(new URL(checkout.url, context.request.url), 303);
   } catch (error) {

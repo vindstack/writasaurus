@@ -1,5 +1,4 @@
 import { defineMiddleware } from "astro:middleware";
-import { isPublicHttpsUrl } from "../../../packages/shared/releases.ts";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -23,14 +22,6 @@ function isSameOriginRequest(request: Request): boolean {
 
 function contentSecurityPolicy(nonce: string): string {
   const dev = import.meta.env.DEV;
-  const downloadBase = process.env.WRITASAURUS_R2_PUBLIC_BASE_URL?.trim();
-  const formOrigins = ["'self'", "https://checkout.stripe.com"];
-  if (downloadBase) {
-    if (!isPublicHttpsUrl(downloadBase)) {
-      throw new Error("WRITASAURUS_R2_PUBLIC_BASE_URL must be a public HTTPS URL.");
-    }
-    formOrigins.push(new URL(downloadBase).origin);
-  }
   return [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
@@ -44,7 +35,7 @@ function contentSecurityPolicy(nonce: string): string {
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
-    `form-action ${formOrigins.join(" ")}`,
+    "form-action 'self' https://checkout.stripe.com",
     "frame-ancestors 'none'",
   ].join("; ");
 }

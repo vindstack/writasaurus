@@ -7,6 +7,22 @@
   "vars": {
     "PAYMENT_PROVIDER": "stripe",
   },
+  "observability": {
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true,
+      "persist": true,
+    },
+    "traces": {
+      "enabled": false,
+      "head_sampling_rate": 1,
+      "persist": true,
+    },
+    "issues": {
+      "enabled": false,
+    },
+  },
   "assets": {
     "directory": "./dist/client",
     "binding": "ASSETS",
@@ -16,6 +32,13 @@
       "binding": "DB",
       "database_name": "writasaurus-website",
       "migrations_dir": "migrations",
+      "database_id": "20fe4217-11c8-4dee-ac18-d3111164eaba",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2_DOWNLOAD_DESKTOP_BUCKET",
+      "bucket_name": "writasaurus-desktop",
     },
   ],
 }
