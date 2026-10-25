@@ -60,48 +60,62 @@ frame. The title bar stays hidden when the editor is opened in an ordinary brows
 
 ## Website deployment
 
-The website uses the standalone Astro Node adapter and requires PostgreSQL. After `pnpm build:website`,
-run `pnpm --filter @writasaurus/website start` with production environment variables. Set
-`HOST=0.0.0.0`, `PORT`, and `NODE_ENV=production` in the deployment environment. The server must have
-write access to its configured session storage. To start a database from the current schema:
+The website runs as an Astro Cloudflare Worker and uses Cloudflare D1 for website storage. The D1
+database starts empty; existing PostgreSQL data is intentionally not migrated.
+Deployments are manual and run locally through Wrangler, which bundles the Worker and uploads its
+server code and static assets.
+
+For local development, apply the schema to Wrangler's local D1 database, configure local runtime
+values, then start Astro:
 
 ```sh
-pnpm db:migrate
-```
-
-`pnpm db:reset` is destructive: it drops the existing Writasaurus database tables and applies
-the current initial schema. Use it only when intentionally starting over with all database data
-deleted.
-
-Configure the website's environment/secret store with:
-
-- `DATABASE_URL`
-- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
-- `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
-- `PUBLIC_SITE_URL` and `SESSION_SECRET`
-- `WRITASAURUS_R2_PUBLIC_BASE_URL` (the public download domain, also allowed by the website's
-  form-redirect security policy)
-
-Configure Stripe Checkout for one-time payments and a webhook for `checkout.session.completed`,
-`checkout.session.async_payment_succeeded`, `charge.refunded`, and `charge.dispute.created`. Set its
-signing secret in `STRIPE_WEBHOOK_SECRET`. Configure Resend with a verified sending domain. Passcode
-emails are sent for passwordless account sign-in; marketing email preference does not suppress them.
-
-### Local PostgreSQL
-
-Install Docker Compose, copy `.env.example` to `.env`, then start the local database and apply its
-schema:
-
-```sh
-pnpm db:dev:up
-pnpm db:migrate
+pnpm --filter @writasaurus/website db:migrate:local
+cp apps/website/.dev.vars.example apps/website/.dev.vars
 pnpm dev:website
 ```
 
-To discard local data and recreate the current schema, run `pnpm db:reset`. The local database
-credentials in `.env.example` are only for development. The Compose service stores data in a
-persistent Docker volume; stop it with `pnpm db:dev:down`. Use separate credentials and a
-separate database for staging or production.
+Local D1 data is stored under the ignored `.wrangler/` directory. Edit local runtime values in
+`apps/website/.dev.vars` (do not commit this file); set the same runtime values for the deployed
+Worker in Cloudflare's variables/secrets.
+Required values are `SESSION_SECRET`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`,
+`RESEND_API_KEY`, `RESEND_FROM_EMAIL`, `PUBLIC_SITE_URL`, and
+`WRITASAURUS_R2_PUBLIC_BASE_URL`. Keep credentials and signing keys in Wrangler secrets; configure
+the public URLs as non-secret variables. `PAYMENT_PROVIDER` should be `stripe`.
+
+Before the first deployment, authenticate Wrangler and provision the remote D1 database:
+
+```sh
+pnpm --filter @writasaurus/website exec wrangler login
+pnpm --filter @writasaurus/website db:create
+```
+
+`db:create` provisions the remote database and writes its ID into
+[`apps/website/wrangler.jsonc`](./apps/website/wrangler.jsonc). Set secrets for the deployed Worker
+with Wrangler, for example:
+
+```sh
+pnpm --filter @writasaurus/website exec wrangler secret put SESSION_SECRET
+pnpm --filter @writasaurus/website exec wrangler secret put STRIPE_SECRET_KEY
+pnpm --filter @writasaurus/website exec wrangler secret put STRIPE_WEBHOOK_SECRET
+pnpm --filter @writasaurus/website exec wrangler secret put RESEND_API_KEY
+```
+
+To apply schema changes to D1 and deploy manually:
+
+```sh
+pnpm --filter @writasaurus/website db:migrate:remote
+pnpm deploy:website
+```
+
+`pnpm deploy:website` builds the website locally and runs `wrangler deploy`; it does not set up a
+GitHub Actions deployment. Configure Stripe Checkout for one-time payments and a webhook for
+`checkout.session.completed`, `checkout.session.async_payment_succeeded`, `charge.refunded`, and
+`charge.dispute.created`. Configure Resend with a verified sending domain. Passcode emails are sent
+for passwordless account sign-in; marketing email preference does not suppress them. Wrangler prints
+the deployed `workers.dev` URL; attach the production domain to the Worker through Cloudflare when
+ready.
+
+To exercise the local Worker runtime, run `pnpm --filter @writasaurus/website worker:dev`.
 
 ## Free desktop downloads and donations
 
@@ -162,5 +176,5 @@ set to the website URL (`http://localhost:8000` for local development), not R2.
 Manuscripts remain on the user's device. The website stores donation amounts and processor IDs,
 donor email addresses, Stripe receipt URLs, passwordless sign-in state, and marketing email
 preferences. Payment details are handled by Stripe; the website does not store card numbers.
-PostgreSQL backups, access, retention, tax handling, marketing consent, and donation terms should be
-reviewed before launch. The website terms are a product draft, not legal advice.
+D1 backups, access, retention, tax handling, marketing consent, and donation terms should be reviewed
+before launch. The website terms are a product draft, not legal advice.

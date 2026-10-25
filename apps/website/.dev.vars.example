@@ -1,0 +1,8 @@
+PAYMENT_PROVIDER=mock
+SESSION_SECRET=replace-with-at-least-32-random-characters
+PUBLIC_SITE_URL=http://localhost:8000
+WRITASAURUS_R2_PUBLIC_BASE_URL=https://downloads.example.com
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=

@@ -6,6 +6,8 @@ dist/
 .vite/
 node_modules/
 .env
+.dev.vars
+.wrangler/
 /apps/*/dist/
 /apps/*/.astro/
 /apps/desktop/desktop/

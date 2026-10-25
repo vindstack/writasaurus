@@ -2,6 +2,7 @@ import vue from "@astrojs/vue";
 
 export const sharedConfig = {
   output: "server" as const,
+  session: false,
   devToolbar: {
     enabled: false,
   },
@@ -20,13 +21,7 @@ export const sharedConfig = {
     ],
   },
   vite: {
-    build: {
-      rolldownOptions: {
-        external: ["pg"],
-      },
-    },
     ssr: {
-      external: ["pg"],
       noExternal: ["@astrojs/vue"],
     },
   },

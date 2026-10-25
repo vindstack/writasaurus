@@ -5,30 +5,31 @@
   "scripts": {
     "dev": "node --env-file-if-exists=../../.env node_modules/astro/bin/astro.mjs dev --host 127.0.0.1 --port 8000",
     "build": "node --env-file-if-exists=../../.env node_modules/astro/bin/astro.mjs build",
-    "preview": "astro preview",
-    "start": "node --env-file-if-exists=../../.env dist/server/entry.mjs",
+    "worker:dev": "astro build && wrangler dev",
+    "worker:deploy": "astro build && wrangler deploy",
+    "db:create": "wrangler d1 create writasaurus-website --binding DB --update-config",
+    "db:migrate:local": "wrangler d1 migrations apply writasaurus-website --local",
+    "db:migrate:remote": "wrangler d1 migrations apply writasaurus-website --remote",
     "test": "astro build --config astro.config.test.ts && vitest run --config ../../vitest.config.ts",
     "test:watch": "astro build --config astro.config.test.ts && vitest --config ../../vitest.config.ts",
-    "type-check": "astro check && tsc -p tsconfig.json",
-    "db:migrate": "node --env-file-if-exists=../../.env ../../scripts/db-migrate.ts",
-    "db:reset": "node --env-file-if-exists=../../.env ../../scripts/db-migrate.ts --reset"
+    "type-check": "astro check && tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.9",
+    "@astrojs/cloudflare": "^14.4.2",
     "@astrojs/vue": "^7.0.3",
     "@preact/signals": "^2.9.0",
     "@writasaurus/shared": "workspace:*",
     "astro": "^7.3.5",
     "harper.js": "2.10.0",
-    "pg": "^8.11.3",
     "vue": "^3.5.43"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",
+    "@astrojs/node": "^11.1.9",
     "@types/node": "^24.0.0",
-    "@types/pg": "^8.15.6",
     "playwright": "^1.63.0",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "wrangler": "^4.152.0"
   }
 }

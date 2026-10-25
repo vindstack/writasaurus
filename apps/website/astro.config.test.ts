@@ -14,4 +14,12 @@ export default defineConfig({
       { hostname: "writasaurus.test" },
     ],
   },
+  vite: {
+    ...sharedConfig.vite,
+    resolve: {
+      alias: {
+        "cloudflare:workers": new URL("./src/lib/cloudflare-env.test.ts", import.meta.url).pathname,
+      },
+    },
+  },
 });

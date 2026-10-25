@@ -20,13 +20,17 @@ function escapeHtml(value: string): string {
 
 export async function sendEmail(message: EmailMessage): Promise<void> {
   if (env.NODE_ENV !== "production") {
-    const logPath = process.env.EMAIL_LOG_FILE?.trim() || ".data/emails.jsonl";
-    await mkdir(dirname(logPath), { recursive: true });
-    await appendFile(
-      logPath,
-      `${JSON.stringify({ sentAt: new Date().toISOString(), ...message })}\n`,
-    );
-    console.info(`Development email written to ${logPath}`);
+    const logPath = process.env.EMAIL_LOG_FILE?.trim();
+    if (logPath) {
+      await mkdir(dirname(logPath), { recursive: true });
+      await appendFile(
+        logPath,
+        `${JSON.stringify({ sentAt: new Date().toISOString(), ...message })}\n`,
+      );
+      console.info(`Development email written to ${logPath}`);
+    } else {
+      console.info(`Development email to ${message.to}: ${message.text}`);
+    }
     return;
   }
 

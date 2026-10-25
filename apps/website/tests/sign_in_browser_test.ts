@@ -9,13 +9,12 @@ function assert(condition: unknown, message = "Assertion failed"): asserts condi
 }
 
 test("browser: Astro sign-in works inline and with JavaScript disabled", async () => {
-  const names = ["SESSION_SECRET", "EMAIL_LOG_FILE", "NODE_ENV", "PUBLIC_SITE_URL", "DATABASE_URL"];
+  const names = ["SESSION_SECRET", "EMAIL_LOG_FILE", "NODE_ENV", "PUBLIC_SITE_URL"];
   const original = new Map(names.map((name) => [name, process.env[name]]));
   const logFile = `.data/sign-in-browser-${crypto.randomUUID()}.jsonl`;
   process.env.SESSION_SECRET = "browser-auth-test-secret-at-least-32-characters";
   process.env.EMAIL_LOG_FILE = logFile;
   process.env.NODE_ENV = "test";
-  delete process.env.DATABASE_URL;
   const server = await startWebsiteServer();
   const { origin } = server;
   process.env.PUBLIC_SITE_URL = origin;

@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "writasaurus-website",
+  "main": "@astrojs/cloudflare/entrypoints/server",
+  "compatibility_date": "2026-10-24",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": {
+    "PAYMENT_PROVIDER": "stripe",
+  },
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "writasaurus-website",
+      "migrations_dir": "migrations",
+    },
+  ],
+}

@@ -1,5 +1,5 @@
-import { env } from "node:process";
-import { type PoolClient, query, withConnection, withTransaction } from "./db.ts";
+import { env } from "cloudflare:workers";
+import type { D1Database } from "./d1.ts";
 
 export interface DonationRecord {
   id: string;
@@ -42,180 +42,230 @@ export interface WebsiteStore {
   ): Promise<void>;
 }
 
-function mapDonation(row: Record<string, unknown>): DonationRecord {
+type DonationRow = {
+  id: string;
+  stripeSessionId: string;
+  paymentIntentId: string;
+  email: string;
+  amountTotal: number;
+  currency: string;
+  status: DonationRecord["status"];
+  receiptUrl: string | null;
+  donatedAt: number;
+};
+
+function mapDonation(row: DonationRow): DonationRecord {
   return {
-    id: String(row.id),
-    stripeSessionId: String(row.stripeSessionId),
-    paymentIntentId: String(row.paymentIntentId),
-    email: String(row.email),
+    ...row,
     amountTotal: Number(row.amountTotal),
-    currency: String(row.currency).trim(),
-    status: row.status as DonationRecord["status"],
-    receiptUrl: row.receiptUrl === null ? null : String(row.receiptUrl),
-    donatedAt: new Date(row.donatedAt as string | number | Date),
+    donatedAt: new Date(Number(row.donatedAt)),
   };
 }
 
-async function selectDonation(
-  client: PoolClient,
-  sessionId: string,
-): Promise<DonationRecord | null> {
-  const result = await query<Record<string, unknown>>(client)`
-    SELECT id, stripe_session_id AS "stripeSessionId",
-      payment_intent_id AS "paymentIntentId", email, amount_total AS "amountTotal",
-      currency, status, receipt_url AS "receiptUrl", donated_at AS "donatedAt"
-    FROM donations WHERE stripe_session_id = ${sessionId}
-  `;
-  return result.rows[0] ? mapDonation(result.rows[0]) : null;
-}
+const DONATION_COLUMNS = `
+  id, stripe_session_id AS stripeSessionId, payment_intent_id AS paymentIntentId,
+  email, amount_total AS amountTotal, currency, status, receipt_url AS receiptUrl,
+  donated_at AS donatedAt
+`;
 
-export class PostgresWebsiteStore implements WebsiteStore {
+export class D1WebsiteStore implements WebsiteStore {
+  constructor(private readonly db: D1Database) {}
+
   async createAuthCode(email: string, codeHash: string): Promise<boolean> {
-    return await withTransaction(async (client) => {
-      await query(client)`SELECT pg_advisory_xact_lock(hashtext(${email}))`;
-      const recent = await query<{ count: number }>(client)`
-        SELECT count(*)::int AS count FROM auth_codes
-        WHERE email = ${email} AND created_at > now() - interval '1 hour'
-      `;
-      if ((recent.rows[0]?.count ?? 0) >= 5) return false;
-      await query(client)`
-        UPDATE auth_codes SET consumed_at = now()
-        WHERE email = ${email} AND consumed_at IS NULL
-      `;
-      await query(client)`
-        INSERT INTO auth_codes (id, email, code_hash, expires_at)
-        VALUES (${crypto.randomUUID()}, ${email}, ${codeHash}, now() + interval '10 minutes')
-      `;
-      return true;
-    });
+    const now = Date.now();
+    const rateLimitArgs = [email, now - 3_600_000];
+    const results = await this.db.batch([
+      this.db
+        .prepare(
+          `UPDATE auth_codes SET consumed_at = ?
+           WHERE email = ? AND consumed_at IS NULL
+             AND (SELECT COUNT(*) FROM auth_codes WHERE email = ? AND created_at > ?) < 5`,
+        )
+        .bind(now, email, ...rateLimitArgs),
+      this.db
+        .prepare(
+          `INSERT INTO auth_codes (id, email, code_hash, created_at, expires_at)
+           SELECT ?, ?, ?, ?, ?
+           WHERE (SELECT COUNT(*) FROM auth_codes WHERE email = ? AND created_at > ?) < 5
+           RETURNING id`,
+        )
+        .bind(crypto.randomUUID(), email, codeHash, now, now + 600_000, ...rateLimitArgs),
+    ]);
+    return results[1].results.length > 0;
   }
 
   async verifyAuthCode(email: string, codeHash: string): Promise<boolean> {
-    return await withTransaction(async (client) => {
-      const result = await query<{ id: string; codeHash: string }>(client)`
-        SELECT id, code_hash AS "codeHash" FROM auth_codes
-        WHERE email = ${email} AND consumed_at IS NULL AND expires_at > now() AND attempts < 5
-        ORDER BY created_at DESC LIMIT 1 FOR UPDATE
-      `;
-      const code = result.rows[0];
-      if (!code) return false;
-      if (code.codeHash !== codeHash) {
-        await query(client)`UPDATE auth_codes SET attempts = attempts + 1 WHERE id = ${code.id}`;
-        return false;
-      }
-      await query(client)`UPDATE auth_codes SET consumed_at = now() WHERE id = ${code.id}`;
-      return true;
-    });
+    const now = Date.now();
+    const code = await this.db
+      .prepare(
+        `SELECT id, code_hash AS codeHash FROM auth_codes
+         WHERE email = ? AND consumed_at IS NULL AND expires_at > ? AND attempts < 5
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .bind(email, now)
+      .first<{ id: string; codeHash: string }>();
+    if (!code) return false;
+
+    if (code.codeHash !== codeHash) {
+      await this.db
+        .prepare(
+          `UPDATE auth_codes SET attempts = attempts + 1
+           WHERE id = ? AND consumed_at IS NULL AND expires_at > ? AND attempts < 5`,
+        )
+        .bind(code.id, now)
+        .run();
+      return false;
+    }
+
+    const consumed = await this.db
+      .prepare(
+        `UPDATE auth_codes SET consumed_at = ?
+         WHERE id = ? AND consumed_at IS NULL AND expires_at > ? AND attempts < 5
+         RETURNING id`,
+      )
+      .bind(now, code.id, now)
+      .all();
+    return consumed.results.length > 0;
   }
 
   async saveSession(tokenHash: string, email: string, expiresAt: Date): Promise<void> {
-    await withConnection(
-      (client) =>
-        query(client)`
-        INSERT INTO auth_sessions (token_hash, email, expires_at)
-        VALUES (${tokenHash}, ${email}, ${expiresAt})
-      `,
-    );
+    const now = Date.now();
+    await this.db
+      .prepare(
+        "INSERT INTO auth_sessions (token_hash, email, created_at, expires_at) VALUES (?, ?, ?, ?)",
+      )
+      .bind(tokenHash, email, now, expiresAt.getTime())
+      .run();
   }
 
   async getSession(tokenHash: string): Promise<{ email: string } | null> {
-    return await withConnection(async (client) => {
-      const result = await query<{ email: string }>(client)`
-        SELECT email FROM auth_sessions WHERE token_hash = ${tokenHash} AND expires_at > now()
-      `;
-      return result.rows[0] ?? null;
-    });
+    return await this.db
+      .prepare("SELECT email FROM auth_sessions WHERE token_hash = ? AND expires_at > ?")
+      .bind(tokenHash, Date.now())
+      .first<{ email: string }>();
   }
 
   async deleteSession(tokenHash: string): Promise<void> {
-    await withConnection(
-      (client) => query(client)`DELETE FROM auth_sessions WHERE token_hash = ${tokenHash}`,
-    );
+    await this.db.prepare("DELETE FROM auth_sessions WHERE token_hash = ?").bind(tokenHash).run();
   }
 
   async getDonationsByEmail(email: string): Promise<DonationRecord[]> {
-    return await withConnection(async (client) => {
-      const result = await query<Record<string, unknown>>(client)`
-        SELECT id, stripe_session_id AS "stripeSessionId",
-          payment_intent_id AS "paymentIntentId", email, amount_total AS "amountTotal",
-          currency, status, receipt_url AS "receiptUrl", donated_at AS "donatedAt"
-        FROM donations WHERE email = ${email} ORDER BY donated_at DESC
-      `;
-      return result.rows.map(mapDonation);
-    });
+    const result = await this.db
+      .prepare(`SELECT ${DONATION_COLUMNS} FROM donations WHERE email = ? ORDER BY donated_at DESC`)
+      .bind(email)
+      .all<DonationRow>();
+    return result.results.map(mapDonation);
   }
 
   async getDonationBySession(sessionId: string): Promise<DonationRecord | null> {
-    return await withConnection((client) => selectDonation(client, sessionId));
+    const row = await this.db
+      .prepare(`SELECT ${DONATION_COLUMNS} FROM donations WHERE stripe_session_id = ?`)
+      .bind(sessionId)
+      .first<DonationRow>();
+    return row ? mapDonation(row) : null;
   }
 
   async recordDonation(input: DonationInput, eventId?: string): Promise<DonationRecord> {
-    return await withTransaction(async (client) => {
-      if (eventId) {
-        const event = await query<{ eventId: string }>(client)`
-          INSERT INTO processed_stripe_events (event_id, event_type)
-          VALUES (${eventId}, 'donation.completed')
-          ON CONFLICT (event_id) DO NOTHING
-          RETURNING event_id AS "eventId"
-        `;
-        if (!event.rows[0]) {
-          const existing = await selectDonation(client, input.stripeSessionId);
-          if (existing) return existing;
-          throw new Error("Stripe event was already processed without a matching donation.");
-        }
-      }
-      const existing = await selectDonation(client, input.stripeSessionId);
-      if (existing) {
-        if (
-          existing.email !== input.email ||
-          existing.paymentIntentId !== input.paymentIntentId ||
-          existing.amountTotal !== input.amountTotal ||
-          existing.currency !== input.currency
+    const values = [
+      input.id,
+      input.stripeSessionId,
+      input.paymentIntentId,
+      input.email,
+      input.amountTotal,
+      input.currency,
+      input.receiptUrl,
+      input.donatedAt.getTime(),
+    ];
+    const statements = [
+      eventId
+        ? this.db
+            .prepare(
+              `INSERT INTO donations (
+                 id, stripe_session_id, payment_intent_id, email, amount_total,
+                 currency, status, receipt_url, donated_at
+               )
+               SELECT ?, ?, ?, ?, ?, ?, 'paid', ?, ?
+               WHERE NOT EXISTS (
+                 SELECT 1 FROM processed_stripe_events WHERE event_id = ?
+               )
+               ON CONFLICT (stripe_session_id) DO NOTHING`,
+            )
+            .bind(...values, eventId)
+        : this.db
+            .prepare(
+              `INSERT INTO donations (
+                 id, stripe_session_id, payment_intent_id, email, amount_total,
+                 currency, status, receipt_url, donated_at
+               ) VALUES (?, ?, ?, ?, ?, ?, 'paid', ?, ?)
+               ON CONFLICT (stripe_session_id) DO NOTHING`,
+            )
+            .bind(...values),
+      ...(eventId
+        ? [
+            this.db
+              .prepare(
+                `INSERT INTO processed_stripe_events (event_id, event_type, processed_at)
+                 SELECT ?, 'donation.completed', ?
+                 WHERE EXISTS (
+                   SELECT 1 FROM donations
+                   WHERE stripe_session_id = ? AND email = ? AND payment_intent_id = ?
+                     AND amount_total = ? AND currency = ?
+                 )
+                 ON CONFLICT (event_id) DO NOTHING`,
+              )
+              .bind(
+                eventId,
+                Date.now(),
+                input.stripeSessionId,
+                input.email,
+                input.paymentIntentId,
+                input.amountTotal,
+                input.currency,
+              ),
+          ]
+        : []),
+      this.db
+        .prepare(
+          `UPDATE donations SET receipt_url = ?
+           WHERE stripe_session_id = ? AND receipt_url IS NULL AND ? IS NOT NULL`,
         )
-          throw new Error("Stripe session conflicts with the recorded donation.");
-        if (!existing.receiptUrl && input.receiptUrl) {
-          await query(client)`
-            UPDATE donations SET receipt_url = ${input.receiptUrl}
-            WHERE stripe_session_id = ${input.stripeSessionId}
-          `;
-          existing.receiptUrl = input.receiptUrl;
-        }
-        return existing;
-      }
-      await query(client)`
-        INSERT INTO donations (
-          id, stripe_session_id, payment_intent_id, email, amount_total, currency,
-          status, receipt_url, donated_at
-        ) VALUES (
-          ${input.id}, ${input.stripeSessionId}, ${input.paymentIntentId}, ${input.email},
-          ${input.amountTotal}, ${input.currency}, 'paid', ${input.receiptUrl}, ${input.donatedAt}
-        )
-      `;
-      const donation = await selectDonation(client, input.stripeSessionId);
-      if (!donation) throw new Error("Donation was inserted but could not be read back.");
-      return donation;
-    });
+        .bind(input.receiptUrl, input.stripeSessionId, input.receiptUrl),
+    ];
+    await this.db.batch(statements);
+
+    const donation = await this.getDonationBySession(input.stripeSessionId);
+    if (!donation) {
+      throw new Error("Stripe event was already processed without a matching donation.");
+    }
+    if (
+      donation.email !== input.email ||
+      donation.paymentIntentId !== input.paymentIntentId ||
+      donation.amountTotal !== input.amountTotal ||
+      donation.currency !== input.currency
+    ) {
+      throw new Error("Stripe session conflicts with the recorded donation.");
+    }
+    return donation;
   }
 
   async setMarketingPreference(email: string, optedIn: boolean): Promise<void> {
-    await withConnection(
-      (client) =>
-        query(client)`
-        INSERT INTO email_preferences (email, marketing_opt_in, updated_at)
-        VALUES (${email}, ${optedIn}, now())
-        ON CONFLICT (email) DO UPDATE
-        SET marketing_opt_in = EXCLUDED.marketing_opt_in, updated_at = now()
-      `,
-    );
+    await this.db
+      .prepare(
+        `INSERT INTO email_preferences (email, marketing_opt_in, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT (email) DO UPDATE
+         SET marketing_opt_in = excluded.marketing_opt_in, updated_at = excluded.updated_at`,
+      )
+      .bind(email, optedIn ? 1 : 0, Date.now())
+      .run();
   }
 
   async getMarketingPreference(email: string): Promise<boolean | null> {
-    return await withConnection(async (client) => {
-      const result = await query<{ optedIn: boolean }>(client)`
-        SELECT marketing_opt_in AS "optedIn" FROM email_preferences WHERE email = ${email}
-      `;
-      return result.rows[0]?.optedIn ?? null;
-    });
+    const row = await this.db
+      .prepare("SELECT marketing_opt_in AS optedIn FROM email_preferences WHERE email = ?")
+      .bind(email)
+      .first<{ optedIn: number }>();
+    return row ? Boolean(row.optedIn) : null;
   }
 
   async setDonationStatus(
@@ -223,19 +273,20 @@ export class PostgresWebsiteStore implements WebsiteStore {
     paymentIntentId: string,
     status: "refunded" | "disputed",
   ): Promise<void> {
-    await withTransaction(async (client) => {
-      const updated = await query<{ id: string }>(client)`
-        UPDATE donations SET status = ${status}
-        WHERE payment_intent_id = ${paymentIntentId}
-        RETURNING id
-      `;
-      if (!updated.rows.length) return;
-      await query(client)`
-        INSERT INTO processed_stripe_events (event_id, event_type)
-        VALUES (${eventId}, ${status})
-        ON CONFLICT (event_id) DO NOTHING
-      `;
-    });
+    await this.db.batch([
+      this.db
+        .prepare("UPDATE donations SET status = ? WHERE payment_intent_id = ?")
+        .bind(status, paymentIntentId),
+      this.db
+        .prepare(
+          `INSERT INTO processed_stripe_events (event_id, event_type, processed_at)
+           SELECT ?, ?, ? WHERE EXISTS (
+             SELECT 1 FROM donations WHERE payment_intent_id = ?
+           )
+           ON CONFLICT (event_id) DO NOTHING`,
+        )
+        .bind(eventId, status, Date.now(), paymentIntentId),
+    ]);
   }
 }
 
@@ -343,12 +394,12 @@ let activeStore: WebsiteStore | undefined;
 
 export function getWebsiteStore(): WebsiteStore {
   if (activeStore) return activeStore;
-  if (process.env.DATABASE_URL) {
-    activeStore = new PostgresWebsiteStore();
-  } else if (env.NODE_ENV !== "production") {
+  if (env.DB) {
+    activeStore = new D1WebsiteStore(env.DB);
+  } else if (process.env.NODE_ENV !== "production") {
     activeStore = new MemoryWebsiteStore();
   } else {
-    throw new Error("DATABASE_URL is not configured.");
+    throw new Error("Cloudflare D1 binding DB is not configured.");
   }
   return activeStore;
 }
