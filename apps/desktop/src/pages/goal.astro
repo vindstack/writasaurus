@@ -9,11 +9,17 @@ import PageEffects from "../components/islands/PageEffects.vue";
   <CardPage size="wide" brandHref="/" roomy>
     <h2>Manuscript Goal</h2>
     <p class="intro">
-      Track your current manuscript draft against this project's word-count goal.
+      Track your current manuscript draft against this project's word-count
+      goal.
     </p>
-    <aside class="alert alert--info" role="note" data-testid="local-storage-notice">
-      Your goals and writing history are stored locally on this device. They won't carry over to
-      other devices unless you back up the project, including its settings, using cloud storage.
+    <aside
+      class="alert alert--info"
+      role="note"
+      data-testid="local-storage-notice"
+    >
+      Your goals and writing history are stored locally on this device. They
+      won't carry over to other devices unless you back up the project,
+      including its settings, using cloud storage.
     </aside>
     <ProjectGoal client:load />
   </CardPage>
