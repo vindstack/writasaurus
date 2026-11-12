@@ -1,5 +1,4 @@
 packages:
-  - "apps/website"
-  - "apps/desktop"
+  - "apps/writasaurus"
   - "packages/shared"
   - "packages/fs"

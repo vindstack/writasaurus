@@ -1,3 +1,5 @@
+/// <reference types="wicg-file-system-access" />
+
 import { joinPath, parentAndName, splitPath } from "./paths.ts";
 
 export type FolderHandle = FileSystemDirectoryHandle;
@@ -32,6 +34,31 @@ export async function pickFolder(
   }
 }
 
+/** Prompts for an EPUB destination. Call directly from a user gesture. */
+export async function pickEpubFile(suggestedName: string): Promise<FileSystemFileHandle | null> {
+  try {
+    return await showSaveFilePicker({
+      suggestedName,
+      types: [{ description: "EPUB eBook", accept: { "application/epub+zip": [".epub"] } }],
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") return null;
+    throw error;
+  }
+}
+
+/** Replaces the file selected by the user, aborting an unsuccessful write. */
+export async function writeFileHandle(handle: FileSystemFileHandle, data: FileData): Promise<void> {
+  const writable = await handle.createWritable();
+  try {
+    await writable.write(data);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => {});
+    throw error;
+  }
+}
+
 /** Checks permission and, if needed, requests it (requires a user gesture). */
 export async function ensurePermission(
   dir: FolderHandle,
@@ -40,6 +67,43 @@ export async function ensurePermission(
   if (typeof dir.queryPermission !== "function") return true;
   if ((await dir.queryPermission({ mode })) === "granted") return true;
   return (await dir.requestPermission({ mode })) === "granted";
+}
+
+/** Returns the current permission without showing a prompt. */
+export async function queryPermission(
+  dir: FolderHandle,
+  mode: PermissionMode = "readwrite",
+): Promise<PermissionState> {
+  return typeof dir.queryPermission === "function"
+    ? await dir.queryPermission({ mode })
+    : "granted";
+}
+
+let creations = Promise.resolve();
+
+async function serializeCreation<T>(operation: () => Promise<T>): Promise<T> {
+  const run = () =>
+    typeof navigator !== "undefined" && navigator.locks
+      ? navigator.locks.request("writasaurus-fs-create", operation)
+      : operation();
+  const result = creations.then(run);
+  creations = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return await result;
+}
+
+/** Creates a direct child folder; never intentionally reuses an existing entry. */
+export async function createFolder(dir: FolderHandle, name: string): Promise<FolderHandle> {
+  const parts = splitPath(name);
+  if (parts.length !== 1 || parts[0] !== name) throw new TypeError("Invalid folder name.");
+  return await serializeCreation(async () => {
+    if (await exists(dir, name)) {
+      throw new DOMException(`Entry already exists: ${name}`, "InvalidModificationError");
+    }
+    return await dir.getDirectoryHandle(name, { create: true });
+  });
 }
 
 async function resolveFolder(
@@ -91,7 +155,17 @@ export async function readBytes(dir: FolderHandle, path: string): Promise<ArrayB
 
 /** Writes a file, creating it and any parent folders as needed. */
 export async function writeFile(dir: FolderHandle, path: string, data: FileData): Promise<void> {
-  const writable = await (await getFile(dir, path, true)).createWritable();
+  if (await exists(dir, path)) await writeExistingFile(dir, path, data);
+  else await createFile(dir, path, data);
+}
+
+/** Replaces an existing file without recreating it if it was removed. */
+export async function writeExistingFile(
+  dir: FolderHandle,
+  path: string,
+  data: FileData,
+): Promise<void> {
+  const writable = await (await getFile(dir, path)).createWritable();
   try {
     await writable.write(data);
     await writable.close();
@@ -101,16 +175,24 @@ export async function writeFile(dir: FolderHandle, path: string, data: FileData)
   }
 }
 
-/** Creates a new file, failing if something already exists at `path`. */
+/**
+ * Creates a new file, failing if something already exists at `path`.
+ * Web Locks coordinate this library across same-origin tabs, but the File System Access API
+ * has no exclusive-create primitive to prevent races with other applications or origins.
+ * A failed write can leave an empty entry; it is not deleted because its ownership is unknown.
+ */
 export async function createFile(
   dir: FolderHandle,
   path: string,
   data: FileData = "",
 ): Promise<void> {
-  if (await exists(dir, path)) {
-    throw new DOMException(`Entry already exists: ${path}`, "InvalidModificationError");
-  }
-  await writeFile(dir, path, data);
+  await serializeCreation(async () => {
+    if (await exists(dir, path)) {
+      throw new DOMException(`Entry already exists: ${path}`, "InvalidModificationError");
+    }
+    const handle = await getFile(dir, path, true);
+    await writeFileHandle(handle, data);
+  });
 }
 
 export async function deleteEntry(
@@ -157,6 +239,6 @@ export async function renameEntry(dir: FolderHandle, from: string, to: string): 
     await movable.move(targetFolder, target.name);
     return;
   }
-  await writeFile(dir, to, await source.getFile());
+  await createFile(dir, to, await source.getFile());
   await deleteEntry(dir, from);
 }

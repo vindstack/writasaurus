@@ -4,7 +4,7 @@ export default defineConfig({
   resolve: {
     alias: {
       "cloudflare:workers": new URL(
-        "./apps/website/src/lib/cloudflare-env.test.ts",
+        "./apps/writasaurus/src/lib/cloudflare-env.test.ts",
         import.meta.url,
       ).pathname,
     },

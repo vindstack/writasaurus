@@ -101,4 +101,32 @@ describe("file functions against OPFS", () => {
     });
     expect(result).toEqual({ same: true, gone: null });
   });
+
+  it("does not delete an entry replaced after the existence check when creation fails", async () => {
+    const result = await page.evaluate(async () => {
+      const { fs, root } = globalThis as any;
+      const folder = await root.getDirectoryHandle("external-race", { create: true });
+      const getFileHandle = folder.getFileHandle.bind(folder);
+      folder.getFileHandle = async (name: string, options: FileSystemGetFileOptions) => {
+        const handle = await getFileHandle(name, options);
+        if (name === "race.txt" && options?.create) {
+          handle.createWritable = async () => {
+            const replacement = await getFileHandle(name);
+            const writable = await replacement.createWritable();
+            await writable.write("external data");
+            await writable.close();
+            throw new DOMException("Write failed", "NotAllowedError");
+          };
+        }
+        return handle;
+      };
+      const error = await fs.createFile(folder, "race.txt", "ours").then(
+        () => "ok",
+        (failure: DOMException) => failure.name,
+      );
+      delete folder.getFileHandle;
+      return { error, contents: await (await (await getFileHandle("race.txt")).getFile()).text() };
+    });
+    expect(result).toEqual({ error: "NotAllowedError", contents: "external data" });
+  });
 });

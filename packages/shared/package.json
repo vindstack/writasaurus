@@ -6,8 +6,6 @@
   "exports": {
     ".": "./mod.ts",
     "./path": "./path.ts",
-    "./r2": "./r2.ts",
-    "./releases": "./releases.ts",
     "./settings": "./settings.ts",
     "./server": "./server.ts"
   },

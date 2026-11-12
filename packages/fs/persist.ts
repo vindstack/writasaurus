@@ -17,13 +17,35 @@ async function run<T>(mode: IDBTransactionMode, action: (store: IDBObjectStore) 
   const db = await openDb();
   try {
     return await new Promise<T>((resolve, reject) => {
-      const request = action(db.transaction(STORE, mode).objectStore(STORE));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
+      const transaction = db.transaction(STORE, mode);
+      const request = action(transaction.objectStore(STORE));
+      transaction.oncomplete = () => resolve(request.result);
+      transaction.onerror = () => reject(transaction.error);
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error("Storage transaction aborted."));
     });
   } finally {
     db.close();
   }
+}
+
+export async function rememberFolderData<T>(
+  dir: FolderHandle,
+  data: T,
+  key: string,
+): Promise<void> {
+  await run("readwrite", (store) => store.put({ folder: dir, data }, key));
+}
+
+/** Loads a handle without requesting permission, so callers can prompt from a user gesture. */
+export async function loadRememberedFolderData<T>(
+  key: string,
+): Promise<{ folder: FolderHandle; data: T } | null> {
+  return (
+    (await run<{ folder: FolderHandle; data: T } | undefined>("readonly", (store) =>
+      store.get(key),
+    )) ?? null
+  );
 }
 
 export async function rememberFolder(dir: FolderHandle, key = DEFAULT_KEY): Promise<void> {

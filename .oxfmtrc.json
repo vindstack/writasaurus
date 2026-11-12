@@ -11,7 +11,7 @@
     "**/.vite/**",
     "desktop/**",
     "pnpm-lock.yaml",
-    "apps/desktop/public/data/*.json",
+    "apps/writasaurus/public/data/*.json",
     "plan.md"
   ]
 }

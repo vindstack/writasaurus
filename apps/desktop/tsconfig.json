@@ -1,5 +1,0 @@
-{
-  "extends": ["astro/tsconfigs/strict", "../../tsconfig.json"],
-  "include": [".astro/types.d.ts", "**/*.ts", "**/*.vue"],
-  "exclude": ["dist", "dist-electron", "node_modules"]
-}

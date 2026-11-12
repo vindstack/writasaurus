@@ -1,0 +1,4 @@
+SESSION_SECRET=replace-with-at-least-32-random-characters
+PUBLIC_SITE_URL=http://localhost:8787
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=

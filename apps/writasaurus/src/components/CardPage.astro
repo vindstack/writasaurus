@@ -1,0 +1,112 @@
+---
+import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro";
+
+interface Props {
+  size: "narrow" | "medium" | "wide";
+  brandHref?: string;
+  roomy?: boolean;
+  prose?: boolean;
+}
+
+const { size, brandHref, roomy = false, prose = false } = Astro.props;
+---
+
+<div class="page">
+  <div class={`container ${size}`}>
+    <header class="header">
+      <BrandMark href={brandHref} />
+    </header>
+    <main>
+      <section class:list={["card", roomy && "roomy", prose && "prose"]}>
+        <slot />
+      </section>
+    </main>
+  </div>
+  <footer class="pageFooter">
+    <a class="button button--quiet" href="/editor" data-testid="layout-return-to-editor">
+      ← Return to Editor
+    </a>
+  </footer>
+</div>
+
+<style>
+.page {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+}
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.narrow {
+  max-width: 32rem;
+}
+
+.medium {
+  max-width: 36rem;
+}
+
+.wide {
+  max-width: 38rem;
+}
+
+.header {
+  text-align: center;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 2rem;
+}
+
+.roomy {
+  gap: 1.5rem;
+}
+
+.prose :global(p) {
+  color: var(--text);
+  line-height: 1.7;
+}
+
+.card :global(h2) {
+  font-size: 1.5rem;
+}
+
+.pageFooter {
+  bottom: 0.75rem;
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  z-index: 1;
+}
+
+.pageFooter :global(a) {
+  opacity: 0.75;
+  pointer-events: auto;
+}
+
+.pageFooter :global(a:hover),
+.pageFooter :global(a:focus-visible) {
+  opacity: 1;
+}
+
+@media (max-width: 36rem) {
+  .card {
+    padding: 1.25rem;
+  }
+
+  .pageFooter {
+    bottom: 0.5rem;
+    right: 0.5rem;
+  }
+}
+</style>

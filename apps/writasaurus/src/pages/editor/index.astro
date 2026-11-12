@@ -1,0 +1,10 @@
+---
+import BaseLayout from "../../layouts/EditorLayout.astro";
+import EditorApp from "../../components/islands/EditorApp.vue";
+---
+
+<BaseLayout title="Writasaurus">
+  <EditorApp client:only="vue">
+    <p slot="fallback" role="status">Loading Writasaurus...</p>
+  </EditorApp>
+</BaseLayout>
