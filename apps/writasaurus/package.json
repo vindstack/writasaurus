@@ -1,0 +1,38 @@
+{
+  "name": "@writasaurus/app",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --env-file-if-exists=../../.env node_modules/astro/bin/astro.mjs dev --host 127.0.0.1 --port 8000",
+    "build": "node --env-file-if-exists=../../.env node_modules/astro/bin/astro.mjs build",
+    "worker:dev": "astro build && wrangler dev",
+    "worker:deploy": "astro build && wrangler deploy",
+    "db:create": "wrangler d1 create writasaurus-website --binding DB --update-config",
+    "db:migrate:local": "wrangler d1 migrations apply writasaurus-website --local",
+    "db:migrate:remote": "wrangler d1 migrations apply writasaurus-website --remote",
+    "test": "astro build --config astro.config.test.ts && vitest run --config ../../vitest.config.ts",
+    "test:watch": "astro build --config astro.config.test.ts && vitest --config ../../vitest.config.ts",
+    "type-check": "astro check && tsc -p tsconfig.json",
+    "build:wordnet": "node scripts/build-wordnet-index.ts"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^14.4.2",
+    "@astrojs/vue": "^7.0.3",
+    "@preact/signals": "^2.9.0",
+    "@writasaurus/fs": "workspace:*",
+    "@writasaurus/shared": "workspace:*",
+    "astro": "^7.3.5",
+    "harper.js": "2.10.0",
+    "vue": "^3.5.43"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@astrojs/node": "^11.1.9",
+    "@types/node": "^24.0.0",
+    "@types/wicg-file-system-access": "^2023.10.6",
+    "playwright": "^1.63.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.152.0"
+  }
+}

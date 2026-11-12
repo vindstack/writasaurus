@@ -1,0 +1,28 @@
+---
+import BaseLayout from "../../layouts/EditorLayout.astro";
+import CardPage from "../../components/CardPage.astro";
+import ProjectGoal from "../../components/islands/ProjectGoal.vue";
+import PageEffects from "../../components/islands/PageEffects.vue";
+---
+
+<BaseLayout title="Manuscript Goal — Writasaurus">
+  <CardPage size="wide" brandHref="/editor" roomy>
+    <h2>Manuscript Goal</h2>
+    <p class="intro">
+      Track your current manuscript draft against this project's word-count goal.
+    </p>
+    <aside class="alert alert--info" role="note" data-testid="local-storage-notice">
+      Your goals and writing history are stored locally on this device. They won't carry over to
+      other devices unless you back up the project, including its settings, using cloud storage.
+    </aside>
+    <ProjectGoal client:load />
+  </CardPage>
+  <PageEffects client:load />
+</BaseLayout>
+
+<style>
+  .intro {
+    color: var(--muted);
+    line-height: 1.6;
+  }
+</style>

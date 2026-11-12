@@ -1,0 +1,4 @@
+packages:
+  - "apps/writasaurus"
+  - "packages/shared"
+  - "packages/fs"

@@ -2,15 +2,9 @@
   "mcpServers": {
     "playwright": {
       "type": "local",
-      "command": "deno",
-      "args": [
-        "run",
-        "-A",
-        "npm:@playwright/mcp@latest"
-      ],
-      "tools": [
-        "*"
-      ]
+      "command": "pnpm",
+      "args": ["dlx", "@playwright/mcp@latest"],
+      "tools": ["*"]
     }
   }
 }

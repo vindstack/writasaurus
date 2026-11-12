@@ -1,0 +1,10 @@
+{
+  "categories": { "correctness": "error" },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/dist-electron/**",
+    "**/dist-test/**",
+    "**/.astro/**",
+    "desktop/**"
+  ]
+}

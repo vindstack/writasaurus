@@ -1,139 +1,84 @@
 # Writasaurus
 
-A local-first manuscript editor built with Astro, Vue, and Deno. Desktop and website code are
-separate applications in one Deno workspace.
+Writasaurus is a local-first manuscript editor built with Astro and Vue. The marketing site,
+editor, and optional account pages live in `apps/writasaurus/`. Manuscripts stay in a folder on
+your device; an account is not required to write.
 
-## Applications
+## Using the editor
 
-- `apps/desktop/` contains the editor, native launchers, and desktop tests.
-- `apps/website/` contains the marketing site, optional donation flow, accounts, and server APIs.
-- `packages/shared/` contains release, settings, UI, path, and private R2 utilities.
+Open `/editor` in a supported Chromium-based browser on HTTPS or localhost. Choose a project
+folder or create one inside a folder you select. The browser may ask you to grant access again
+after a restart. Unsupported browsers cannot open the editor's project folders.
 
-Desktop project folders store manuscript versions as `draft_1.epub`, `draft_2.epub`, and so on;
-`settings.json` keeps their numbered draft list, project-specific manuscript and daily word goals,
-and a rolling 30-day writing history. The Goals page reports writing and goal-completion streaks and
-estimates manuscript completion from that history. The editor opens the latest draft by default and
-can create a blank draft or copy any earlier one. A Markdown outline is saved as `Outline.md` beside
-the drafts. Outline mode includes replaceable templates and autosaves changes to the project folder.
+Projects contain numbered EPUB drafts (`draft_1.epub`, `draft_2.epub`, and so on), `Outline.md`,
+and `settings.json` with project goals and writing history. Existing Writasaurus desktop project
+folders use the same format. Save As exports an EPUB copy without changing the open project.
+Back up the entire project folder to preserve drafts, outline, and settings.
+
+Editor preferences are stored in the browser, separately from project files. Preferences from the
+former desktop app do not transfer automatically. Browser storage and file access permissions can
+be cleared by the user or browser, so they are not a substitute for backups.
+
+The editor can be installed as a progressive web app. After the initial online visit and offline
+setup, editor features work without a network connection. Account sign-in and email preferences
+require a connection. Manually clearing browser site data removes the offline cache and saved
+permissions.
 
 Outline template guidance is informed by the
 [three-act structure](https://en.wikipedia.org/wiki/Three-act_structure),
-[Save the Cat beat sheet](https://savethecat.com/beat-sheets), the
+[Save the Cat beat sheet](https://savethecat.com/beat-sheets),
 [Hero's Journey](https://en.wikipedia.org/wiki/Hero%27s_journey), and Randy Ingermanson's
-[Snowflake Method](https://www.advancedfictionwriting.com/articles/snowflake-method/). The four-act
-template is a flexible midpoint-split adaptation, not a claim that there is one canonical four-act
-structure. Its explanations and the other templates' section notes are included in the outline as
-editable guidance.
+[Snowflake Method](https://www.advancedfictionwriting.com/articles/snowflake-method/). The
+four-act template is a flexible midpoint-split adaptation, not a claim that there is one
+canonical four-act structure. The guidance is included in the outline as editable text.
 
 ## Development
 
-Use Deno 2:
+Use Node.js 24 or newer and pnpm 9.12. Install dependencies and the Chromium browser used by tests:
 
 ```sh
-deno task dev:website         # website at http://localhost:8000
-deno task dev:desktop         # desktop app in a native window
-deno task build:website       # build the website
-deno task build:desktop       # build the desktop app
-deno task desktop             # package desktop app for this platform
-deno task test                # build and run unit and Playwright tests
-deno task check               # format, lint, types, and tests
+pnpm install
+pnpm exec playwright install chromium
+pnpm dev                 # http://localhost:8000
+pnpm build               # Cloudflare production build
+pnpm test                # build and run unit, API and browser tests
+pnpm check               # formatting, lint, types and tests
 ```
 
-To exercise donations without Stripe, run the website with
-`PAYMENT_PROVIDER=mock deno task dev:website`. Mock donations are available only outside Deno
-Deploy; local sign-in messages are written to `apps/website/.data/emails.jsonl` instead of being
-sent through Resend. The log is ignored by Git and may contain passcodes.
+`packages/fs/` wraps browser filesystem access, and `packages/shared/` contains shared UI and
+utilities. The editor uses browser-side filesystem operations, never server-side manuscript file
+APIs. Regenerate the local thesaurus index with
+`pnpm --filter @writasaurus/app build:wordnet <unpacked-wordnet> <output>`.
 
-## Website deployment
+Use `pnpm lint`, `pnpm format`, and `pnpm format:check` for the workspace. Astro files use the
+Astro editor formatter. Install the recommended Astro, Vue, and Oxc VS Code extensions or their
+Zed equivalents.
 
-The website runs on Deno Deploy and requires PostgreSQL. To start a new database from the current
-schema, apply the initial migration:
+## Cloudflare deployment and accounts
+
+The app deploys as an Astro Cloudflare Worker. Cloudflare D1 stores account sign-in codes, sessions,
+and email preferences; project files are not uploaded to Cloudflare. Account sign-in uses Resend
+for one-time email codes. Configure `SESSION_SECRET` (at least 32 cryptographically random
+characters), `RESEND_API_KEY`, `RESEND_FROM_EMAIL`, and `PUBLIC_SITE_URL` for the deployed
+environment. Keep secrets in Wrangler secrets, not source control. Refer to `.env.example` and
+`apps/writasaurus/.dev.vars.example` for local configuration.
+
+The existing D1 binding and migration history remain in `apps/writasaurus/wrangler.jsonc` and
+`apps/writasaurus/migrations/`. Historical payment tables are not deleted by this migration.
+For local Worker development, apply local migrations and configure `.dev.vars` before starting
+the Worker:
 
 ```sh
-deno task db:migrate
+pnpm --filter @writasaurus/app db:migrate:local
+pnpm --filter @writasaurus/app worker:dev
 ```
 
-`deno task db:reset` is destructive: it drops the existing Writasaurus database tables and applies
-the current initial schema. Use it only when intentionally starting over with all database data
-deleted.
-
-Configure the website's environment/secret store with:
-
-- `DATABASE_URL`
-- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`
-- `RESEND_API_KEY` and `RESEND_FROM_EMAIL`
-- `PUBLIC_SITE_URL` and `SESSION_SECRET`
-- `WRITASAURUS_R2_PUBLIC_BASE_URL` (the public download domain, also allowed by the website's
-  form-redirect security policy)
-
-Configure Stripe Checkout for one-time payments and a webhook for `checkout.session.completed`,
-`checkout.session.async_payment_succeeded`, `charge.refunded`, and `charge.dispute.created`. Set its
-signing secret in `STRIPE_WEBHOOK_SECRET`. Configure Resend with a verified sending domain. Passcode
-emails are sent for passwordless account sign-in; marketing email preference does not suppress them.
-
-### Local PostgreSQL
-
-Install Docker Compose, copy `.env.example` to `.env`, then start the local database and apply its
-schema:
+Apply migrations to the configured remote database and deploy with:
 
 ```sh
-deno task db:dev:up
-deno task db:migrate
-deno task dev:website
+pnpm --filter @writasaurus/app db:migrate:remote
+pnpm deploy
 ```
 
-To discard local data and recreate the current schema, run `deno task db:reset`. The local database
-credentials in `.env.example` are only for development. The Compose service stores data in a
-persistent Docker volume; stop it with `deno task db:dev:down`. Use separate credentials and a
-separate database for staging or production.
-
-## Free desktop downloads and donations
-
-The desktop app is free to download and use. The website's download flow asks for a platform and
-optionally an email address, then offers free, a one-time $10 or $25 USD donation, or a custom
-one-time USD amount. Custom amounts must meet Stripe's minimum; Writasaurus sets no additional upper
-cap. An email is required for a donation. Downloads do not require an account or payment. The
-website requires explicit agreement to the terms and conditions before starting a download or
-donation checkout. The checkbox is unchecked by default and validated by both the browser and
-server.
-
-Anyone who provides an email has an account, whether or not they donate. Accounts use passwordless
-email codes to show any donation receipts and manage the marketing email preference. The marketing
-checkbox is checked by default; account holders can uncheck it. There is no download history.
-Passcode emails are necessary for sign-in and are not affected by the marketing preference.
-
-### Public desktop releases
-
-Create a Cloudflare R2 bucket for downloadable release artifacts and expose it through a public
-HTTPS custom domain (or enable its public `r2.dev` URL for development). Do not use the private
-`r2.cloudflarestorage.com` S3 API endpoint as `WRITASAURUS_R2_PUBLIC_BASE_URL`. For local
-publishing, copy `.env.example` to `.env` and set the R2 account ID, access key ID, secret access
-key, bucket name, and public base URL for that domain. Keep R2 credentials local; they are only used
-by the release command. Build and publish an immutable semantic version:
-
-```sh
-deno task release:desktop 1.2.3
-```
-
-The release task builds the Linux AppImage, Apple Silicon macOS archive, and Windows MSI; validates
-the package signatures; generates a `SHA256SUMS.txt`; and uploads the artifacts and versioned
-metadata to R2. Uploads are verified and version paths cannot be overwritten. After all versioned
-objects are verified, the task updates `latest.json` at the bucket root with the release manifest
-and public artifact URLs. Downloads use the new release immediately, without a website deployment.
-The latest pointer is revalidated rather than cached, and conditional writes prevent concurrent
-releases from overwriting a newer pointer. Use `--dry-run` to build, validate, and preview the
-release metadata without reading R2 credentials or uploading. Existing immutable version paths
-cannot be republished.
-
-The website fetches `latest.json` from `WRITASAURUS_R2_PUBLIC_BASE_URL` and redirects download
-requests directly to the public artifact URL. No purchase, account, or license check is involved.
-Release metadata is stored only in R2, not the website's public directory. Keep `PUBLIC_SITE_URL`
-set to the website URL (`http://localhost:8000` for local development), not R2.
-
-## Data and security
-
-Manuscripts remain on the user's device. The website stores donation amounts and processor IDs,
-donor email addresses, Stripe receipt URLs, passwordless sign-in state, and marketing email
-preferences. Payment details are handled by Stripe; the website does not store card numbers.
-PostgreSQL backups, access, retention, tax handling, marketing consent, and donation terms should be
-reviewed before launch. The website terms are a product draft, not legal advice.
+Configure the verified Resend sender and the site's public URL for the deployed domain. Local
+development sign-in messages are logged rather than sent; treat these logs as sensitive.

@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-const props = withDefaults(defineProps<{
-  label: string;
-  value?: number;
-  max?: number;
-}>(), { max: 100 });
+const props = withDefaults(
+  defineProps<{
+    label: string;
+    value?: number;
+    max?: number;
+  }>(),
+  { max: 100 },
+);
 
-const maximum = computed(() => Number.isFinite(props.max) && props.max > 0 ? props.max : 100);
+const maximum = computed(() => (Number.isFinite(props.max) && props.max > 0 ? props.max : 100));
 const current = computed(() =>
   typeof props.value === "number" && Number.isFinite(props.value)
     ? Math.max(0, Math.min(props.value, maximum.value))
-    : undefined
+    : undefined,
 );
 </script>
 
@@ -23,12 +26,7 @@ const current = computed(() =>
     :value="current"
     :max="maximum"
   />
-  <progress
-    v-else
-    class="progress"
-    :aria-label="label"
-    :max="maximum"
-  />
+  <progress v-else class="progress" :aria-label="label" :max="maximum" />
 </template>
 
 <style scoped>

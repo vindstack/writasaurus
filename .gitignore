@@ -1,12 +1,15 @@
 .data/
 /desktop
-deno.lock
 ignore/
 dist/
 .astro/
 .vite/
 node_modules/
 .env
+.dev.vars
+.wrangler/
 /apps/*/dist/
 /apps/*/.astro/
-/apps/desktop/desktop/
+dist-electron/
+dist-test/
+coverage/

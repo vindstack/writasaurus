@@ -22,7 +22,7 @@ Build accessible, consistent interfaces while keeping client-side JavaScript to 
 5. Before adding a primitive, check whether semantic HTML, a native element, a shared component, or
    a `main.css` class already solves the need. If the primitive is broadly reusable, add it to
    `packages/shared/ui/components` and keep its styles based on `main.css`.
-6. Validate the affected app with its existing Deno check/build/test tasks.
+6. Validate the affected app with its existing pnpm check/build/test tasks.
 
 ## Rendering and interaction
 

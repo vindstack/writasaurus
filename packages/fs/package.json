@@ -1,0 +1,20 @@
+{
+  "name": "@writasaurus/fs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./mod.ts",
+    "./paths": "./paths.ts"
+  },
+  "scripts": {
+    "test": "vitest run --config ../../vitest.config.ts",
+    "type-check": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/wicg-file-system-access": "^2023.10.6",
+    "esbuild": "^0.27.0",
+    "playwright": "^1.63.0",
+    "vitest": "^5.0.5"
+  }
+}

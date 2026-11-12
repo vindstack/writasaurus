@@ -1,0 +1,38 @@
+import { editorHistory } from "./history.ts";
+import { saveEpubToDisk, saveOutlineToDisk, saveToDisk } from "./file-io.ts";
+import { getEditor } from "./surface.ts";
+import { editorMode, hasUnsavedChanges, markOutlineChanged, syncChapter } from "./state.ts";
+
+/** Saves to the current file, only when there is something to save. */
+export async function save(): Promise<void> {
+  if (editorMode.peek() === "outline") {
+    const editor = getEditor();
+    if (editor) markOutlineChanged(editor);
+    await saveOutlineToDisk();
+    if (hasUnsavedChanges.peek()) await saveToDisk();
+    editorHistory.saveCurrentState();
+    return;
+  }
+  if (!hasUnsavedChanges.peek()) return;
+  const editor = getEditor();
+  if (!editor) return;
+  syncChapter(editor);
+  await saveToDisk();
+  editorHistory.saveCurrentState();
+}
+
+export async function saveAsEpub(): Promise<void> {
+  const editor = getEditor();
+  if (editor && editorMode.peek() === "manuscript") syncChapter(editor);
+  await saveEpubToDisk();
+  editorHistory.saveCurrentState();
+}
+
+export async function toggleFullscreen(): Promise<void> {
+  try {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await document.documentElement.requestFullscreen();
+  } catch (error) {
+    console.error("Could not toggle fullscreen mode.", error);
+  }
+}

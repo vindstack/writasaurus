@@ -1,26 +1,33 @@
 <script setup lang="ts">
 import { onUnmounted, watch } from "vue";
 
-const props = withDefaults(defineProps<{
-  open: boolean;
-  message: string;
-  variant?: "info" | "success" | "warning" | "danger";
-  duration?: number;
-}>(), { variant: "info", duration: 4000 });
+const props = withDefaults(
+  defineProps<{
+    open: boolean;
+    message: string;
+    variant?: "info" | "success" | "warning" | "danger";
+    duration?: number;
+  }>(),
+  { variant: "info", duration: 4000 },
+);
 
 const emit = defineEmits<{ close: [] }>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-watch(() => props.open, (open) => {
-  clearTimeout(timer);
-  timer = undefined;
-  if (open && props.duration > 0) {
-    timer = setTimeout(() => {
-      timer = undefined;
-      emit("close");
-    }, props.duration);
-  }
-}, { immediate: true });
+watch(
+  () => props.open,
+  (open) => {
+    clearTimeout(timer);
+    timer = undefined;
+    if (open && props.duration > 0) {
+      timer = setTimeout(() => {
+        timer = undefined;
+        emit("close");
+      }, props.duration);
+    }
+  },
+  { immediate: true },
+);
 
 onUnmounted(() => clearTimeout(timer));
 </script>

@@ -1,0 +1,43 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import SitePage from "../components/SitePage.astro";
+import SignInForm from "../components/SignInForm.astro";
+import { getSession } from "../lib/auth.ts";
+import { getWebsiteStore } from "../lib/website-store.ts";
+
+const session = await getSession(Astro.request);
+const sent = Astro.url.searchParams.get("sent") === "1";
+const preferencesUpdated = Astro.url.searchParams.get("preferences") === "updated";
+const marketingOptIn = session
+  ? (await getWebsiteStore().getMarketingPreference(session.email)) ?? true
+  : true;
+---
+
+<BaseLayout title={session ? "Your Writasaurus account" : "Sign in to Writasaurus"}>
+  <SitePage>
+    {session
+      ? <>
+        <h1>Your account</h1>
+        <p>Signed in as <strong>{session.email}</strong>.</p>
+        {preferencesUpdated && <p role="status">Your email preference has been saved.</p>}
+        <section aria-labelledby="email-preference-heading">
+          <h2 id="email-preference-heading">Email preferences</h2>
+          <form action="/api/account/preferences" method="post">
+            <label>
+              <input
+                type="checkbox"
+                name="marketingEmails"
+                value="yes"
+                checked={marketingOptIn}
+              />
+              Send me optional marketing emails
+            </label>
+            <p>Passcode emails needed to sign in are always sent and are not affected by this setting.</p>
+            <button type="submit">Save preference</button>
+          </form>
+        </section>
+        <form action="/api/auth/logout" method="post"><button type="submit">Sign out</button></form>
+      </>
+      : <SignInForm sent={sent} />}
+  </SitePage>
+</BaseLayout>

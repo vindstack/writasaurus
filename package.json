@@ -1,0 +1,28 @@
+{
+  "name": "writasaurus-monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @writasaurus/app dev",
+    "build": "pnpm --filter @writasaurus/app build",
+    "deploy": "pnpm --filter @writasaurus/app worker:deploy",
+    "test": "pnpm --filter @writasaurus/fs test && pnpm --filter @writasaurus/app test",
+    "lint": "oxlint .",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check .",
+    "type-check": "pnpm -r type-check",
+    "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm test"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "oxfmt": "^0.74.0",
+    "oxlint": "^1.89.0",
+    "playwright": "^1.63.0",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@9.12.0"
+}

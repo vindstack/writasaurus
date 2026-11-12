@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from "vue";
 
-const props = withDefaults(defineProps<{
-  id?: string;
-  open: boolean;
-  placement?: "bottom-start" | "bottom-end";
-}>(), { placement: "bottom-start" });
+const props = withDefaults(
+  defineProps<{
+    id?: string;
+    open: boolean;
+    placement?: "bottom-start" | "bottom-end";
+  }>(),
+  { placement: "bottom-start" },
+);
 const emit = defineEmits<{ "open-change": [open: boolean] }>();
 const root = ref<HTMLDivElement | null>(null);
 
@@ -15,15 +18,17 @@ function onDocumentClick(event: MouseEvent): void {
 
 function onMenuClick(event: MouseEvent): void {
   const item = (event.target as HTMLElement).closest('[role^="menuitem"]');
-  if (
-    item && !item.hasAttribute("data-keep-open") && item.getAttribute("aria-haspopup") !== "true"
-  ) emit("open-change", false);
+  if (item && !item.hasAttribute("data-keep-open") && item.getAttribute("aria-haspopup") !== "true")
+    emit("open-change", false);
 }
 
-watch(() => props.open, (open) => {
-  if (open) document.addEventListener("click", onDocumentClick);
-  else document.removeEventListener("click", onDocumentClick);
-});
+watch(
+  () => props.open,
+  (open) => {
+    if (open) document.addEventListener("click", onDocumentClick);
+    else document.removeEventListener("click", onDocumentClick);
+  },
+);
 onMounted(() => {
   if (props.open) document.addEventListener("click", onDocumentClick);
 });
@@ -35,11 +40,7 @@ onUnmounted(() => document.removeEventListener("click", onDocumentClick));
     <div class="trigger" @click="emit('open-change', !open)">
       <slot name="trigger" />
     </div>
-    <div
-      :class="['popover', placement, open && 'open']"
-      role="menu"
-      @click="onMenuClick"
-    >
+    <div :class="['popover', placement, open && 'open']" role="menu" @click="onMenuClick">
       <slot />
     </div>
   </div>
