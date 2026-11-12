@@ -2,3 +2,4 @@ packages:
   - "apps/website"
   - "apps/desktop"
   - "packages/shared"
+  - "packages/fs"
