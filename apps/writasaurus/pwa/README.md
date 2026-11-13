@@ -18,6 +18,18 @@ registers only in builds with the integration enabled. Keep CSP `worker-src
 visit must remain online until the service worker has finished installing; `navigator.serviceWorker.ready`
 resolves after activation. The landing page itself is not cached.
 
+The landing CTA queries `getInstalledRelatedApps()` where supported. A matching installed web
+app, or the `appinstalled` event, changes it to "Open App" with a `web+writasaurus://open` link.
+The manifest registers this protocol to launch `/editor#launch=%s`, keeping offline editor
+navigation free of query strings. Set `PUBLIC_SITE_URL` to the deployed origin when building:
+the integration uses it to override the absolute related-app ID required for desktop detection.
+Without this override, the manifest targets `https://writasaurus.vindstack.com/editor`.
+Browsers without installed-app detection retain "Try now"; no localStorage installation flag
+is used because it would remain stale after uninstalling. Native protocol registration and
+launch permission are browser/OS dependent; existing installs may require a manifest update
+or reinstall. Tests simulate installed-app detection and verify the link/manifest contract,
+not Brave's native launch dialog.
+
 All seven routes in `public-pages.ts` must render complete, anonymous, non-personalized editor
 shells without authentication, account data, user-specific server state, cookies, or API responses.
 Adapt editor links and browser-side file/settings/goal behavior to these routes and to offline use.

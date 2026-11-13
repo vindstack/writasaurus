@@ -58,7 +58,18 @@ export function editorPwa(): AstroIntegration {
           if (existing.includes(name)) throw new Error(`PWA output conflicts with ${name}`);
         }
         for (const name of generatedNames.slice(1)) {
-          await writeFile(join(clientDir, name), await readFile(join(assetsDir, name)));
+          let content = await readFile(join(assetsDir, name));
+          if (name === "writasaurus-editor.webmanifest" && process.env.PUBLIC_SITE_URL) {
+            const manifest: { related_applications: { id: string }[] } = JSON.parse(
+              content.toString("utf8"),
+            );
+            manifest.related_applications[0].id = new URL(
+              "/editor",
+              process.env.PUBLIC_SITE_URL,
+            ).href;
+            content = Buffer.from(JSON.stringify(manifest, null, 2));
+          }
+          await writeFile(join(clientDir, name), content);
         }
         const synonyms = await readFile(synonymsSource);
         const synonymsDestination = join(clientDir, ...synonymsPath.split("/"));

@@ -128,7 +128,19 @@ test("manifest icons are PNGs with the declared install sizes", async () => {
     await readFile(new URL("writasaurus-editor.webmanifest", assets), "utf8"),
   ) as {
     icons: { src: string; sizes: string; type: string }[];
+    related_applications: { platform: string; url: string; id: string }[];
+    protocol_handlers: { protocol: string; url: string }[];
   };
+  expect(manifest.related_applications).toEqual([
+    {
+      platform: "webapp",
+      url: "/writasaurus-editor.webmanifest",
+      id: "https://writasaurus.vindstack.com/editor",
+    },
+  ]);
+  expect(manifest.protocol_handlers).toEqual([
+    { protocol: "web+writasaurus", url: "/editor#launch=%s" },
+  ]);
   for (const size of [192, 512]) {
     const icon = manifest.icons.find((entry) => entry.sizes === `${size}x${size}`);
     expect(icon?.type).toBe("image/png");

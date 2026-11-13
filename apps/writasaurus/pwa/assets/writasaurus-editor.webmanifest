@@ -6,8 +6,21 @@
   "start_url": "/editor",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#f5f2e9",
-  "theme_color": "#405234",
+  "background_color": "#fffdf7",
+  "theme_color": "#fffdf7",
+  "related_applications": [
+    {
+      "platform": "webapp",
+      "url": "/writasaurus-editor.webmanifest",
+      "id": "https://writasaurus.vindstack.com/editor"
+    }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+writasaurus",
+      "url": "/editor#launch=%s"
+    }
+  ],
   "icons": [
     {
       "src": "/writasaurus-editor-icon-192.png",

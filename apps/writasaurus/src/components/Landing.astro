@@ -23,9 +23,20 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
                 <a
                     class="button button--primary heroButton"
                     href="/editor"
+                    data-install-button
                 >
                     Try now
                 </a>
+                <p
+                    id="install-browser-warning"
+                    class="installWarning"
+                    role="alert"
+                    data-install-warning
+                    hidden
+                >
+                    Your browser does not support native project folder access.
+                    Please use Chrome, Edge, or Brave to install and use Writasaurus.
+                </p>
             </div>
         </div>
         <div class="art">
@@ -165,6 +176,22 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         min-height: 3.25rem;
         min-width: 13.5rem;
         padding: 0.75rem 1.25rem;
+    }
+
+    .heroButton[aria-disabled="true"] {
+        cursor: not-allowed;
+    }
+
+    .installWarning {
+        background: color-mix(in srgb, var(--warning) 9%, var(--surface));
+        border: 1px solid color-mix(in srgb, var(--warning) 35%, var(--border));
+        border-radius: var(--radius-control);
+        color: var(--warning);
+        font-size: 0.9rem;
+        line-height: 1.5;
+        margin: 0;
+        max-width: 36rem;
+        padding: 0.75rem 1rem;
     }
 
     .art {
@@ -315,3 +342,9 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
         }
     }
 </style>
+
+<script>
+    import { setupInstallPrompt } from "../pwa/install-prompt.ts";
+
+    setupInstallPrompt();
+</script>

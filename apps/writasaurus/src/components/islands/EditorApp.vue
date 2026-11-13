@@ -295,14 +295,52 @@ async function showManuscript(): Promise<boolean> {
 </script>
 
 <template>
-  <div v-if="needsPermission">
-    <p>Reconnect your project folder to continue editing and saving.</p>
-    <button class="button button--primary" type="button" @click="reconnect">
-      Reconnect project
-    </button>
-    <button class="button" type="button" @click="recoverCached">Recover cached changes</button>
-    <p v-if="initializationError" role="alert">{{ initializationError }}</p>
-  </div>
+  <main v-if="needsPermission" class="permissionPage">
+    <section class="permissionCard" aria-labelledby="permission-title">
+      <div class="permissionIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path
+            d="M3.75 7.5h6l1.8 2.1h8.7v8.65a1.5 1.5 0 0 1-1.5 1.5h-13.5a1.5 1.5 0 0 1-1.5-1.5V7.5Z"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linejoin="round"
+          />
+          <path
+            d="M12 12.25v4.5m-2.25-2.25h4.5"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          />
+        </svg>
+      </div>
+      <p class="permissionEyebrow">Project access</p>
+      <h1 id="permission-title">Reconnect your project</h1>
+      <p class="permissionDescription">
+        Writasaurus needs access to your project folder to reopen your manuscript and save changes.
+        Your files stay on your device.
+      </p>
+      <p v-if="initializationError" class="permissionError" role="alert">
+        {{ initializationError }}
+      </p>
+      <div class="permissionActions">
+        <button
+          class="button button--primary"
+          type="button"
+          data-reconnect-project
+          @click="reconnect"
+        >
+          Reconnect project
+        </button>
+        <button class="button button--quiet-outline" type="button" @click="recoverCached">
+          Recover cached changes
+        </button>
+      </div>
+      <p class="permissionNote">
+        If folder access isn’t available, you can try recovering the latest changes saved in this
+        browser.
+      </p>
+    </section>
+  </main>
   <p v-else-if="initializationError" role="alert">
     {{ initializationError }} You may retry by restarting Writasaurus.
   </p>
@@ -348,6 +386,106 @@ async function showManuscript(): Promise<boolean> {
 </template>
 
 <style scoped>
+.permissionPage {
+  align-items: center;
+  background:
+    radial-gradient(
+      ellipse at 50% 20%,
+      color-mix(in srgb, var(--accent) 8%, transparent),
+      transparent 38rem
+    ),
+    var(--bg);
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: clamp(1.25rem, 5vw, 3rem);
+}
+
+.permissionCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-md);
+  box-sizing: border-box;
+  max-width: 34rem;
+  padding: clamp(1.5rem, 5vw, 2.75rem);
+  text-align: center;
+  width: 100%;
+}
+
+.permissionIcon {
+  align-items: center;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-radius: 1rem;
+  color: var(--accent-strong);
+  display: flex;
+  height: 3.5rem;
+  justify-content: center;
+  margin: 0 auto 1.25rem;
+  width: 3.5rem;
+}
+
+.permissionIcon svg {
+  height: 1.8rem;
+  width: 1.8rem;
+}
+
+.permissionEyebrow {
+  color: var(--accent-warm);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.5rem;
+  text-transform: uppercase;
+}
+
+.permissionCard h1 {
+  color: var(--accent-strong);
+  font-family: var(--font-display, var(--font-serif));
+  font-size: clamp(1.8rem, 5vw, 2.35rem);
+  letter-spacing: -0.025em;
+  margin: 0;
+}
+
+.permissionDescription {
+  color: var(--muted);
+  line-height: 1.65;
+  margin: 0.75rem auto 0;
+  max-width: 29rem;
+}
+
+.permissionError {
+  background: color-mix(in srgb, var(--danger) 9%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--border));
+  border-radius: var(--radius-control);
+  color: var(--danger);
+  font-size: 0.9rem;
+  margin: 1.25rem 0 0;
+  padding: 0.75rem 1rem;
+  text-align: left;
+}
+
+.permissionActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 1.5rem;
+}
+
+.permissionActions .button {
+  min-height: 2.8rem;
+}
+
+.permissionNote {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  margin: 1.25rem auto 0;
+  max-width: 27rem;
+}
+
 .app {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
@@ -381,6 +519,17 @@ async function showManuscript(): Promise<boolean> {
 @media (max-width: 55rem) {
   .app {
     height: calc(100dvh - var(--window-titlebar-height, 0px));
+  }
+}
+
+@media (max-width: 36rem) {
+  .permissionPage {
+    padding: 1rem;
+  }
+
+  .permissionActions {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 </style>
