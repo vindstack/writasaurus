@@ -5,7 +5,9 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
 <main class="page">
     <header class="header">
         <BrandMark href="/" />
-        <a class="headerLink" href="/account">Sign in</a>
+        <a class="headerLink" href="/account">
+            Sign in
+        </a>
     </header>
 
     <section class="hero" aria-labelledby="hero-title">
@@ -35,7 +37,8 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
                     hidden
                 >
                     Your browser does not support native project folder access.
-                    Please use Chrome, Edge, or Brave to install and use Writasaurus.
+                    Please use Chrome, Edge, or Brave to install and use
+                    Writasaurus.
                 </p>
             </div>
         </div>
@@ -79,9 +82,9 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
     </section>
 
     <footer class="footer">
-        <span
-            >© 2026 Vindstack LLC. Writasaurus is a trademark of Vindstack LLC.</span
-        >
+        <span>
+            © 2026 Vindstack LLC. Writasaurus is a trademark of Vindstack LLC.
+        </span>
         <a href="/agreement">Terms and conditions</a>
     </footer>
 </main>
@@ -170,7 +173,8 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
     }
 
     .heroButton {
-        box-shadow: 0 0.5rem 1.25rem color-mix(in srgb, var(--accent) 22%, transparent);
+        box-shadow: 0 0.5rem 1.25rem
+            color-mix(in srgb, var(--accent) 22%, transparent);
         font-size: 1rem;
         font-weight: 700;
         min-height: 3.25rem;
@@ -263,7 +267,6 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
             grid-template-columns: minmax(0, 1fr) minmax(16rem, 0.8fr);
             min-height: 0;
         }
-
     }
 
     @media (max-width: 44rem) {
@@ -326,7 +329,6 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
             align-items: stretch;
         }
 
-
         .paper {
             min-height: 16rem;
         }
@@ -344,7 +346,7 @@ import BrandMark from "../../../../packages/shared/ui/components/BrandMark.astro
 </style>
 
 <script>
-    import { setupInstallPrompt } from "../pwa/install-prompt.ts";
+    import { setupInstallPrompt } from "../pwa/install-prompt";
 
     setupInstallPrompt();
 </script>
