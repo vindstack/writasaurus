@@ -68,6 +68,10 @@ test("landing visit installs an anonymous offline editor without caching account
     expect(precacheCookies).toHaveLength(assetPaths.length + OFFLINE_EDITOR_PAGES.length);
     expect(precacheCookies.every((cookie) => cookie === "")).toBe(true);
 
+    await page.goto(`${server.url}/editor`);
+    expect(await page.locator("h1").textContent()).toBe("/editor");
+    expect(precacheCookies).toHaveLength(assetPaths.length + OFFLINE_EDITOR_PAGES.length);
+
     await page.goto(`${server.url}/account`);
     await page.goto(`${server.url}/api/account`);
     const cachedPaths = await page.evaluate(async () => {
@@ -120,6 +124,17 @@ test("public page opt-in rejects authenticated, non-editor and non-cacheable res
   expect(
     markOfflineEditorPage(request("/editor"), privateResponse).headers.has("x-writasaurus-offline"),
   ).toBe(false);
+});
+
+test("the offline cache excludes host-managed robots metadata", async () => {
+  const worker = await readFile(
+    new URL("../../dist-test/client/writasaurus-editor-sw.js", import.meta.url),
+    "utf8",
+  );
+  const config = JSON.parse(worker.match(/^const config = (.+);$/m)![1]) as {
+    assets: [string, string][];
+  };
+  expect(config.assets.map(([path]) => path)).not.toContain("/robots.txt");
 });
 
 test("manifest icons are PNGs with the declared install sizes", async () => {

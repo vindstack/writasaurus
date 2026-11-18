@@ -6,8 +6,9 @@ through the Cloudflare assets binding, including the root-level `writasaurus-edi
 fails on conflicting assets, and precaches every eligible emitted client asset, including dynamic
 chunks and WASM. Each fetched asset must match its build-time SHA-256 digest, so an SSR response or
 stale deployment cannot be mistaken for a public build asset. The site must be deployed at the
-origin root over HTTPS (or localhost). Cloudflare control files such as `_headers` and `_redirects`
-are excluded because they are deployment metadata, not fetchable assets. The same integration works
+origin root over HTTPS (or localhost). Cloudflare control files such as `_headers` and `_redirects` are excluded because they are deployment
+metadata, not fetchable assets, and `robots.txt` is excluded because Cloudflare may rewrite its served
+content. The same integration works
 with the Node middleware adapter's client directory used by the app's test configuration. The
 manifest's 192px and 512px PNG icons are derived from the existing application artwork.
 
@@ -43,8 +44,9 @@ depend on IP, headers, sessions, or other user-specific information. Do not send
 Failure of any resource prevents installation rather than installing a partial offline editor.
 
 The worker intercepts only exact editor navigations and emitted static asset URLs, never account,
-API, cross-origin, query-string, or other requests. Navigations are network-first with an offline
-fallback; assets are cache-first. Google-hosted fonts are not cached and need local fallbacks.
+API, cross-origin, query-string, or other requests. Navigations and assets are cache-first so an
+online request cannot briefly expose a network error before the cached shell appears. Google-hosted
+fonts are not cached and need local fallbacks.
 Cached HTML retains its original nonce and CSP, so its nonce is reused for offline renders; never
 use these cached shells for personalized content or mix their HTML and headers with another response.
 

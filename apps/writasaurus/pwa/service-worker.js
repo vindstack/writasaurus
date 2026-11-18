@@ -92,13 +92,12 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate" && pages.has(url.pathname)) {
     event.respondWith(
-      fetch(request).catch(async () => {
+      (async () => {
         const cached = await (
           await caches.open(cacheName)
         ).match(url.pathname, { ignoreVary: true });
-        if (cached) return cached;
-        throw new Error("Offline editor page unavailable");
-      }),
+        return cached || fetch(request);
+      })(),
     );
   } else if (assets.has(url.pathname)) {
     event.respondWith(

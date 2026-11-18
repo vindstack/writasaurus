@@ -33,9 +33,15 @@ function isPublicAsset(path: string): boolean {
   return (
     !parts.some((part) => part.startsWith(".")) &&
     !parts.some((part) =>
-      ["api", "account", "_worker.js", "_headers", "_redirects", "_routes.json"].includes(
-        part.toLowerCase(),
-      ),
+      [
+        "api",
+        "account",
+        "_worker.js",
+        "_headers",
+        "_redirects",
+        "_routes.json",
+        "robots.txt",
+      ].includes(part.toLowerCase()),
     ) &&
     !/\.html?$/i.test(path)
   );
