@@ -14,12 +14,12 @@
     "check": "pnpm format:check && pnpm lint && pnpm type-check && pnpm test"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
+    "@types/node": "^24.19.2",
     "oxfmt": "^0.74.0",
-    "oxlint": "^1.89.0",
-    "playwright": "^1.63.0",
+    "oxlint": "^1.94.0",
+    "playwright": "^1.65.1",
     "typescript": "^6.0.3",
-    "vitest": "^5.0.5"
+    "vitest": "^5.1.1"
   },
   "engines": {
     "node": ">=24.0.0"
