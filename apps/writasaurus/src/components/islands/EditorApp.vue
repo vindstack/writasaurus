@@ -50,6 +50,7 @@ const AUTOSAVE_DEBOUNCE_MS = 1_000;
 const ready = ref(false);
 const surfaceReady = ref(false);
 const initializationError = ref("");
+const canRecoverCached = ref(false);
 const recoveryCacheFailed = ref(false);
 const needsPermission = ref(false);
 const toolbarVisible = ref(true);
@@ -141,6 +142,7 @@ async function initializeEditor(): Promise<void> {
   } catch (error) {
     initializationError.value =
       error instanceof Error ? error.message : "Could not initialize Writasaurus.";
+    canRecoverCached.value = restoreLocal() !== null;
   } finally {
     ready.value = true;
   }
@@ -150,11 +152,12 @@ async function restoreProjectEditor(offline = false): Promise<void> {
   const opened = offline
     ? recoverCachedEditor()
       ? "opened"
-      : "permission"
+      : { status: "permission" as const }
     : await restoreEditor();
   if (disposed) return;
-  if (opened === "permission") {
+  if (typeof opened !== "string") {
     needsPermission.value = true;
+    initializationError.value = opened.accessError ?? "";
     return;
   }
   needsPermission.value = false;
@@ -341,9 +344,23 @@ async function showManuscript(): Promise<boolean> {
       </p>
     </section>
   </main>
-  <p v-else-if="initializationError" role="alert">
-    {{ initializationError }} You may retry by restarting Writasaurus.
-  </p>
+  <main v-else-if="initializationError" class="permissionPage">
+    <section class="permissionCard" aria-labelledby="restore-error-title">
+      <h1 id="restore-error-title">Could not load the editor</h1>
+      <p class="permissionError" role="alert">{{ initializationError }}</p>
+      <div class="permissionActions">
+        <a class="button button--primary" href="/editor">Retry loading the editor</a>
+        <button
+          v-if="canRecoverCached"
+          class="button button--quiet-outline"
+          type="button"
+          @click="recoverCached"
+        >
+          Recover cached changes
+        </button>
+      </div>
+    </section>
+  </main>
   <p v-else-if="!ready" role="status">Loading Writasaurus...</p>
   <div
     v-else

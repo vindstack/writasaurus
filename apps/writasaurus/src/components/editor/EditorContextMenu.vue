@@ -55,6 +55,19 @@ let selectedRange: Range | null = null;
 let clickedWordRange: Range | null = null;
 let thesaurusRange: Range | null = null;
 let lookupGeneration = 0;
+let positionStyle: HTMLStyleElement | null = null;
+
+function setContextMenuPosition(left: number, top: number): void {
+  if (!positionStyle) {
+    positionStyle = document.createElement("style");
+    const nonceSource = document.querySelector<HTMLScriptElement | HTMLStyleElement>(
+      "script[nonce], style[nonce]",
+    );
+    if (nonceSource?.nonce) positionStyle.nonce = nonceSource.nonce;
+    document.head.appendChild(positionStyle);
+  }
+  positionStyle.textContent = `[data-editor-context-menu] { left: ${left}px; top: ${top}px; }`;
+}
 
 function normalizeWord(word: string): string {
   return word.replaceAll("_", " ").trim().toLocaleLowerCase("en-US");
@@ -151,8 +164,10 @@ async function showContextMenu(x: number, y: number): Promise<void> {
   if (!menu) return;
   const bounds = menu.getBoundingClientRect();
   const margin = 8;
-  menu.style.left = `${Math.max(margin, Math.min(x, innerWidth - bounds.width - margin))}px`;
-  menu.style.top = `${Math.max(margin, Math.min(y, innerHeight - bounds.height - margin))}px`;
+  setContextMenuPosition(
+    Math.max(margin, Math.min(x, innerWidth - bounds.width - margin)),
+    Math.max(margin, Math.min(y, innerHeight - bounds.height - margin)),
+  );
   menu.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
 }
 
@@ -366,6 +381,8 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener("contextmenu", onContextMenu);
   document.removeEventListener("pointerdown", onDocumentPointerDown);
+  positionStyle?.remove();
+  positionStyle = null;
 });
 </script>
 

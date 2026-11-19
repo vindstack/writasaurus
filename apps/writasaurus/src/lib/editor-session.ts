@@ -20,6 +20,7 @@ import {
 import { blankManuscript } from "./editor/data.ts";
 import { epubFilename, generateEpub, isEpubFilename, parseEpub } from "./epub.ts";
 import { DEFAULT_OUTLINE } from "./editor/outline-templates.ts";
+import { ProjectRestoreTimeout, restoreStep } from "./editor/restore-step.ts";
 import type { Manuscript } from "./editor/types.ts";
 import { basename } from "../../../../packages/shared/path.ts";
 import { DEFAULT_DAILY_WORD_GOAL } from "../../../../packages/shared/settings.ts";
@@ -92,11 +93,20 @@ export function getProjectIdentity(): ProjectIdentity | null {
 }
 
 async function setActiveProject(folder: FolderHandle, filename: string): Promise<void> {
-  const saved = await loadRememberedFolderData<RememberedProject>(PROJECT_KEY);
-  const projectId =
-    saved?.data?.projectId && (await folder.isSameEntry(saved.folder))
-      ? saved.data.projectId
-      : crypto.randomUUID();
+  let projectId = folder === state.folder ? state.projectId : null;
+  if (!projectId) {
+    const saved = await loadRememberedFolderData<RememberedProject>(PROJECT_KEY);
+    if (saved?.data?.projectId) {
+      try {
+        if (await folder.isSameEntry(saved.folder)) projectId = saved.data.projectId;
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== "AbortError") throw error;
+        // Never associate cached edits with a folder whose identity couldn't be verified.
+        console.warn("The browser aborted the project folder comparison.", error);
+      }
+    }
+    projectId ??= crypto.randomUUID();
+  }
   await rememberFolderData(folder, { filename, projectId }, PROJECT_KEY);
   state.folder = folder;
   state.filename = filename;
@@ -132,6 +142,7 @@ export type RestoreProjectResult =
       permission: PermissionState;
       folder: FolderHandle;
       identity: ProjectIdentity;
+      accessError?: string;
     }
   | {
       status: "restored";
@@ -148,7 +159,10 @@ export async function requestProjectPermission(folder: FolderHandle): Promise<bo
 
 /** Pass requestPermission only from a user gesture; denied handles remain remembered. */
 export async function restoreProject(requestPermission = false): Promise<RestoreProjectResult> {
-  const saved = await loadRememberedFolderData<RememberedProject>(PROJECT_KEY);
+  const saved = await restoreStep(
+    "look up your saved project folder",
+    loadRememberedFolderData<RememberedProject>(PROJECT_KEY),
+  );
   if (!saved) return { status: "none" };
   const { folder, data } = saved;
   if (
@@ -163,15 +177,34 @@ export async function restoreProject(requestPermission = false): Promise<Restore
   const projectId =
     typeof data.projectId === "string" && data.projectId ? data.projectId : crypto.randomUUID();
   if (projectId !== data.projectId) {
-    await rememberFolderData(folder, { filename: data.filename, projectId }, PROJECT_KEY);
+    await restoreStep(
+      "update your saved project reference",
+      rememberFolderData(folder, { filename: data.filename, projectId }, PROJECT_KEY),
+    );
   }
   const identity = { id: projectId, name: folder.name, filename: data.filename };
-  let permission = await queryPermission(folder);
+  const checkPermission = () => restoreStep("check project folder access", queryPermission(folder));
+  let permission: PermissionState;
+  try {
+    permission = await checkPermission();
+  } catch (error) {
+    if (!(error instanceof ProjectRestoreTimeout)) throw error;
+    return {
+      status: "permission",
+      permission: "prompt",
+      folder,
+      identity,
+      accessError: error.message,
+    };
+  }
   if (permission !== "granted" && requestPermission) {
-    permission = (await ensurePermission(folder)) ? "granted" : await queryPermission(folder);
+    permission = (await ensurePermission(folder)) ? "granted" : await checkPermission();
   }
   if (permission !== "granted") return { status: "permission", permission, folder, identity };
-  const manuscript = await readManuscript(folder, data.filename);
+  const manuscript = await restoreStep(
+    "open your manuscript",
+    readManuscript(folder, data.filename),
+  );
   state.folder = folder;
   state.filename = data.filename;
   state.projectId = projectId;
@@ -232,20 +265,25 @@ export async function createManuscript(
   await createFile(folder, filename, new Uint8Array(await generateEpub(manuscript)));
 }
 
-export async function loadOrCreateOutline(): Promise<string> {
+export async function loadOrCreateOutline(restoring = false): Promise<string> {
   const folder = activeFolder();
+  const readOutline = () =>
+    restoring
+      ? restoreStep("read your outline", readText(folder, "Outline.md"))
+      : readText(folder, "Outline.md");
   try {
-    return await readText(folder, "Outline.md");
+    return await readOutline();
   } catch (error) {
     if (!isMissing(error)) throw error;
   }
 
   try {
-    await createFile(folder, "Outline.md", DEFAULT_OUTLINE);
+    const creation = createFile(folder, "Outline.md", DEFAULT_OUTLINE);
+    await (restoring ? restoreStep("create your outline", creation) : creation);
     return DEFAULT_OUTLINE;
   } catch (error) {
     if (error instanceof DOMException && error.name === "InvalidModificationError") {
-      return await readText(folder, "Outline.md");
+      return await readOutline();
     }
     throw error;
   }

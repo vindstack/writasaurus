@@ -45,6 +45,29 @@ test("opening an existing project restores its saved manuscript after reload", a
   });
 });
 
+test("a project opens and remains remembered when the browser aborts the folder comparison", async () => {
+  await withEditorPage(async (page) => {
+    await createProject(page);
+    await page.goto("/editor/welcome");
+    await page.waitForURL("**/editor/welcome");
+    await page.locator('astro-island[component-url*="WelcomeActions"]:not([ssr])').waitFor();
+    await page.evaluate(() => {
+      localStorage.setItem("test-picker", "Test Novel");
+      FileSystemHandle.prototype.isSameEntry = async () => {
+        sessionStorage.setItem("test-compared-folders", "true");
+        throw new DOMException("The user aborted a request.", "AbortError");
+      };
+    });
+
+    await page.locator("#welcome-project-open").click();
+    await page.locator('[data-ready="true"]').waitFor();
+    expect(await page.evaluate(() => sessionStorage.getItem("test-compared-folders"))).toBe("true");
+    await page.reload();
+    await page.locator('[data-ready="true"]').waitFor();
+    expect(await page.locator("#manuscript-title").inputValue()).toBe("Test Novel");
+  });
+});
+
 test("drafts copy edits, switch independently, and retain the selection after reload", async () => {
   await withEditorPage(async (page) => {
     await createProject(page);
@@ -513,6 +536,72 @@ for (const matchingProject of [true, false]) {
     });
   });
 }
+
+test("a stalled folder permission check offers to reconnect the project", async () => {
+  await withEditorPage(async (page) => {
+    await createProject(page);
+    await page.addInitScript(() => {
+      const queryPermission = FileSystemHandle.prototype.queryPermission;
+      Object.defineProperty(FileSystemHandle.prototype, "queryPermission", {
+        value: function (this: FileSystemHandle, ...args: Parameters<typeof queryPermission>) {
+          if (sessionStorage.getItem("test-stall-restore") !== "true") {
+            return queryPermission.apply(this, args);
+          }
+          document.documentElement.dataset.testRestoreStarted = "true";
+          return new Promise<PermissionState>(() => {});
+        },
+      });
+    });
+    await page.evaluate(() => sessionStorage.setItem("test-stall-restore", "true"));
+    await page.clock.install();
+    await page.reload();
+    await page.locator("[data-test-restore-started]").waitFor({ state: "attached" });
+    await page.clock.fastForward(10_000);
+    const reconnect = page.getByRole("button", { name: "Reconnect project" });
+    await reconnect.waitFor();
+    expect(await page.getByRole("alert").textContent()).toContain("check project folder access");
+    await page.evaluate(() => sessionStorage.removeItem("test-stall-restore"));
+    await reconnect.click();
+    await page.locator('[data-ready="true"]').waitFor();
+    expect(await page.getByRole("textbox", { name: "Manuscript title" }).inputValue()).toBe(
+      "Test Novel",
+    );
+  });
+}, 60_000);
+
+test("a stalled manuscript read can recover the cached session", async () => {
+  await withEditorPage(async (page) => {
+    await createProject(page);
+    await page.locator("#editor").fill("Cached text survives the stalled read.");
+    await page.waitForFunction(() =>
+      sessionStorage
+        .getItem("writasaurus-manuscript-v1:state")
+        ?.includes("Cached text survives the stalled read."),
+    );
+    await page.evaluate(() => {
+      const key = "writasaurus-manuscript-v1:state";
+      const saved = JSON.parse(sessionStorage.getItem(key) ?? "{}");
+      sessionStorage.setItem(key, JSON.stringify({ ...saved, hasUnsavedChanges: false }));
+    });
+    await page.addInitScript(() => {
+      FileSystemFileHandle.prototype.getFile = () => {
+        document.documentElement.dataset.testRestoreStarted = "true";
+        return new Promise<File>(() => {});
+      };
+    });
+    await page.clock.install();
+    await page.reload();
+    await page.locator("[data-test-restore-started]").waitFor({ state: "attached" });
+    await page.clock.fastForward(10_000);
+    await page.getByRole("heading", { name: "Could not load the editor" }).waitFor();
+    expect(await page.getByRole("alert").textContent()).toContain("open your manuscript");
+    await page.getByRole("button", { name: "Recover cached changes" }).click();
+    await page.locator('[data-ready="true"]').waitFor();
+    expect(await page.locator("#editor").textContent()).toContain(
+      "Cached text survives the stalled read.",
+    );
+  });
+}, 60_000);
 
 test("restoring a project requests permission only from the reconnect button", async () => {
   await withEditorPage(async (page) => {

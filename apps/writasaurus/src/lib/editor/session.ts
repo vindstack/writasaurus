@@ -22,6 +22,7 @@ import {
 } from "./state.ts";
 import type { Manuscript } from "./types.ts";
 import { restoreLocal, shouldSkipWelcome } from "./storage.ts";
+import { restoreStep } from "./restore-step.ts";
 
 let permissionFolder: FileSystemDirectoryHandle | null = null;
 export const recoveryNotice = signal("");
@@ -44,7 +45,9 @@ function sameManuscriptContent(cached: Manuscript, disk: Manuscript): boolean {
   );
 }
 
-export async function restoreEditor(): Promise<"opened" | "welcome" | "permission"> {
+export async function restoreEditor(): Promise<
+  "opened" | "welcome" | { status: "permission"; accessError?: string }
+> {
   applyFontPreference(getFontPreference());
   const saved = restoreLocal();
   let result: Awaited<ReturnType<typeof restoreProject>>;
@@ -52,12 +55,15 @@ export async function restoreEditor(): Promise<"opened" | "welcome" | "permissio
     result = await restoreProject();
   } catch (error) {
     if (!saved || (!saved.hasUnsavedChanges && !saved.outlineHasUnsavedChanges)) throw error;
-    restoreOffline(saved);
+    restoreOffline(
+      saved,
+      error instanceof Error ? error.message : "Could not restore the project.",
+    );
     return "opened";
   }
   if (result.status === "permission") {
     permissionFolder = result.folder;
-    return "permission";
+    return { status: "permission", accessError: result.accessError };
   }
   permissionFolder = null;
   if (result.status === "restored") {
@@ -75,11 +81,11 @@ export async function restoreEditor(): Promise<"opened" | "welcome" | "permissio
         try {
           const folder = getActiveFolder();
           if (!folder) throw new Error("Project folder is unavailable.");
-          diskOutline = await readText(folder, "Outline.md");
+          diskOutline = await restoreStep("read your outline", readText(folder, "Outline.md"));
         } catch (error) {
           console.error("Could not compare the cached outline with the project.", error);
           const reason = error instanceof Error ? error.message : "The outline could not be read.";
-          restoreOffline(saved, reason);
+          restoreOffline(saved, `Could not compare the cached outline with the project: ${reason}`);
           return "opened";
         }
         if (saved.outlineContent !== diskOutline) {
@@ -87,13 +93,17 @@ export async function restoreEditor(): Promise<"opened" | "welcome" | "permissio
           return "opened";
         }
       }
+      const restoreOutline = saved.outlineHasUnsavedChanges || saved.editorMode === "outline";
+      if (restoreOutline) {
+        diskOutline ??= await loadOrCreateOutline(true);
+      }
       replaceManuscript(result.manuscript, {
         activeChapter: saved.activeChapter,
         projectLoaded: true,
         hasUnsavedChanges: false,
       });
-      if (saved.outlineHasUnsavedChanges || saved.editorMode === "outline") {
-        replaceOutline(diskOutline ?? (await loadOrCreateOutline()));
+      if (diskOutline !== undefined) {
+        replaceOutline(diskOutline);
         editorMode.value = saved.editorMode ?? "manuscript";
       }
     } else if (saved && (saved.hasUnsavedChanges || saved.outlineHasUnsavedChanges)) {
@@ -129,7 +139,7 @@ function restoreOffline(
     hasUnsavedChanges.value = Boolean(saved.hasUnsavedChanges);
     projectLoaded.value = false;
     recoveryNotice.value = reason
-      ? `Could not compare the outline with the project: ${reason} Recovered changes are disconnected to protect the project on disk. Export your manuscript and outline before opening another project.`
+      ? `${reason} Recovered changes are disconnected to protect the project on disk. Export your manuscript and outline before opening another project.`
       : "Recovered changes are disconnected to protect the project on disk. Export your manuscript and outline before opening another project.";
     saveMessage.value = "Recovered unsaved changes.";
     replaceOutline(saved.outlineContent ?? "", saved.outlineHasUnsavedChanges);

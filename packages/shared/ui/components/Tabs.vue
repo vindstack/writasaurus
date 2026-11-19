@@ -67,7 +67,7 @@ function onKeydown(event: KeyboardEvent, currentIndex: number): void {
     </div>
     <div
       v-for="(tab, index) in tabs"
-      v-show="modelValue === tab.id"
+      v-if="modelValue === tab.id"
       :id="`${id}-panel-${index}`"
       :key="`${tab.id}-panel`"
       class="tab-panel"
