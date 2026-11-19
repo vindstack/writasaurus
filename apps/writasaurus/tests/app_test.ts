@@ -56,6 +56,7 @@ test("marketing page has nonce-based CSP and terms link", async () => {
   const policy = response.headers.get("content-security-policy") ?? "";
   const nonce = policy.match(/script-src[^;]*'nonce-([^']+)'/)?.[1];
   assert(nonce);
+  assert(policy.includes(`style-src 'self' 'nonce-${nonce}'`));
   const page = await response.text();
   for (const [tag] of page.matchAll(/<(?:script|style)\b[^>]*>/gi)) {
     assert(

@@ -102,6 +102,5 @@ export function applyFontPreference(font: FontOption): void {
   const definition = FONT_MAP[font] ?? FONT_MAP[DEFAULT_FONT];
   if (typeof document !== "undefined") {
     document.documentElement.dataset.font = definition.id;
-    document.documentElement.style.setProperty("--editor-font", definition.family);
   }
 }

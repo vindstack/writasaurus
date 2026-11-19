@@ -26,7 +26,7 @@ function contentSecurityPolicy(nonce: string): string {
   return [
     "default-src 'none'",
     `script-src 'self' 'nonce-${nonce}' 'wasm-unsafe-eval'`,
-    `style-src 'self' ${dev ? "'unsafe-inline' " : ""}https://fonts.googleapis.com`,
+    `style-src 'self' 'nonce-${nonce}' ${dev ? "'unsafe-inline' " : ""}https://fonts.googleapis.com`,
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data:",
     `connect-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com${
